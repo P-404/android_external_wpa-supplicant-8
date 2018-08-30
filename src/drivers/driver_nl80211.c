@@ -1079,11 +1079,20 @@ static void wpa_driver_nl80211_event_rtm_newlink(void *ctx,
 	}
 
 	if (drv->if_disabled && (ifi->ifi_flags & IFF_UP)) {
+		namebuf[0] = '\0';
 		if (if_indextoname(ifi->ifi_index, namebuf) &&
 		    linux_iface_up(drv->global->ioctl_sock, namebuf) == 0) {
 			wpa_printf(MSG_DEBUG, "nl80211: Ignore interface up "
 				   "event since interface %s is down",
 				   namebuf);
+			return;
+		}
+		wpa_printf(MSG_DEBUG, "nl80211: Interface up (%s/%s)",
+			   namebuf, ifname);
+		if (os_strcmp(drv->first_bss->ifname, ifname) != 0) {
+			wpa_printf(MSG_DEBUG,
+				   "nl80211: Not the main interface (%s) - do not indicate interface up",
+				   drv->first_bss->ifname);
 		} else if (if_nametoindex(drv->first_bss->ifname) == 0) {
 			wpa_printf(MSG_DEBUG, "nl80211: Ignore interface up "
 				   "event since interface %s does not exist",
@@ -1096,7 +1105,6 @@ static void wpa_driver_nl80211_event_rtm_newlink(void *ctx,
 			/* Re-read MAC address as it may have changed */
 			nl80211_refresh_mac(drv, ifi->ifi_index, 0);
 
-			wpa_printf(MSG_DEBUG, "nl80211: Interface up");
 			drv->if_disabled = 0;
 			wpa_supplicant_event(drv->ctx, EVENT_INTERFACE_ENABLED,
 					     NULL);
@@ -2603,9 +2611,11 @@ static void wpa_driver_nl80211_deinit(struct i802_bss *bss)
 			wpa_printf(MSG_INFO, "nl80211: Failed to remove "
 				   "interface %s from bridge %s: %s",
 				   bss->ifname, bss->brname, strerror(errno));
-		if (drv->rtnl_sk)
-			nl80211_handle_destroy(drv->rtnl_sk);
 	}
+
+	if (drv->rtnl_sk)
+		nl80211_handle_destroy(drv->rtnl_sk);
+
 	if (bss->added_bridge) {
 		if (linux_set_iface_flags(drv->global->ioctl_sock, bss->brname,
 					  0) < 0)
@@ -3348,11 +3358,11 @@ retry:
 	msg = NULL;
 	if (ret) {
 		wpa_dbg(drv->ctx, MSG_DEBUG,
-			"nl80211: MLME command failed (auth): ret=%d (%s)",
-			ret, strerror(-ret));
+			"nl80211: MLME command failed (auth): count=%d ret=%d (%s)",
+			count, ret, strerror(-ret));
 		count++;
-		if (ret == -EALREADY && count == 1 && params->bssid &&
-		    !params->local_state_change) {
+		if ((ret == -EALREADY || ret == -EEXIST) && count == 1 &&
+		    params->bssid && !params->local_state_change) {
 			/*
 			 * mac80211 does not currently accept new
 			 * authentication if we are already authenticated. As a
@@ -6511,6 +6521,7 @@ static int i802_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
 	struct i802_bss *bss = priv;
 	struct wpa_driver_nl80211_data *drv = bss->drv;
 	char name[IFNAMSIZ + 1];
+	union wpa_event_data event;
 
 	os_snprintf(name, sizeof(name), "%s.sta%d", bss->ifname, aid);
 	if (ifname_wds)
@@ -6529,6 +6540,14 @@ static int i802_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
 			    linux_br_add_if(drv->global->ioctl_sock,
 					    bridge_ifname, name) < 0)
 				return -1;
+
+			os_memset(&event, 0, sizeof(event));
+			event.wds_sta_interface.sta_addr = addr;
+			event.wds_sta_interface.ifname = name;
+			event.wds_sta_interface.istatus = INTERFACE_ADDED;
+			wpa_supplicant_event(drv->ctx,
+					     EVENT_WDS_STA_INTERFACE_STATUS,
+					     &event);
 		}
 		if (linux_set_iface_flags(drv->global->ioctl_sock, name, 1)) {
 			wpa_printf(MSG_ERROR, "nl80211: Failed to set WDS STA "
@@ -6542,6 +6561,12 @@ static int i802_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
 
 		i802_set_sta_vlan(priv, addr, bss->ifname, 0);
 		nl80211_remove_iface(drv, if_nametoindex(name));
+		os_memset(&event, 0, sizeof(event));
+		event.wds_sta_interface.sta_addr = addr;
+		event.wds_sta_interface.ifname = name;
+		event.wds_sta_interface.istatus = INTERFACE_REMOVED;
+		wpa_supplicant_event(drv->ctx, EVENT_WDS_STA_INTERFACE_STATUS,
+				     &event);
 		return 0;
 	}
 }
@@ -6595,8 +6620,10 @@ static int i802_check_bridge(struct wpa_driver_nl80211_data *drv,
 	bss->br_ifindex = br_ifindex;
 
 	if (linux_br_get(in_br, ifname) == 0) {
-		if (os_strcmp(in_br, brname) == 0)
+		if (os_strcmp(in_br, brname) == 0) {
+			bss->already_in_bridge = 1;
 			return 0; /* already in the bridge */
+		}
 
 		wpa_printf(MSG_DEBUG, "nl80211: Removing interface %s from "
 			   "bridge %s", ifname, in_br);
@@ -6693,7 +6720,7 @@ static void *i802_init(struct hostapd_data *hapd,
 		add_ifidx(drv, br_ifindex, drv->ifindex);
 
 #ifdef CONFIG_LIBNL3_ROUTE
-	if (bss->added_if_into_bridge) {
+	if (bss->added_if_into_bridge || bss->already_in_bridge) {
 		drv->rtnl_sk = nl_socket_alloc();
 		if (drv->rtnl_sk == NULL) {
 			wpa_printf(MSG_ERROR, "nl80211: Failed to allocate nl_sock");
@@ -8051,6 +8078,7 @@ static void nl80211_poll_client(void *priv, const u8 *own_addr, const u8 *addr,
 static int nl80211_set_power_save(struct i802_bss *bss, int enabled)
 {
 	struct nl_msg *msg;
+	int ret;
 
 	if (!(msg = nl80211_bss_msg(bss, 0, NL80211_CMD_SET_POWER_SAVE)) ||
 	    nla_put_u32(msg, NL80211_ATTR_PS_STATE,
@@ -8058,7 +8086,15 @@ static int nl80211_set_power_save(struct i802_bss *bss, int enabled)
 		nlmsg_free(msg);
 		return -ENOBUFS;
 	}
-	return send_and_recv_msgs(bss->drv, msg, NULL, NULL);
+
+	ret = send_and_recv_msgs(bss->drv, msg, NULL, NULL);
+	if (ret < 0) {
+		wpa_printf(MSG_DEBUG,
+			   "nl80211: Setting PS state %s failed: %d (%s)",
+			   enabled ? "enabled" : "disabled",
+			   ret, strerror(-ret));
+	}
+	return ret;
 }
 
 
@@ -8476,7 +8512,7 @@ static int wpa_driver_nl80211_status(void *priv, char *buf, size_t buflen)
 			  "brname=%s\n"
 			  "addr=" MACSTR "\n"
 			  "freq=%d\n"
-			  "%s%s%s%s%s",
+			  "%s%s%s%s%s%s",
 			  bss->ifindex,
 			  bss->ifname,
 			  bss->brname,
@@ -8485,6 +8521,7 @@ static int wpa_driver_nl80211_status(void *priv, char *buf, size_t buflen)
 			  bss->beacon_set ? "beacon_set=1\n" : "",
 			  bss->added_if_into_bridge ?
 			  "added_if_into_bridge=1\n" : "",
+			  bss->already_in_bridge ? "already_in_bridge=1\n" : "",
 			  bss->added_bridge ? "added_bridge=1\n" : "",
 			  bss->in_deinit ? "in_deinit=1\n" : "",
 			  bss->if_dynamic ? "if_dynamic=1\n" : "");
@@ -8660,8 +8697,9 @@ static int nl80211_switch_channel(void *priv, struct csa_settings *settings)
 		return -EOPNOTSUPP;
 	}
 
-	if ((drv->nlmode != NL80211_IFTYPE_AP) &&
-	    (drv->nlmode != NL80211_IFTYPE_P2P_GO))
+	if (drv->nlmode != NL80211_IFTYPE_AP &&
+	    drv->nlmode != NL80211_IFTYPE_P2P_GO &&
+	    drv->nlmode != NL80211_IFTYPE_MESH_POINT)
 		return -EOPNOTSUPP;
 
 	/*

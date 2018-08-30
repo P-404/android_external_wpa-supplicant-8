@@ -1192,6 +1192,8 @@ struct wpa_supplicant {
 	/* RIC elements for FT protocol */
 	struct wpabuf *ric_ies;
 
+	int last_auth_timeout_sec;
+
 #ifdef CONFIG_DPP
 	struct dl_list dpp_bootstrap; /* struct dpp_bootstrap_info */
 	struct dl_list dpp_configurator; /* struct dpp_configurator */
@@ -1233,6 +1235,7 @@ struct wpa_supplicant {
 #ifdef CONFIG_FILS
 	unsigned int disable_fils:1;
 #endif /* CONFIG_FILS */
+	unsigned int ieee80211ac:1;
 };
 
 
@@ -1265,6 +1268,7 @@ void wpa_supplicant_initiate_eapol(struct wpa_supplicant *wpa_s);
 void wpa_clear_keys(struct wpa_supplicant *wpa_s, const u8 *addr);
 void wpa_supplicant_req_auth_timeout(struct wpa_supplicant *wpa_s,
 				     int sec, int usec);
+void wpas_auth_timeout_restart(struct wpa_supplicant *wpa_s, int sec_diff);
 void wpa_supplicant_reinit_autoscan(struct wpa_supplicant *wpa_s);
 void wpa_supplicant_set_state(struct wpa_supplicant *wpa_s,
 			      enum wpa_states state);
@@ -1498,5 +1502,8 @@ int wpas_ctrl_iface_get_pref_freq_list_override(struct wpa_supplicant *wpa_s,
 						enum wpa_driver_if_type if_type,
 						unsigned int *num,
 						unsigned int *freq_list);
+
+int wpa_is_fils_supported(struct wpa_supplicant *wpa_s);
+int wpa_is_fils_sk_pfs_supported(struct wpa_supplicant *wpa_s);
 
 #endif /* WPA_SUPPLICANT_I_H */

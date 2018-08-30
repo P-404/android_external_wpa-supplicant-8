@@ -112,7 +112,8 @@ struct wpa_state_machine {
 	u32 dot11RSNAStatsTKIPRemoteMICFailures;
 
 #ifdef CONFIG_IEEE80211R_AP
-	u8 xxkey[PMK_LEN]; /* PSK or the second 256 bits of MSK */
+	u8 xxkey[PMK_LEN_MAX]; /* PSK or the second 256 bits of MSK, or the
+				* first 384 bits of MSK */
 	size_t xxkey_len;
 	u8 pmk_r1_name[WPA_PMK_NAME_LEN]; /* PMKR1Name derived from FT Auth
 					   * Request */
@@ -276,8 +277,8 @@ int wpa_auth_for_each_auth(struct wpa_authenticator *wpa_auth,
 
 #ifdef CONFIG_IEEE80211R_AP
 int wpa_write_mdie(struct wpa_auth_config *conf, u8 *buf, size_t len);
-int wpa_write_ftie(struct wpa_auth_config *conf, const u8 *r0kh_id,
-		   size_t r0kh_id_len,
+int wpa_write_ftie(struct wpa_auth_config *conf, int use_sha384,
+		   const u8 *r0kh_id, size_t r0kh_id_len,
 		   const u8 *anonce, const u8 *snonce,
 		   u8 *buf, size_t len, const u8 *subelem,
 		   size_t subelem_len);
@@ -286,9 +287,8 @@ int wpa_auth_derive_ptk_ft(struct wpa_state_machine *sm, const u8 *pmk,
 struct wpa_ft_pmk_cache * wpa_ft_pmk_cache_init(void);
 void wpa_ft_pmk_cache_deinit(struct wpa_ft_pmk_cache *cache);
 void wpa_ft_install_ptk(struct wpa_state_machine *sm);
-int wpa_ft_store_pmk_r0(struct wpa_authenticator *wpa_auth,
-			const u8 *spa, const u8 *pmk_r0,
-			const u8 *pmk_r0_name, int pairwise);
+int wpa_ft_store_pmk_fils(struct wpa_state_machine *sm, const u8 *pmk_r0,
+			  const u8 *pmk_r0_name);
 #endif /* CONFIG_IEEE80211R_AP */
 
 #endif /* WPA_AUTH_I_H */

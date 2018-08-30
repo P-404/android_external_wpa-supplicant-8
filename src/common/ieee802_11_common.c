@@ -11,6 +11,7 @@
 #include "common.h"
 #include "defs.h"
 #include "wpa_common.h"
+#include "drivers/driver.h"
 #include "qca-vendor.h"
 #include "ieee802_11_defs.h"
 #include "ieee802_11_common.h"
@@ -119,6 +120,11 @@ static int ieee802_11_parse_vendor_specific(const u8 *pos, size_t elen,
 			/* MBO-OCE */
 			elems->mbo = pos;
 			elems->mbo_len = elen;
+			break;
+		case HS20_ROAMING_CONS_SEL_OUI_TYPE:
+			/* Hotspot 2.0 Roaming Consortium Selection */
+			elems->roaming_cons_sel = pos;
+			elems->roaming_cons_sel_len = elen;
 			break;
 		default:
 			wpa_printf(MSG_MSGDUMP, "Unknown WFA "
@@ -255,6 +261,10 @@ static int ieee802_11_parse_extension(const u8 *pos, size_t elen,
 			break;
 		elems->owe_dh = pos;
 		elems->owe_dh_len = elen;
+		break;
+	case WLAN_EID_EXT_PASSWORD_IDENTIFIER:
+		elems->password_id = pos;
+		elems->password_id_len = elen;
 		break;
 	default:
 		if (show_errors) {
@@ -1173,10 +1183,24 @@ int ieee80211_chan_to_freq(const char *country, u8 op_class, u8 chan)
 }
 
 
-int ieee80211_is_dfs(int freq)
+int ieee80211_is_dfs(int freq, const struct hostapd_hw_modes *modes,
+		     u16 num_modes)
 {
-	/* TODO: this could be more accurate to better cover all domains */
-	return (freq >= 5260 && freq <= 5320) || (freq >= 5500 && freq <= 5700);
+	int i, j;
+
+	if (!modes || !num_modes)
+		return (freq >= 5260 && freq <= 5320) ||
+			(freq >= 5500 && freq <= 5700);
+
+	for (i = 0; i < num_modes; i++) {
+		for (j = 0; j < modes[i].num_channels; j++) {
+			if (modes[i].channels[j].freq == freq &&
+			    (modes[i].channels[j].flag & HOSTAPD_CHAN_RADAR))
+				return 1;
+		}
+	}
+
+	return 0;
 }
 
 

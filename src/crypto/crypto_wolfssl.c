@@ -11,18 +11,8 @@
 #include "common.h"
 #include "crypto.h"
 
-#define WOLFSSL_AES_DIRECT
-#define HAVE_AESGCM
-#define HAVE_AES_KEYWRAP
-#define WOLFSSL_SHA384
-#define WOLFSSL_SHA512
-#define WOLFSSL_CMAC
-#define HAVE_ECC
-#define USE_FAST_MATH
-#define WOLFSSL_KEY_GEN
-
-#include <wolfssl/options.h>
 /* wolfSSL headers */
+#include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/md4.h>
 #include <wolfssl/wolfcrypt/md5.h>
 #include <wolfssl/wolfcrypt/sha.h>
@@ -62,7 +52,7 @@ int md4_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 
 int md5_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 {
-	Md5 md5;
+	wc_Md5 md5;
 	size_t i;
 
 	if (TEST_FAIL())
@@ -83,7 +73,7 @@ int md5_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 
 int sha1_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 {
-	Sha sha;
+	wc_Sha sha;
 	size_t i;
 
 	if (TEST_FAIL())
@@ -104,7 +94,7 @@ int sha1_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 int sha256_vector(size_t num_elem, const u8 *addr[], const size_t *len,
 		  u8 *mac)
 {
-	Sha256 sha256;
+	wc_Sha256 sha256;
 	size_t i;
 
 	if (TEST_FAIL())
@@ -126,7 +116,7 @@ int sha256_vector(size_t num_elem, const u8 *addr[], const size_t *len,
 int sha384_vector(size_t num_elem, const u8 *addr[], const size_t *len,
 		  u8 *mac)
 {
-	Sha384 sha384;
+	wc_Sha384 sha384;
 	size_t i;
 
 	if (TEST_FAIL())
@@ -148,7 +138,7 @@ int sha384_vector(size_t num_elem, const u8 *addr[], const size_t *len,
 int sha512_vector(size_t num_elem, const u8 *addr[], const size_t *len,
 		  u8 *mac)
 {
-	Sha512 sha512;
+	wc_Sha512 sha512;
 	size_t i;
 
 	if (TEST_FAIL())
@@ -195,8 +185,8 @@ static int wolfssl_hmac_vector(int type, const u8 *key,
 int hmac_md5_vector(const u8 *key, size_t key_len, size_t num_elem,
 		    const u8 *addr[], const size_t *len, u8 *mac)
 {
-	return wolfssl_hmac_vector(MD5, key, key_len, num_elem, addr, len, mac,
-				   16);
+	return wolfssl_hmac_vector(WC_MD5, key, key_len, num_elem, addr, len,
+				   mac, 16);
 }
 
 
@@ -212,8 +202,8 @@ int hmac_md5(const u8 *key, size_t key_len, const u8 *data, size_t data_len,
 int hmac_sha1_vector(const u8 *key, size_t key_len, size_t num_elem,
 		     const u8 *addr[], const size_t *len, u8 *mac)
 {
-	return wolfssl_hmac_vector(SHA, key, key_len, num_elem, addr, len, mac,
-				   20);
+	return wolfssl_hmac_vector(WC_SHA, key, key_len, num_elem, addr, len,
+				   mac, 20);
 }
 
 
@@ -229,7 +219,7 @@ int hmac_sha1(const u8 *key, size_t key_len, const u8 *data, size_t data_len,
 int hmac_sha256_vector(const u8 *key, size_t key_len, size_t num_elem,
 		       const u8 *addr[], const size_t *len, u8 *mac)
 {
-	return wolfssl_hmac_vector(SHA256, key, key_len, num_elem, addr, len,
+	return wolfssl_hmac_vector(WC_SHA256, key, key_len, num_elem, addr, len,
 				   mac, 32);
 }
 
@@ -248,7 +238,7 @@ int hmac_sha256(const u8 *key, size_t key_len, const u8 *data,
 int hmac_sha384_vector(const u8 *key, size_t key_len, size_t num_elem,
 		       const u8 *addr[], const size_t *len, u8 *mac)
 {
-	return wolfssl_hmac_vector(SHA384, key, key_len, num_elem, addr, len,
+	return wolfssl_hmac_vector(WC_SHA384, key, key_len, num_elem, addr, len,
 				   mac, 48);
 }
 
@@ -267,7 +257,7 @@ int hmac_sha384(const u8 *key, size_t key_len, const u8 *data,
 int hmac_sha512_vector(const u8 *key, size_t key_len, size_t num_elem,
 		       const u8 *addr[], const size_t *len, u8 *mac)
 {
-	return wolfssl_hmac_vector(SHA512, key, key_len, num_elem, addr, len,
+	return wolfssl_hmac_vector(WC_SHA512, key, key_len, num_elem, addr, len,
 				   mac, 64);
 }
 
@@ -285,7 +275,7 @@ int pbkdf2_sha1(const char *passphrase, const u8 *ssid, size_t ssid_len,
 		int iterations, u8 *buf, size_t buflen)
 {
 	if (wc_PBKDF2(buf, (const byte*)passphrase, os_strlen(passphrase), ssid,
-		      ssid_len, iterations, buflen, SHA) != 0)
+		      ssid_len, iterations, buflen, WC_SHA) != 0)
 		return -1;
 	return 0;
 }
@@ -423,6 +413,9 @@ int aes_wrap(const u8 *kek, size_t kek_len, int n, const u8 *plain, u8 *cipher)
 {
 	int ret;
 
+	if (TEST_FAIL())
+		return -1;
+
 	ret = wc_AesKeyWrap(kek, kek_len, plain, n * 8, cipher, (n + 1) * 8,
 			    NULL);
 	return ret != (n + 1) * 8 ? -1 : 0;
@@ -433,6 +426,9 @@ int aes_unwrap(const u8 *kek, size_t kek_len, int n, const u8 *cipher,
 	       u8 *plain)
 {
 	int ret;
+
+	if (TEST_FAIL())
+		return -1;
 
 	ret = wc_AesKeyUnWrap(kek, kek_len, cipher, (n + 1) * 8, plain, n * 8,
 			      NULL);
@@ -654,13 +650,13 @@ void * dh5_init(struct wpabuf **priv, struct wpabuf **publ)
 	wpabuf_free(*publ);
 	*publ = NULL;
 
-	dh = os_malloc(sizeof(DhKey));
+	dh = XMALLOC(sizeof(DhKey), NULL, DYNAMIC_TYPE_TMP_BUFFER);
 	if (!dh)
 		return NULL;
 	wc_InitDhKey(dh);
 
 	if (wc_InitRng(&rng) != 0) {
-		os_free(dh);
+		XFREE(dh, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 		return NULL;
 	}
 
@@ -692,7 +688,7 @@ done:
 	wpabuf_clear_free(privkey);
 	if (dh) {
 		wc_FreeDhKey(dh);
-		os_free(dh);
+		XFREE(dh, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 	}
 	wc_FreeRng(&rng);
 	return ret;
@@ -706,12 +702,12 @@ void * dh5_init_fixed(const struct wpabuf *priv, const struct wpabuf *publ)
 	byte *secret;
 	word32 secret_sz;
 
-	dh = os_malloc(sizeof(DhKey));
+	dh = XMALLOC(sizeof(DhKey), NULL, DYNAMIC_TYPE_TMP_BUFFER);
 	if (!dh)
 		return NULL;
 	wc_InitDhKey(dh);
 
-	secret = os_malloc(RFC3526_LEN);
+	secret = XMALLOC(RFC3526_LEN, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 	if (!secret)
 		goto done;
 
@@ -734,9 +730,9 @@ void * dh5_init_fixed(const struct wpabuf *priv, const struct wpabuf *publ)
 done:
 	if (dh) {
 		wc_FreeDhKey(dh);
-		os_free(dh);
+		XFREE(dh, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 	}
-	os_free(secret);
+	XFREE(secret, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 	return ret;
 }
 
@@ -773,7 +769,7 @@ void dh5_free(void *ctx)
 		return;
 
 	wc_FreeDhKey(ctx);
-	os_free(ctx);
+	XFREE(ctx, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 }
 
 #endif /* CONFIG_WPS_NFC */
@@ -889,7 +885,7 @@ struct crypto_hash * crypto_hash_init(enum crypto_hash_alg alg, const u8 *key,
 	struct crypto_hash *hash;
 	int type;
 
-	hash = os_malloc(sizeof(*hash));
+	hash = os_zalloc(sizeof(*hash));
 	if (!hash)
 		goto done;
 
@@ -897,19 +893,19 @@ struct crypto_hash * crypto_hash_init(enum crypto_hash_alg alg, const u8 *key,
 #ifndef NO_MD5
 	case CRYPTO_HASH_ALG_HMAC_MD5:
 		hash->size = 16;
-		type = MD5;
+		type = WC_MD5;
 		break;
 #endif /* NO_MD5 */
 #ifndef NO_SHA
 	case CRYPTO_HASH_ALG_HMAC_SHA1:
-		type = SHA;
+		type = WC_SHA;
 		hash->size = 20;
 		break;
 #endif /* NO_SHA */
 #ifdef CONFIG_SHA256
 #ifndef NO_SHA256
 	case CRYPTO_HASH_ALG_HMAC_SHA256:
-		type = SHA256;
+		type = WC_SHA256;
 		hash->size = 32;
 		break;
 #endif /* NO_SHA256 */
@@ -1185,7 +1181,7 @@ int crypto_bignum_rshift(const struct crypto_bignum *a, int n,
 {
 	if (mp_copy((mp_int *) a, (mp_int *) r) != MP_OKAY)
 		return -1;
-	mp_rshd((mp_int *) r, n);
+	mp_rshb((mp_int *) r, n);
 	return 0;
 }
 
@@ -1586,18 +1582,18 @@ int crypto_ec_point_solve_y_coord(struct crypto_ec *e,
 				  struct crypto_ec_point *p,
 				  const struct crypto_bignum *x, int y_bit)
 {
-	byte buf[MAX_ECC_BYTES + 1];
+	byte buf[1 + 2 * MAX_ECC_BYTES];
 	int ret;
 	int prime_len = crypto_ec_prime_len(e);
 
 	if (TEST_FAIL())
 		return -1;
 
-	buf[0] = 0x2 + (byte) y_bit;
+	buf[0] = y_bit ? ECC_POINT_COMP_ODD : ECC_POINT_COMP_EVEN;
 	ret = crypto_bignum_to_bin(x, buf + 1, prime_len, prime_len);
 	if (ret <= 0)
 		return -1;
-	ret = wc_ecc_import_point_der(buf, ret + 1, e->key.idx,
+	ret = wc_ecc_import_point_der(buf, 1 + 2 * ret, e->key.idx,
 				      (ecc_point *) p);
 	if (ret != 0)
 		return -1;
@@ -1625,7 +1621,7 @@ crypto_ec_point_compute_y_sqr(struct crypto_ec *e,
 		goto done;
 
 	if (mp_sqrmod((mp_int *) x, &e->prime, y2) != 0 ||
-	    mp_mulmod((mp_int *) x, &t, &e->prime, y2) != 0 ||
+	    mp_mulmod((mp_int *) x, y2, &e->prime, y2) != 0 ||
 	    mp_mulmod((mp_int *) x, &e->a, &e->prime, &t) != 0 ||
 	    mp_addmod(y2, &t, &e->prime, y2) != 0 ||
 	    mp_addmod(y2, &e->b, &e->prime, y2) != 0)
@@ -1665,6 +1661,131 @@ int crypto_ec_point_cmp(const struct crypto_ec *e,
 			const struct crypto_ec_point *b)
 {
 	return wc_ecc_cmp_point((ecc_point *) a, (ecc_point *) b);
+}
+
+
+struct crypto_ecdh {
+	struct crypto_ec *ec;
+};
+
+struct crypto_ecdh * crypto_ecdh_init(int group)
+{
+	struct crypto_ecdh *ecdh = NULL;
+	WC_RNG rng;
+	int ret;
+
+	if (wc_InitRng(&rng) != 0)
+		goto fail;
+
+	ecdh = os_zalloc(sizeof(*ecdh));
+	if (!ecdh)
+		goto fail;
+
+	ecdh->ec = crypto_ec_init(group);
+	if (!ecdh->ec)
+		goto fail;
+
+	ret = wc_ecc_make_key_ex(&rng, ecdh->ec->key.dp->size, &ecdh->ec->key,
+				 ecdh->ec->key.dp->id);
+	if (ret < 0)
+		goto fail;
+
+done:
+	wc_FreeRng(&rng);
+
+	return ecdh;
+fail:
+	crypto_ecdh_deinit(ecdh);
+	ecdh = NULL;
+	goto done;
+}
+
+
+void crypto_ecdh_deinit(struct crypto_ecdh *ecdh)
+{
+	if (ecdh) {
+		crypto_ec_deinit(ecdh->ec);
+		os_free(ecdh);
+	}
+}
+
+
+struct wpabuf * crypto_ecdh_get_pubkey(struct crypto_ecdh *ecdh, int inc_y)
+{
+	struct wpabuf *buf = NULL;
+	int ret;
+	int len = ecdh->ec->key.dp->size;
+
+	buf = wpabuf_alloc(inc_y ? 2 * len : len);
+	if (!buf)
+		goto fail;
+
+	ret = crypto_bignum_to_bin((struct crypto_bignum *)
+				   ecdh->ec->key.pubkey.x, wpabuf_put(buf, len),
+				   len, len);
+	if (ret < 0)
+		goto fail;
+	if (inc_y) {
+		ret = crypto_bignum_to_bin((struct crypto_bignum *)
+					   ecdh->ec->key.pubkey.y,
+					   wpabuf_put(buf, len), len, len);
+		if (ret < 0)
+			goto fail;
+	}
+
+done:
+	return buf;
+fail:
+	wpabuf_free(buf);
+	buf = NULL;
+	goto done;
+}
+
+
+struct wpabuf * crypto_ecdh_set_peerkey(struct crypto_ecdh *ecdh, int inc_y,
+					const u8 *key, size_t len)
+{
+	int ret;
+	struct wpabuf *pubkey = NULL;
+	struct wpabuf *secret = NULL;
+	word32 key_len = ecdh->ec->key.dp->size;
+	ecc_point *point = NULL;
+	size_t need_key_len = inc_y ? 2 * key_len : key_len;
+
+	if (len < need_key_len)
+		goto fail;
+	pubkey = wpabuf_alloc(1 + 2 * key_len);
+	if (!pubkey)
+		goto fail;
+	wpabuf_put_u8(pubkey, inc_y ? ECC_POINT_UNCOMP : ECC_POINT_COMP_EVEN);
+	wpabuf_put_data(pubkey, key, need_key_len);
+
+	point = wc_ecc_new_point();
+	if (!point)
+		goto fail;
+
+	ret = wc_ecc_import_point_der(wpabuf_mhead(pubkey), 1 + 2 * key_len,
+				      ecdh->ec->key.idx, point);
+	if (ret != MP_OKAY)
+		goto fail;
+
+	secret = wpabuf_alloc(key_len);
+	if (!secret)
+		goto fail;
+
+	ret = wc_ecc_shared_secret_ex(&ecdh->ec->key, point,
+				      wpabuf_put(secret, key_len), &key_len);
+	if (ret != MP_OKAY)
+		goto fail;
+
+done:
+	wc_ecc_del_point(point);
+	wpabuf_free(pubkey);
+	return secret;
+fail:
+	wpabuf_free(secret);
+	secret = NULL;
+	goto done;
 }
 
 #endif /* CONFIG_ECC */

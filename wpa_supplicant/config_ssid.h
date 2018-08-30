@@ -194,6 +194,14 @@ struct wpa_ssid {
 	char *sae_password;
 
 	/**
+	 * sae_password_id - SAE password identifier
+	 *
+	 * This parameter can be used to identify a specific SAE password. If
+	 * not included, the default SAE password is used instead.
+	 */
+	char *sae_password_id;
+
+	/**
 	 * ext_psk - PSK/passphrase name in external storage
 	 *
 	 * If this is set, PSK/passphrase will be fetched from external storage
@@ -497,7 +505,7 @@ struct wpa_ssid {
 
 	int vht;
 
-	u8 max_oper_chwidth;
+	int max_oper_chwidth;
 
 	unsigned int vht_center_freq1;
 	unsigned int vht_center_freq2;
@@ -804,6 +812,19 @@ struct wpa_ssid {
 
 #ifdef CONFIG_HS20
 	int update_identifier;
+
+	/**
+	 * roaming_consortium_selection - Roaming Consortium Selection
+	 *
+	 * The matching Roaming Consortium OI that was used to generate this
+	 * network profile.
+	 */
+	u8 *roaming_consortium_selection;
+
+	/**
+	 * roaming_consortium_selection_len - roaming_consortium_selection len
+	 */
+	size_t roaming_consortium_selection_len;
 #endif /* CONFIG_HS20 */
 
 	unsigned int wps_run;

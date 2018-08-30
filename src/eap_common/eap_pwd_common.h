@@ -46,10 +46,14 @@ struct eap_pwd_id {
 	u8 prep;
 #define EAP_PWD_PREP_NONE               0
 #define EAP_PWD_PREP_MS                 1
+#define EAP_PWD_PREP_SSHA1              3
+#define EAP_PWD_PREP_SSHA256            4
+#define EAP_PWD_PREP_SSHA512            5
 	u8 identity[0];     /* length inferred from payload */
 } STRUCT_PACKED;
 
 /* common routines */
+EAP_PWD_group * get_eap_pwd_group(u16 num);
 int compute_password_element(EAP_PWD_group *grp, u16 num,
 			     const u8 *password, size_t password_len,
 			     const u8 *id_server, size_t id_server_len,

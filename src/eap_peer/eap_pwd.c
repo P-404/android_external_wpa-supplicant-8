@@ -9,7 +9,9 @@
 #include "includes.h"
 
 #include "common.h"
+#include "crypto/sha1.h"
 #include "crypto/sha256.h"
+#include "crypto/sha512.h"
 #include "crypto/ms_funcs.h"
 #include "crypto/crypto.h"
 #include "eap_peer/eap_i.h"
@@ -29,6 +31,8 @@ struct eap_pwd_data {
 	size_t password_len;
 	int password_hash;
 	u16 group_num;
+	u8 prep;
+	u8 token[4];
 	EAP_PWD_group *grp;
 
 	struct wpabuf *inbuf;
@@ -206,10 +210,6 @@ eap_pwd_perform_id_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 			    const u8 *payload, size_t payload_len)
 {
 	struct eap_pwd_id *id;
-	const u8 *password;
-	size_t password_len;
-	u8 pwhashhash[16];
-	int res;
 
 	if (data->state != PWD_ID_Req) {
 		ret->ignore = TRUE;
@@ -236,7 +236,10 @@ eap_pwd_perform_id_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 	}
 
 	if (id->prep != EAP_PWD_PREP_NONE &&
-	    id->prep != EAP_PWD_PREP_MS) {
+	    id->prep != EAP_PWD_PREP_MS &&
+	    id->prep != EAP_PWD_PREP_SSHA1 &&
+	    id->prep != EAP_PWD_PREP_SSHA256 &&
+	    id->prep != EAP_PWD_PREP_SSHA512) {
 		wpa_printf(MSG_DEBUG,
 			   "EAP-PWD: Unsupported password pre-processing technique (Prep=%u)",
 			   id->prep);
@@ -254,6 +257,15 @@ eap_pwd_perform_id_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 	wpa_printf(MSG_DEBUG, "EAP-PWD (peer): using group %d",
 		   data->group_num);
 
+	data->prep = id->prep;
+	os_memcpy(data->token, id->token, sizeof(id->token));
+
+	if (data->id_server || data->grp) {
+		wpa_printf(MSG_INFO, "EAP-pwd: data was already allocated");
+		eap_pwd_state(data, FAILURE);
+		return;
+	}
+
 	data->id_server = os_malloc(payload_len - sizeof(struct eap_pwd_id));
 	if (data->id_server == NULL) {
 		wpa_printf(MSG_INFO, "EAP-PWD: memory allocation id fail");
@@ -265,61 +277,13 @@ eap_pwd_perform_id_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 	wpa_hexdump_ascii(MSG_INFO, "EAP-PWD (peer): server sent id of",
 			  data->id_server, data->id_server_len);
 
-	data->grp = os_zalloc(sizeof(EAP_PWD_group));
+	data->grp = get_eap_pwd_group(data->group_num);
 	if (data->grp == NULL) {
 		wpa_printf(MSG_INFO, "EAP-PWD: failed to allocate memory for "
 			   "group");
 		eap_pwd_state(data, FAILURE);
 		return;
 	}
-
-	if (id->prep == EAP_PWD_PREP_MS) {
-#ifdef CONFIG_FIPS
-		wpa_printf(MSG_ERROR,
-			   "EAP-PWD (peer): MS password hash not supported in FIPS mode");
-		eap_pwd_state(data, FAILURE);
-		return;
-#else /* CONFIG_FIPS */
-		if (data->password_hash) {
-			res = hash_nt_password_hash(data->password, pwhashhash);
-		} else {
-			u8 pwhash[16];
-
-			res = nt_password_hash(data->password,
-					       data->password_len, pwhash);
-			if (res == 0)
-				res = hash_nt_password_hash(pwhash, pwhashhash);
-			os_memset(pwhash, 0, sizeof(pwhash));
-		}
-
-		if (res) {
-			eap_pwd_state(data, FAILURE);
-			return;
-		}
-
-		password = pwhashhash;
-		password_len = sizeof(pwhashhash);
-#endif /* CONFIG_FIPS */
-	} else {
-		password = data->password;
-		password_len = data->password_len;
-	}
-
-	/* compute PWE */
-	res = compute_password_element(data->grp, data->group_num,
-				       password, password_len,
-				       data->id_server, data->id_server_len,
-				       data->id_peer, data->id_peer_len,
-				       id->token);
-	os_memset(pwhashhash, 0, sizeof(pwhashhash));
-	if (res) {
-		wpa_printf(MSG_INFO, "EAP-PWD (peer): unable to compute PWE");
-		eap_pwd_state(data, FAILURE);
-		return;
-	}
-
-	wpa_printf(MSG_DEBUG, "EAP-PWD (peer): computed %d bit PWE...",
-		   (int) crypto_ec_prime_len_bits(data->grp->group));
 
 	data->outbuf = wpabuf_alloc(sizeof(struct eap_pwd_id) +
 				    data->id_peer_len);
@@ -346,11 +310,25 @@ eap_pwd_perform_commit_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 {
 	struct crypto_ec_point *K = NULL, *point = NULL;
 	struct crypto_bignum *mask = NULL, *cofactor = NULL;
-	const u8 *ptr;
+	const u8 *ptr = payload;
 	u8 *scalar = NULL, *element = NULL;
 	size_t prime_len, order_len;
+	const u8 *password;
+	size_t password_len;
+	u8 pwhashhash[16];
+	const u8 *salt_pwd[2];
+	size_t salt_pwd_len[2], exp_len;
+	u8 salt_len, salthashpwd[64]; /* 64 = SHA512_DIGEST_LENGTH */
+	int res;
 
 	if (data->state != PWD_Commit_Req) {
+		ret->ignore = TRUE;
+		goto fin;
+	}
+
+	if (!data->grp) {
+		wpa_printf(MSG_DEBUG,
+			   "EAP-PWD (client): uninitialized EAP-pwd group");
 		ret->ignore = TRUE;
 		goto fin;
 	}
@@ -358,13 +336,194 @@ eap_pwd_perform_commit_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 	prime_len = crypto_ec_prime_len(data->grp->group);
 	order_len = crypto_ec_order_len(data->grp->group);
 
-	if (payload_len != 2 * prime_len + order_len) {
-		wpa_printf(MSG_INFO,
-			   "EAP-pwd: Unexpected Commit payload length %u (expected %u)",
-			   (unsigned int) payload_len,
-			   (unsigned int) (2 * prime_len + order_len));
-		goto fin;
+	switch (data->prep) {
+	case EAP_PWD_PREP_MS:
+		wpa_printf(MSG_DEBUG,
+			   "EAP-pwd commit request, password prep is MS");
+#ifdef CONFIG_FIPS
+		wpa_printf(MSG_ERROR,
+			   "EAP-PWD (peer): MS password hash not supported in FIPS mode");
+		eap_pwd_state(data, FAILURE);
+		return;
+#else /* CONFIG_FIPS */
+		if (payload_len != 2 * prime_len + order_len) {
+			wpa_printf(MSG_INFO,
+				   "EAP-pwd: Unexpected Commit payload length %u (expected %u)",
+				   (unsigned int) payload_len,
+				   (unsigned int) (2 * prime_len + order_len));
+			goto fin;
+		}
+		if (data->password_hash) {
+			res = hash_nt_password_hash(data->password, pwhashhash);
+		} else {
+			u8 pwhash[16];
+
+			res = nt_password_hash(data->password,
+					       data->password_len, pwhash);
+			if (res == 0)
+				res = hash_nt_password_hash(pwhash, pwhashhash);
+			os_memset(pwhash, 0, sizeof(pwhash));
+		}
+
+		if (res) {
+			eap_pwd_state(data, FAILURE);
+			return;
+		}
+
+		password = pwhashhash;
+		password_len = sizeof(pwhashhash);
+#endif /* CONFIG_FIPS */
+		break;
+	case EAP_PWD_PREP_SSHA1:
+		wpa_printf(MSG_DEBUG,
+			   "EAP-pwd commit request, password prep is salted sha1");
+		if (payload_len < 1 || *ptr == 0) {
+			wpa_printf(MSG_DEBUG, "EAP-pwd: Invalid Salt-len");
+			goto fin;
+		}
+		salt_len = *ptr++;
+		exp_len = 1 + salt_len + 2 * prime_len + order_len;
+		if (payload_len != exp_len) {
+			wpa_printf(MSG_INFO,
+				   "EAP-pwd: Unexpected Commit payload length %u (expected %u)",
+				   (unsigned int) payload_len,
+				   (unsigned int) exp_len);
+			goto fin;
+		}
+
+		/* salted-password = Hash(password | salt) */
+		wpa_hexdump_key(MSG_DEBUG, "EAP-pwd: Unsalted password",
+				data->password, data->password_len);
+		wpa_hexdump(MSG_DEBUG, "EAP-pwd: Salt", ptr, salt_len);
+		salt_pwd[0] = data->password;
+		salt_pwd[1] = ptr;
+		salt_pwd_len[0] = data->password_len;
+		salt_pwd_len[1] = salt_len;
+		if (sha1_vector(2, salt_pwd, salt_pwd_len, salthashpwd) < 0)
+			goto fin;
+
+		wpa_printf(MSG_DEBUG,
+			   "EAP-pwd: sha1 hashed %d byte salt with password",
+			   (int) salt_len);
+		ptr += salt_len;
+		password = salthashpwd;
+		password_len = SHA1_MAC_LEN;
+		wpa_hexdump_key(MSG_DEBUG, "EAP-pwd: Salted password",
+				password, password_len);
+		break;
+	case EAP_PWD_PREP_SSHA256:
+		wpa_printf(MSG_DEBUG,
+			   "EAP-pwd commit request, password prep is salted sha256");
+		if (payload_len < 1 || *ptr == 0) {
+			wpa_printf(MSG_DEBUG, "EAP-pwd: Invalid Salt-len");
+			goto fin;
+		}
+		salt_len = *ptr++;
+		exp_len = 1 + salt_len + 2 * prime_len + order_len;
+		if (payload_len != exp_len) {
+			wpa_printf(MSG_INFO,
+				   "EAP-pwd: Unexpected Commit payload length %u (expected %u)",
+				   (unsigned int) payload_len,
+				   (unsigned int) exp_len);
+			goto fin;
+		}
+
+		/* salted-password = Hash(password | salt) */
+		wpa_hexdump_key(MSG_DEBUG, "EAP-pwd: Unsalted password",
+				data->password, data->password_len);
+		wpa_hexdump(MSG_DEBUG, "EAP-pwd: Salt", ptr, salt_len);
+		salt_pwd[0] = data->password;
+		salt_pwd[1] = ptr;
+		salt_pwd_len[0] = data->password_len;
+		salt_pwd_len[1] = salt_len;
+		if (sha256_vector(2, salt_pwd, salt_pwd_len, salthashpwd) < 0)
+			goto fin;
+
+		ptr += salt_len;
+		password = salthashpwd;
+		password_len = SHA256_MAC_LEN;
+		wpa_hexdump_key(MSG_DEBUG, "EAP-pwd: Salted password",
+				password, password_len);
+		break;
+#ifdef CONFIG_SHA512
+	case EAP_PWD_PREP_SSHA512:
+		wpa_printf(MSG_DEBUG,
+			   "EAP-pwd commit request, password prep is salted sha512");
+		if (payload_len < 1 || *ptr == 0) {
+			wpa_printf(MSG_DEBUG, "EAP-pwd: Invalid Salt-len");
+			goto fin;
+		}
+		salt_len = *ptr++;
+		exp_len = 1 + salt_len + 2 * prime_len + order_len;
+		if (payload_len != exp_len) {
+			wpa_printf(MSG_INFO,
+				   "EAP-pwd: Unexpected Commit payload length %u (expected %u)",
+				   (unsigned int) payload_len,
+				   (unsigned int) exp_len);
+			goto fin;
+		}
+
+		/* salted-password = Hash(password | salt) */
+		wpa_hexdump_key(MSG_DEBUG, "EAP-pwd: Unsalted password",
+				data->password, data->password_len);
+		wpa_hexdump(MSG_DEBUG, "EAP-pwd: Salt", ptr, salt_len);
+		salt_pwd[0] = data->password;
+		salt_pwd[1] = ptr;
+		salt_pwd_len[0] = data->password_len;
+		salt_pwd_len[1] = salt_len;
+		if (sha512_vector(2, salt_pwd, salt_pwd_len, salthashpwd) < 0)
+			goto fin;
+
+		ptr += salt_len;
+		password = salthashpwd;
+		password_len = SHA512_MAC_LEN;
+		wpa_hexdump_key(MSG_DEBUG, "EAP-pwd: Salted password",
+				password, password_len);
+		break;
+#endif /* CONFIG_SHA512 */
+	case EAP_PWD_PREP_NONE:
+		wpa_printf(MSG_DEBUG,
+			   "EAP-pwd commit request, password prep is NONE");
+		if (data->password_hash) {
+			wpa_printf(MSG_DEBUG,
+				   "EAP-PWD: Unhashed password not available");
+			eap_pwd_state(data, FAILURE);
+			return;
+		}
+		if (payload_len != 2 * prime_len + order_len) {
+			wpa_printf(MSG_INFO,
+				   "EAP-pwd: Unexpected Commit payload length %u (expected %u)",
+				   (unsigned int) payload_len,
+				   (unsigned int) (2 * prime_len + order_len));
+			goto fin;
+		}
+		password = data->password;
+		password_len = data->password_len;
+		break;
+	default:
+		wpa_printf(MSG_DEBUG,
+			   "EAP-pwd: Unsupported password pre-processing technique (Prep=%u)",
+			   data->prep);
+		eap_pwd_state(data, FAILURE);
+		return;
 	}
+
+	/* compute PWE */
+	res = compute_password_element(data->grp, data->group_num,
+				       password, password_len,
+				       data->id_server, data->id_server_len,
+				       data->id_peer, data->id_peer_len,
+				       data->token);
+	os_memset(pwhashhash, 0, sizeof(pwhashhash));
+	os_memset(salthashpwd, 0, sizeof(salthashpwd));
+	if (res) {
+		wpa_printf(MSG_INFO, "EAP-PWD (peer): unable to compute PWE");
+		eap_pwd_state(data, FAILURE);
+		return;
+	}
+
+	wpa_printf(MSG_DEBUG, "EAP-PWD (peer): computed %d bit PWE...",
+		   (int) crypto_ec_prime_len_bits(data->grp->group));
 
 	data->private_value = crypto_bignum_init();
 	data->my_element = crypto_ec_point_init(data->grp->group);
@@ -421,7 +580,6 @@ eap_pwd_perform_commit_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 	}
 
 	/* element, x then y, followed by scalar */
-	ptr = payload;
 	data->server_element = crypto_ec_point_from_bin(data->grp->group, ptr);
 	if (!data->server_element) {
 		wpa_printf(MSG_INFO, "EAP-PWD (peer): setting peer element "

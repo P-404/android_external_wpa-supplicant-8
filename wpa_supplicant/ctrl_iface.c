@@ -66,28 +66,6 @@ static int * freq_range_to_channel_list(struct wpa_supplicant *wpa_s,
 					char *val);
 
 
-#ifdef CONFIG_FILS
-
-static int wpa_is_fils_supported(struct wpa_supplicant *wpa_s)
-{
-	return (((wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME) &&
-		 (wpa_s->drv_flags & WPA_DRIVER_FLAGS_SUPPORT_FILS)) ||
-		(!(wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME) &&
-		 (wpa_s->drv_flags & WPA_DRIVER_FLAGS_FILS_SK_OFFLOAD)));
-}
-
-
-#ifdef CONFIG_FILS_SK_PFS
-static int wpa_is_fils_sk_pfs_supported(struct wpa_supplicant *wpa_s)
-{
-	return (wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME) &&
-		(wpa_s->drv_flags & WPA_DRIVER_FLAGS_SUPPORT_FILS);
-}
-#endif /* CONFIG_FILS_SK_PFS */
-
-#endif /* CONFIG_FILS */
-
-
 static int set_bssid_filter(struct wpa_supplicant *wpa_s, char *val)
 {
 	char *pos;
@@ -2313,6 +2291,13 @@ static int wpa_supplicant_ctrl_iface_status(struct wpa_supplicant *wpa_s,
 		pos += ret;
 	}
 #endif /* CONFIG_WPS */
+
+	if (wpa_s->ieee80211ac) {
+		ret = os_snprintf(pos, end - pos, "ieee80211ac=1\n");
+		if (os_snprintf_error(end - pos, ret))
+			return pos - buf;
+		pos += ret;
+	}
 
 #ifdef ANDROID
 	/*
@@ -4822,6 +4807,8 @@ static int print_bss_info(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
 				   anqp->hs20_operating_class);
 		pos = anqp_add_hex(pos, end, "hs20_osu_providers_list",
 				   anqp->hs20_osu_providers_list);
+		pos = anqp_add_hex(pos, end, "hs20_operator_icon_metadata",
+				   anqp->hs20_operator_icon_metadata);
 #endif /* CONFIG_HS20 */
 
 		dl_list_for_each(elem, &anqp->anqp_elems,
@@ -7481,10 +7468,17 @@ static int wpa_supplicant_signal_poll(struct wpa_supplicant *wpa_s, char *buf,
 		pos += ret;
 	}
 
-	if (si.center_frq1 > 0 && si.center_frq2 > 0) {
-		ret = os_snprintf(pos, end - pos,
-				  "CENTER_FRQ1=%d\nCENTER_FRQ2=%d\n",
-				  si.center_frq1, si.center_frq2);
+	if (si.center_frq1 > 0) {
+		ret = os_snprintf(pos, end - pos, "CENTER_FRQ1=%d\n",
+				  si.center_frq1);
+		if (os_snprintf_error(end - pos, ret))
+			return -1;
+		pos += ret;
+	}
+
+	if (si.center_frq2 > 0) {
+		ret = os_snprintf(pos, end - pos, "CENTER_FRQ2=%d\n",
+				  si.center_frq2);
 		if (os_snprintf_error(end - pos, ret))
 			return -1;
 		pos += ret;

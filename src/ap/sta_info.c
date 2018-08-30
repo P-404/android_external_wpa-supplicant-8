@@ -324,6 +324,7 @@ void ap_free_sta(struct hostapd_data *hapd, struct sta_info *sta)
 	wpabuf_free(sta->wps_ie);
 	wpabuf_free(sta->p2p_ie);
 	wpabuf_free(sta->hs20_ie);
+	wpabuf_free(sta->roaming_consortium);
 #ifdef CONFIG_FST
 	wpabuf_free(sta->mb_ies);
 #endif /* CONFIG_FST */
@@ -334,6 +335,7 @@ void ap_free_sta(struct hostapd_data *hapd, struct sta_info *sta)
 	os_free(sta->identity);
 	os_free(sta->radius_cui);
 	os_free(sta->remediation_url);
+	os_free(sta->t_c_url);
 	wpabuf_free(sta->hs20_deauth_req);
 	os_free(sta->hs20_session_info_url);
 
@@ -367,6 +369,8 @@ void ap_free_sta(struct hostapd_data *hapd, struct sta_info *sta)
 #ifdef CONFIG_WNM_AP
 	eloop_cancel_timeout(ap_sta_reset_steer_flag_timer, hapd, sta);
 #endif /* CONFIG_WNM_AP */
+
+	os_free(sta->ifname_wds);
 
 	os_free(sta);
 }

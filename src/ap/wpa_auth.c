@@ -1,6 +1,6 @@
 /*
  * IEEE 802.11 RSN / WPA Authenticator
- * Copyright (c) 2004-2015, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2004-2018, Jouni Malinen <j@w1.fi>
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -1949,8 +1949,13 @@ SM_STATE(WPA_PTK, INITPMK)
 		sm->pmk_len = pmk_len;
 #ifdef CONFIG_IEEE80211R_AP
 		if (len >= 2 * PMK_LEN) {
-			os_memcpy(sm->xxkey, msk + PMK_LEN, PMK_LEN);
-			sm->xxkey_len = PMK_LEN;
+			if (wpa_key_mgmt_sha384(sm->wpa_key_mgmt)) {
+				os_memcpy(sm->xxkey, msk, SHA384_MAC_LEN);
+				sm->xxkey_len = SHA384_MAC_LEN;
+			} else {
+				os_memcpy(sm->xxkey, msk + PMK_LEN, PMK_LEN);
+				sm->xxkey_len = PMK_LEN;
+			}
 		}
 #endif /* CONFIG_IEEE80211R_AP */
 	} else {
@@ -2121,21 +2126,24 @@ int fils_auth_pmk_to_ptk(struct wpa_state_machine *sm, const u8 *pmk,
 	if (fils_ft_len) {
 		struct wpa_authenticator *wpa_auth = sm->wpa_auth;
 		struct wpa_auth_config *conf = &wpa_auth->conf;
-		u8 pmk_r0[PMK_LEN], pmk_r0_name[WPA_PMK_NAME_LEN];
+		u8 pmk_r0[PMK_LEN_MAX], pmk_r0_name[WPA_PMK_NAME_LEN];
+		int use_sha384 = wpa_key_mgmt_sha384(sm->wpa_key_mgmt);
+		size_t pmk_r0_len = use_sha384 ? SHA384_MAC_LEN : PMK_LEN;
 
 		if (wpa_derive_pmk_r0(fils_ft, fils_ft_len,
 				      conf->ssid, conf->ssid_len,
 				      conf->mobility_domain,
 				      conf->r0_key_holder,
 				      conf->r0_key_holder_len,
-				      sm->addr, pmk_r0, pmk_r0_name) < 0)
+				      sm->addr, pmk_r0, pmk_r0_name,
+				      use_sha384) < 0)
 			return -1;
 
-		wpa_hexdump_key(MSG_DEBUG, "FILS+FT: PMK-R0", pmk_r0, PMK_LEN);
+		wpa_hexdump_key(MSG_DEBUG, "FILS+FT: PMK-R0",
+				pmk_r0, pmk_r0_len);
 		wpa_hexdump(MSG_DEBUG, "FILS+FT: PMKR0Name",
 			    pmk_r0_name, WPA_PMK_NAME_LEN);
-		wpa_ft_store_pmk_r0(wpa_auth, sm->addr, pmk_r0, pmk_r0_name,
-				    sm->pairwise);
+		wpa_ft_store_pmk_fils(sm, pmk_r0, pmk_r0_name);
 		os_memset(fils_ft, 0, sizeof(fils_ft));
 	}
 #endif /* CONFIG_IEEE80211R_AP */
@@ -2516,7 +2524,8 @@ static struct wpabuf * fils_prepare_plainbuf(struct wpa_state_machine *sm,
 	/* GTK KDE */
 	gtk = gsm->GTK[gsm->GN - 1];
 	gtk_len = gsm->GTK_len;
-	if (sm->wpa_auth->conf.disable_gtk) {
+	if (sm->wpa_auth->conf.disable_gtk ||
+	    sm->wpa_key_mgmt == WPA_KEY_MGMT_OSEN) {
 		/*
 		 * Provide unique random GTK to each STA to prevent use
 		 * of GTK in the BSS.
@@ -2832,7 +2841,8 @@ static u8 * ieee80211w_kde_add(struct wpa_state_machine *sm, u8 *pos)
 	else
 		os_memcpy(igtk.pn, rsc, sizeof(igtk.pn));
 	os_memcpy(igtk.igtk, gsm->IGTK[gsm->GN_igtk - 4], len);
-	if (sm->wpa_auth->conf.disable_gtk) {
+	if (sm->wpa_auth->conf.disable_gtk ||
+	    sm->wpa_key_mgmt == WPA_KEY_MGMT_OSEN) {
 		/*
 		 * Provide unique random IGTK to each STA to prevent use of
 		 * IGTK in the BSS.
@@ -2910,7 +2920,8 @@ SM_STATE(WPA_PTK, PTKINITNEGOTIATING)
 		secure = 1;
 		gtk = gsm->GTK[gsm->GN - 1];
 		gtk_len = gsm->GTK_len;
-		if (sm->wpa_auth->conf.disable_gtk) {
+		if (sm->wpa_auth->conf.disable_gtk ||
+		    sm->wpa_key_mgmt == WPA_KEY_MGMT_OSEN) {
 			/*
 			 * Provide unique random GTK to each STA to prevent use
 			 * of GTK in the BSS.
@@ -3003,7 +3014,10 @@ SM_STATE(WPA_PTK, PTKINITNEGOTIATING)
 				  2 + sm->assoc_resp_ftie[1]);
 			res = 2 + sm->assoc_resp_ftie[1];
 		} else {
-			res = wpa_write_ftie(conf, conf->r0_key_holder,
+			int use_sha384 = wpa_key_mgmt_sha384(sm->wpa_key_mgmt);
+
+			res = wpa_write_ftie(conf, use_sha384,
+					     conf->r0_key_holder,
 					     conf->r0_key_holder_len,
 					     NULL, NULL, pos,
 					     kde + kde_len - pos,
@@ -3028,7 +3042,7 @@ SM_STATE(WPA_PTK, PTKINITNEGOTIATING)
 		*pos++ = WLAN_EID_TIMEOUT_INTERVAL;
 		*pos++ = 5;
 		*pos++ = WLAN_TIMEOUT_KEY_LIFETIME;
-		WPA_PUT_LE32(pos, conf->r0_key_lifetime * 60);
+		WPA_PUT_LE32(pos, conf->r0_key_lifetime);
 		pos += 4;
 	}
 #endif /* CONFIG_IEEE80211R_AP */
@@ -3286,7 +3300,8 @@ SM_STATE(WPA_PTK_GROUP, REKEYNEGOTIATING)
 			"sending 1/2 msg of Group Key Handshake");
 
 	gtk = gsm->GTK[gsm->GN - 1];
-	if (sm->wpa_auth->conf.disable_gtk) {
+	if (sm->wpa_auth->conf.disable_gtk ||
+	    sm->wpa_key_mgmt == WPA_KEY_MGMT_OSEN) {
 		/*
 		 * Provide unique random GTK to each STA to prevent use
 		 * of GTK in the BSS.
@@ -4528,11 +4543,12 @@ wpa_auth_pmksa_get_fils_cache_id(struct wpa_authenticator *wpa_auth,
 
 
 #ifdef CONFIG_IEEE80211R_AP
-int wpa_auth_write_fte(struct wpa_authenticator *wpa_auth, u8 *buf, size_t len)
+int wpa_auth_write_fte(struct wpa_authenticator *wpa_auth, int use_sha384,
+		       u8 *buf, size_t len)
 {
 	struct wpa_auth_config *conf = &wpa_auth->conf;
 
-	return wpa_write_ftie(conf, conf->r0_key_holder,
+	return wpa_write_ftie(conf, use_sha384, conf->r0_key_holder,
 			      conf->r0_key_holder_len,
 			      NULL, NULL, buf, len, NULL, 0);
 }
@@ -4702,7 +4718,10 @@ int wpa_auth_resend_m3(struct wpa_state_machine *sm,
 				  2 + sm->assoc_resp_ftie[1]);
 			res = 2 + sm->assoc_resp_ftie[1];
 		} else {
-			res = wpa_write_ftie(conf, conf->r0_key_holder,
+			int use_sha384 = wpa_key_mgmt_sha384(sm->wpa_key_mgmt);
+
+			res = wpa_write_ftie(conf, use_sha384,
+					     conf->r0_key_holder,
 					     conf->r0_key_holder_len,
 					     NULL, NULL, pos,
 					     kde + kde_len - pos,
@@ -4727,7 +4746,7 @@ int wpa_auth_resend_m3(struct wpa_state_machine *sm,
 		*pos++ = WLAN_EID_TIMEOUT_INTERVAL;
 		*pos++ = 5;
 		*pos++ = WLAN_TIMEOUT_KEY_LIFETIME;
-		WPA_PUT_LE32(pos, conf->r0_key_lifetime * 60);
+		WPA_PUT_LE32(pos, conf->r0_key_lifetime);
 		pos += 4;
 	}
 #endif /* CONFIG_IEEE80211R_AP */

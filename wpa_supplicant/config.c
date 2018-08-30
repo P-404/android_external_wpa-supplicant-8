@@ -1,6 +1,6 @@
 /*
  * WPA Supplicant / Configuration parser and common functions
- * Copyright (c) 2003-2015, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2003-2018, Jouni Malinen <j@w1.fi>
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -735,6 +735,10 @@ static int wpa_config_parse_key_mgmt(const struct parse_data *data,
 			val |= WPA_KEY_MGMT_FT_PSK;
 		else if (os_strcmp(start, "FT-EAP") == 0)
 			val |= WPA_KEY_MGMT_FT_IEEE8021X;
+#ifdef CONFIG_SHA384
+		else if (os_strcmp(start, "FT-EAP-SHA384") == 0)
+			val |= WPA_KEY_MGMT_FT_IEEE8021X_SHA384;
+#endif /* CONFIG_SHA384 */
 #endif /* CONFIG_IEEE80211R */
 #ifdef CONFIG_IEEE80211W
 		else if (os_strcmp(start, "WPA-PSK-SHA256") == 0)
@@ -892,6 +896,18 @@ static char * wpa_config_write_key_mgmt(const struct parse_data *data,
 		}
 		pos += ret;
 	}
+
+#ifdef CONFIG_SHA384
+	if (ssid->key_mgmt & WPA_KEY_MGMT_FT_IEEE8021X_SHA384) {
+		ret = os_snprintf(pos, end - pos, "%sFT-EAP-SHA384",
+				  pos == buf ? "" : " ");
+		if (os_snprintf_error(end - pos, ret)) {
+			end[-1] = '\0';
+			return buf;
+		}
+		pos += ret;
+	}
+#endif /* CONFIG_SHA384 */
 #endif /* CONFIG_IEEE80211R */
 
 #ifdef CONFIG_IEEE80211W
@@ -2134,6 +2150,7 @@ static const struct parse_data ssid_fields[] = {
 	{ FUNC_KEY(psk) },
 	{ INT(mem_only_psk) },
 	{ STR_KEY(sae_password) },
+	{ STR(sae_password_id) },
 	{ FUNC(proto) },
 	{ FUNC(key_mgmt) },
 	{ INT(bg_scan_period) },
@@ -2289,6 +2306,7 @@ static const struct parse_data ssid_fields[] = {
 #endif /* CONFIG_MACSEC */
 #ifdef CONFIG_HS20
 	{ INT(update_identifier) },
+	{ STR_RANGE(roaming_consortium_selection, 0, MAX_ROAMING_CONS_OI_LEN) },
 #endif /* CONFIG_HS20 */
 	{ INT_RANGE(mac_addr, 0, 2) },
 	{ INT_RANGE(pbss, 0, 2) },
@@ -2473,6 +2491,7 @@ void wpa_config_free_ssid(struct wpa_ssid *ssid)
 	str_clear_free(ssid->passphrase);
 	os_free(ssid->ext_psk);
 	str_clear_free(ssid->sae_password);
+	os_free(ssid->sae_password_id);
 #ifdef IEEE8021X_EAPOL
 	eap_peer_config_free(&ssid->eap);
 #endif /* IEEE8021X_EAPOL */
@@ -2489,6 +2508,9 @@ void wpa_config_free_ssid(struct wpa_ssid *ssid)
 #ifdef CONFIG_MESH
 	os_free(ssid->mesh_basic_rates);
 #endif /* CONFIG_MESH */
+#ifdef CONFIG_HS20
+	os_free(ssid->roaming_consortium_selection);
+#endif /* CONFIG_HS20 */
 	os_free(ssid->dpp_connector);
 	bin_clear_free(ssid->dpp_netaccesskey, ssid->dpp_netaccesskey_len);
 	os_free(ssid->dpp_csign);
@@ -3104,11 +3126,62 @@ static int wpa_config_set_cred_req_conn_capab(struct wpa_cred *cred,
 }
 
 
+static int wpa_config_set_cred_roaming_consortiums(struct wpa_cred *cred,
+						   const char *value)
+{
+	u8 roaming_consortiums[MAX_ROAMING_CONS][MAX_ROAMING_CONS_OI_LEN];
+	size_t roaming_consortiums_len[MAX_ROAMING_CONS];
+	unsigned int num_roaming_consortiums = 0;
+	const char *pos, *end;
+	size_t len;
+
+	os_memset(roaming_consortiums, 0, sizeof(roaming_consortiums));
+	os_memset(roaming_consortiums_len, 0, sizeof(roaming_consortiums_len));
+
+	for (pos = value;;) {
+		end = os_strchr(pos, ',');
+		len = end ? (size_t) (end - pos) : os_strlen(pos);
+		if (!end && len == 0)
+			break;
+		if (len == 0 || (len & 1) != 0 ||
+		    len / 2 > MAX_ROAMING_CONS_OI_LEN ||
+		    hexstr2bin(pos,
+			       roaming_consortiums[num_roaming_consortiums],
+			       len / 2) < 0) {
+			wpa_printf(MSG_INFO,
+				   "Invalid roaming_consortiums entry: %s",
+				   pos);
+			return -1;
+		}
+		roaming_consortiums_len[num_roaming_consortiums] = len / 2;
+		num_roaming_consortiums++;
+		if (num_roaming_consortiums > MAX_ROAMING_CONS) {
+			wpa_printf(MSG_INFO,
+				   "Too many roaming_consortiums OIs");
+			return -1;
+		}
+
+		if (!end)
+			break;
+		pos = end + 1;
+	}
+
+	os_memcpy(cred->roaming_consortiums, roaming_consortiums,
+		  sizeof(roaming_consortiums));
+	os_memcpy(cred->roaming_consortiums_len, roaming_consortiums_len,
+		  sizeof(roaming_consortiums_len));
+	cred->num_roaming_consortiums = num_roaming_consortiums;
+
+	return 0;
+}
+
+
 int wpa_config_set_cred(struct wpa_cred *cred, const char *var,
 			const char *value, int line)
 {
 	char *val;
 	size_t len;
+	int res;
 
 	if (os_strcmp(var, "temporary") == 0) {
 		cred->temporary = atoi(value);
@@ -3329,6 +3402,16 @@ int wpa_config_set_cred(struct wpa_cred *cred, const char *var,
 		cred->required_roaming_consortium_len = len;
 		os_free(val);
 		return 0;
+	}
+
+	if (os_strcmp(var, "roaming_consortiums") == 0) {
+		res = wpa_config_set_cred_roaming_consortiums(cred, val);
+		if (res < 0)
+			wpa_printf(MSG_ERROR,
+				   "Line %d: invalid roaming_consortiums",
+				   line);
+		os_free(val);
+		return res;
 	}
 
 	if (os_strcmp(var, "excluded_ssid") == 0) {
@@ -3639,6 +3722,31 @@ char * wpa_config_get_cred_no_key(struct wpa_cred *cred, const char *var)
 			return NULL;
 		wpa_snprintf_hex(buf, buflen, cred->required_roaming_consortium,
 				 cred->required_roaming_consortium_len);
+		return buf;
+	}
+
+	if (os_strcmp(var, "roaming_consortiums") == 0) {
+		size_t buflen;
+		char *buf, *pos;
+		size_t i;
+
+		if (!cred->num_roaming_consortiums)
+			return NULL;
+		buflen = cred->num_roaming_consortiums *
+			MAX_ROAMING_CONS_OI_LEN * 2 + 1;
+		buf = os_malloc(buflen);
+		if (!buf)
+			return NULL;
+		pos = buf;
+		for (i = 0; i < cred->num_roaming_consortiums; i++) {
+			if (i > 0)
+				*pos++ = ',';
+			pos += wpa_snprintf_hex(
+				pos, buf + buflen - pos,
+				cred->roaming_consortiums[i],
+				cred->roaming_consortiums_len[i]);
+		}
+		*pos = '\0';
 		return buf;
 	}
 

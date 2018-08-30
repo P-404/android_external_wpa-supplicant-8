@@ -117,12 +117,15 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 
 	if (sae_prepare_commit(wpa_s->own_addr, bssid,
 			       (u8 *) password, os_strlen(password),
+			       ssid->sae_password_id,
 			       &wpa_s->sme.sae) < 0) {
 		wpa_printf(MSG_DEBUG, "SAE: Could not pick PWE");
 		return NULL;
 	}
 
 	len = wpa_s->sme.sae_token ? wpabuf_len(wpa_s->sme.sae_token) : 0;
+	if (ssid->sae_password_id)
+		len += 4 + os_strlen(ssid->sae_password_id);
 	buf = wpabuf_alloc(4 + SAE_COMMIT_MAX_LEN + len);
 	if (buf == NULL)
 		return NULL;
@@ -130,7 +133,8 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 		wpabuf_put_le16(buf, 1); /* Transaction seq# */
 		wpabuf_put_le16(buf, WLAN_STATUS_SUCCESS);
 	}
-	sae_write_commit(&wpa_s->sme.sae, buf, wpa_s->sme.sae_token);
+	sae_write_commit(&wpa_s->sme.sae, buf, wpa_s->sme.sae_token,
+			 ssid->sae_password_id);
 
 	return buf;
 }
@@ -333,7 +337,8 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_FILS */
 		if (pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid,
 					    wpa_s->current_ssid,
-					    try_opportunistic, cache_id) == 0)
+					    try_opportunistic, cache_id,
+					    0) == 0)
 			eapol_sm_notify_pmkid_attempt(wpa_s->eapol);
 		wpa_s->sme.assoc_req_ie_len = sizeof(wpa_s->sme.assoc_req_ie);
 		if (wpa_supplicant_set_suites(wpa_s, bss, ssid,
@@ -499,12 +504,13 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 	if (is_hs20_network(wpa_s, ssid, bss)) {
 		struct wpabuf *hs20;
 
-		hs20 = wpabuf_alloc(20);
+		hs20 = wpabuf_alloc(20 + MAX_ROAMING_CONS_OI_LEN);
 		if (hs20) {
 			int pps_mo_id = hs20_get_pps_mo_id(wpa_s, ssid);
 			size_t len;
 
 			wpas_hs20_add_indication(hs20, pps_mo_id);
+			wpas_hs20_add_roam_cons_sel(hs20, ssid);
 			len = sizeof(wpa_s->sme.assoc_req_ie) -
 				wpa_s->sme.assoc_req_ie_len;
 			if (wpabuf_len(hs20) <= len) {
@@ -548,9 +554,10 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 #ifdef CONFIG_SAE
 	if (!skip_auth && params.auth_alg == WPA_AUTH_ALG_SAE &&
 	    pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid, ssid, 0,
-				    NULL) == 0) {
+				    NULL, WPA_KEY_MGMT_SAE) == 0) {
 		wpa_dbg(wpa_s, MSG_DEBUG,
 			"PMKSA cache entry found - try to use PMKSA caching instead of new SAE authentication");
+		wpa_sm_set_pmk_from_pmksa(wpa_s->wpa);
 		params.auth_alg = WPA_AUTH_ALG_OPEN;
 		wpa_s->sme.sae_pmksa_caching = 1;
 	}
@@ -615,8 +622,8 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 
 		if (pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid,
 					    ssid, 0,
-					    wpa_bss_get_fils_cache_id(bss)) ==
-		    0)
+					    wpa_bss_get_fils_cache_id(bss),
+					    0) == 0)
 			wpa_printf(MSG_DEBUG,
 				   "SME: Try to use FILS with PMKSA caching");
 		resp = fils_build_auth(wpa_s->wpa, ssid->fils_dh_group, md);
@@ -1000,6 +1007,16 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 				wpa_s, wpa_s->sme.ext_auth.bssid,
 				wpa_s->current_ssid);
 		return 0;
+	}
+
+	if (auth_transaction == 1 &&
+	    status_code == WLAN_STATUS_UNKNOWN_PASSWORD_IDENTIFIER) {
+		const u8 *bssid = sa ? sa : wpa_s->pending_bssid;
+
+		wpa_msg(wpa_s, MSG_INFO,
+			WPA_EVENT_SAE_UNKNOWN_PASSWORD_IDENTIFIER MACSTR,
+			MAC2STR(bssid));
+		return -1;
 	}
 
 	if (status_code != WLAN_STATUS_SUCCESS)
