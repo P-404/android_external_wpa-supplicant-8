@@ -28,7 +28,7 @@ namespace hidl_return_util {
 template <typename ObjT, typename WorkFuncT, typename... Args>
 Return<void> call(
     ObjT* obj, WorkFuncT&& work,
-    const std::function<void(const HostapdStatus&)>& hidl_cb, Args&&... args)
+    const std::function<void(const V1_0::HostapdStatus&)>& hidl_cb, Args&&... args)
 {
 	hidl_cb((obj->*work)(std::forward<Args>(args)...));
 	return Void();

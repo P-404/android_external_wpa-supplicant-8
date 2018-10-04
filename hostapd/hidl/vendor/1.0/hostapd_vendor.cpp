@@ -275,8 +275,8 @@ namespace V1_0 {
 namespace implementation {
 
 using namespace android::hardware;
-using namespace android::hardware::wifi::hostapd::V1_0;
-using namespace android::hardware::wifi::hostapd::V1_0::implementation::hidl_return_util;
+using namespace android::hardware::wifi::hostapd::V1_1;
+using namespace android::hardware::wifi::hostapd::V1_1::implementation::hidl_return_util;
 
 using android::base::StringPrintf;
 using qsap_handler::run_qsap_cmd;
