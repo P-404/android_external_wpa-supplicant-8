@@ -49,6 +49,7 @@
 #include "wmm_ac.h"
 #include "dpp_supplicant.h"
 
+#define MAX_OWE_TRANSITION_BSS_SELECT_COUNT 5
 
 #ifndef CONFIG_NO_SCAN_PROCESSING
 static int wpas_select_network_from_last_scan(struct wpa_supplicant *wpa_s,
@@ -703,6 +704,16 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 #ifdef CONFIG_OWE
 	if ((ssid->key_mgmt & WPA_KEY_MGMT_OWE) && !ssid->owe_only &&
 	    !wpa_ie && !rsn_ie) {
+		ssid->owe_transition_bss_select_count++;
+		if (ssid->owe_transition_bss_select_count <= MAX_OWE_TRANSITION_BSS_SELECT_COUNT) {
+			if (debug_print)
+				wpa_dbg(wpa_s, MSG_DEBUG,
+					"   skip owe transition bss select count %d"
+					" does not exceed %d",
+					ssid->owe_transition_bss_select_count,
+					MAX_OWE_TRANSITION_BSS_SELECT_COUNT);
+			return 0;
+		}
 		if (debug_print)
 			wpa_dbg(wpa_s, MSG_DEBUG,
 				"   allow in OWE transition mode");

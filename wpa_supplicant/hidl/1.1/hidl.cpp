@@ -8,6 +8,8 @@
  */
 
 #include <hwbinder/IPCThreadState.h>
+#include <hwbinder/ProcessState.h>
+#include <cutils/properties.h>
 
 #include <hidl/HidlTransportSupport.h>
 #include "hidl_manager.h"
@@ -31,6 +33,17 @@ void wpas_hidl_sock_handler(
 	handleTransportPoll(sock);
 }
 
+#ifdef ARCH_ARM_32
+#define DEFAULT_WIFISUPP_HW_BINDER_SIZE_KB 4
+size_t getHWBinderMmapSize() {
+	size_t value = 0;
+	value = property_get_int32("persist.vendor.wifi.supplicant.hw.binder.size", DEFAULT_WIFISUPP_HW_BINDER_SIZE_KB);
+	if (!value) value = DEFAULT_WIFISUPP_HW_BINDER_SIZE_KB; // deafult to 1 page of 4 Kb
+
+	return 1024 * value;
+}
+#endif /* ARCH_ARM_32 */
+
 struct wpas_hidl_priv *wpas_hidl_init(struct wpa_global *global)
 {
 	struct wpas_hidl_priv *priv;
@@ -43,6 +56,9 @@ struct wpas_hidl_priv *wpas_hidl_init(struct wpa_global *global)
 
 	wpa_printf(MSG_DEBUG, "Initing hidl control");
 
+#ifdef ARCH_ARM_32
+	android::hardware::ProcessState::initWithMmapSize(getHWBinderMmapSize());
+#endif /* ARCH_ARM_32 */
 	configureRpcThreadpool(1, true /* callerWillJoin */);
 	priv->hidl_fd = setupTransportPolling();
 	if (priv->hidl_fd < 0)
@@ -370,7 +386,8 @@ void wpas_hidl_notify_wps_event_pbc_overlap(struct wpa_supplicant *wpa_s)
 void wpas_hidl_notify_p2p_device_found(
     struct wpa_supplicant *wpa_s, const u8 *addr,
     const struct p2p_peer_info *info, const u8 *peer_wfd_device_info,
-    u8 peer_wfd_device_info_len)
+    u8 peer_wfd_device_info_len, const u8 *peer_wfd_r2_device_info,
+    u8 peer_wfd_r2_device_info_len)
 {
 	if (!wpa_s || !addr || !info)
 		return;
@@ -384,7 +401,9 @@ void wpas_hidl_notify_p2p_device_found(
 		return;
 
 	hidl_manager->notifyP2pDeviceFound(
-	    wpa_s, addr, info, peer_wfd_device_info, peer_wfd_device_info_len);
+	    wpa_s, addr, info, peer_wfd_device_info,
+	    peer_wfd_device_info_len, peer_wfd_r2_device_info,
+	    peer_wfd_r2_device_info_len);
 }
 
 void wpas_hidl_notify_p2p_device_lost(

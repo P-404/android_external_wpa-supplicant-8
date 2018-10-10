@@ -172,9 +172,12 @@ std::string AddOrUpdateHostapdConfig(
 		return "";
 	}
 
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "acs_exclude_dfs", "0"));
 	if (iface_params.channelParams.enableAcs) {
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "channel", "0"));
-		// TODO: add support for acs_exclude_dfs param in qsap then add config here.
+		if (iface_params.channelParams.acsShouldExcludeDfs) {
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "acs_exclude_dfs", "1"));
+		}
 	} else {
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "channel", std::to_string(iface_params.channelParams.channel).c_str()));
 	}
@@ -182,6 +185,7 @@ std::string AddOrUpdateHostapdConfig(
 	switch (iface_params.channelParams.band) {
 	case IHostapd::Band::BAND_2_4_GHZ:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "g"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[SHORT-GI-20] [GF] [DSSS_CCK-40] [LSIG-TXOP-PROT]"));
 		break;
 	case IHostapd::Band::BAND_5_GHZ:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "a"));
