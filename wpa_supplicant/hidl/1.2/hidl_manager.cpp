@@ -20,6 +20,7 @@ extern "C" {
 
 namespace {
 using android::hardware::hidl_array;
+using namespace android::hardware::wifi::supplicant::V1_2;
 
 constexpr uint8_t kWfdDeviceInfoLen = 6;
 #ifdef SUPPLICANT_VENDOR_HIDL
@@ -296,7 +297,8 @@ void callWithEachIfaceCallback_1_1(
     const std::string &ifname,
     const std::function<
 	android::hardware::Return<void>(android::sp<CallbackTypeV1_1>)> &method,
-    const std::map<const std::string, std::vector<android::sp<CallbackTypeV1_0>>>
+    const std::map<
+	const std::string, std::vector<android::sp<CallbackTypeV1_0>>>
 	&callbacks_map)
 {
 	if (ifname.empty())
@@ -401,11 +403,10 @@ namespace android {
 namespace hardware {
 namespace wifi {
 namespace supplicant {
-namespace V1_1 {
+namespace V1_2 {
 namespace implementation {
 
-using namespace android::hardware::wifi::supplicant::V1_0;
-using namespace android::hardware::wifi::supplicant::V1_1;
+using namespace android::hardware::wifi::supplicant::V1_2;
 using V1_0::ISupplicantStaIfaceCallback;
 
 HidlManager *HidlManager::instance_ = NULL;
@@ -1366,7 +1367,8 @@ void HidlManager::notifyP2pGroupFormationFailure(
 }
 
 void HidlManager::notifyP2pGroupStarted(
-    struct wpa_supplicant *wpa_group_s, const struct wpa_ssid *ssid, int persistent, int client)
+    struct wpa_supplicant *wpa_group_s, const struct wpa_ssid *ssid,
+    int persistent, int client)
 {
 	if (!wpa_group_s || !wpa_group_s->parent || !ssid)
 		return;
@@ -1520,9 +1522,11 @@ void HidlManager::notifyApStaAuthorized(
 	    p2p_iface_object_map_.end())
 		return;
 	callWithEachP2pIfaceCallback(
-	    wpa_s->parent->ifname, std::bind(
-			       &ISupplicantP2pIfaceCallback::onStaAuthorized,
-			       std::placeholders::_1, sta, p2p_dev_addr ? p2p_dev_addr : kZeroBssid));
+	    wpa_s->parent->ifname,
+	    std::bind(
+		&ISupplicantP2pIfaceCallback::onStaAuthorized,
+		std::placeholders::_1, sta,
+		p2p_dev_addr ? p2p_dev_addr : kZeroBssid));
 }
 
 void HidlManager::notifyApStaDeauthorized(
@@ -1535,9 +1539,11 @@ void HidlManager::notifyApStaDeauthorized(
 		return;
 
 	callWithEachP2pIfaceCallback(
-	    wpa_s->parent->ifname, std::bind(
-			       &ISupplicantP2pIfaceCallback::onStaDeauthorized,
-			       std::placeholders::_1, sta, p2p_dev_addr ? p2p_dev_addr : kZeroBssid));
+	    wpa_s->parent->ifname,
+	    std::bind(
+		&ISupplicantP2pIfaceCallback::onStaDeauthorized,
+		std::placeholders::_1, sta,
+		p2p_dev_addr ? p2p_dev_addr : kZeroBssid));
 }
 
 void HidlManager::notifyExtRadioWorkStart(
@@ -1582,22 +1588,21 @@ void HidlManager::notifyEapError(struct wpa_supplicant *wpa_s, int error_code)
 		return;
 
 	switch (static_cast<EapErrorCode>(error_code)) {
-		case EapErrorCode::SIM_GENERAL_FAILURE_AFTER_AUTH:
-		case EapErrorCode::SIM_TEMPORARILY_DENIED:
-		case EapErrorCode::SIM_NOT_SUBSCRIBED:
-		case EapErrorCode::SIM_GENERAL_FAILURE_BEFORE_AUTH:
-		case EapErrorCode::SIM_VENDOR_SPECIFIC_EXPIRED_CERT:
-			break;
-		default:
-			return;
+	case EapErrorCode::SIM_GENERAL_FAILURE_AFTER_AUTH:
+	case EapErrorCode::SIM_TEMPORARILY_DENIED:
+	case EapErrorCode::SIM_NOT_SUBSCRIBED:
+	case EapErrorCode::SIM_GENERAL_FAILURE_BEFORE_AUTH:
+	case EapErrorCode::SIM_VENDOR_SPECIFIC_EXPIRED_CERT:
+		break;
+	default:
+		return;
 	}
 
 	callWithEachStaIfaceCallback_1_1(
 	    wpa_s->ifname,
 	    std::bind(
 		&V1_1::ISupplicantStaIfaceCallback::onEapFailure_1_1,
-		std::placeholders::_1,
-		static_cast<EapErrorCode>(error_code)));
+		std::placeholders::_1, static_cast<EapErrorCode>(error_code)));
 }
 
 #ifdef SUPPLICANT_VENDOR_HIDL
@@ -2098,8 +2103,8 @@ void HidlManager::callWithEachP2pIfaceCallback(
  */
 void HidlManager::callWithEachStaIfaceCallback_1_1(
     const std::string &ifname,
-    const std::function<Return<void>
-	(android::sp<V1_1::ISupplicantStaIfaceCallback>)> &method)
+    const std::function<
+	Return<void>(android::sp<V1_1::ISupplicantStaIfaceCallback>)> &method)
 {
 	callWithEachIfaceCallback_1_1(ifname, method, sta_iface_callbacks_map_);
 }
@@ -2406,8 +2411,8 @@ void HidlManager::callWithEachVendorP2pIfaceCallback(
 }
 #endif
 }  // namespace implementation
-}  // namespace V1_1
-}  // namespace wifi
+}  // namespace V1_2
 }  // namespace supplicant
+}  // namespace wifi
 }  // namespace hardware
 }  // namespace android

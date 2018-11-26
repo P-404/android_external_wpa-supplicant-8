@@ -13,7 +13,8 @@
 #include "misc_utils.h"
 #include "sta_iface.h"
 
-extern "C" {
+extern "C"
+{
 #include "utils/eloop.h"
 #include "gas_query.h"
 #include "interworking.h"
@@ -22,10 +23,10 @@ extern "C" {
 }
 
 namespace {
-using android::hardware::wifi::supplicant::V1_1::ISupplicantStaIface;
 using android::hardware::wifi::supplicant::V1_0::SupplicantStatus;
 using android::hardware::wifi::supplicant::V1_0::SupplicantStatusCode;
-using android::hardware::wifi::supplicant::V1_1::implementation::HidlManager;
+using android::hardware::wifi::supplicant::V1_2::ISupplicantStaIface;
+using android::hardware::wifi::supplicant::V1_2::implementation::HidlManager;
 
 constexpr uint32_t kMaxAnqpElems = 100;
 constexpr char kGetMacAddress[] = "MACADDR";
@@ -155,7 +156,7 @@ namespace android {
 namespace hardware {
 namespace wifi {
 namespace supplicant {
-namespace V1_1 {
+namespace V1_2 {
 namespace implementation {
 using hidl_return_util::validateAndCall;
 
@@ -165,8 +166,7 @@ using V1_0::ISupplicantStaIfaceCallback;
 
 StaIface::StaIface(struct wpa_global *wpa_global, const char ifname[])
     : wpa_global_(wpa_global), ifname_(ifname), is_valid_(true)
-{
-}
+{}
 
 void StaIface::invalidate() { is_valid_ = false; }
 bool StaIface::isValid()
@@ -219,8 +219,8 @@ Return<void> StaIface::listNetworks(listNetworks_cb _hidl_cb)
 }
 
 Return<void> StaIface::registerCallback(
-    const sp<ISupplicantStaIfaceCallback>
-    & callback, registerCallback_cb _hidl_cb)
+    const sp<ISupplicantStaIfaceCallback> &callback,
+    registerCallback_cb _hidl_cb)
 {
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
@@ -231,7 +231,7 @@ Return<void> StaIface::registerCallback_1_1(
     const sp<V1_1::ISupplicantStaIfaceCallback> &callback,
     registerCallback_cb _hidl_cb)
 {
-	sp<V1_0::ISupplicantStaIfaceCallback> callback_1_0 =  callback;
+	sp<V1_0::ISupplicantStaIfaceCallback> callback_1_0 = callback;
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
 	    &StaIface::registerCallbackInternal, _hidl_cb, callback_1_0);
@@ -509,6 +509,14 @@ Return<void> StaIface::enableAutoReconnect(
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
 	    &StaIface::enableAutoReconnectInternal, _hidl_cb, enable);
+}
+
+Return<void> StaIface::getKeyMgmtCapabilities(
+    getKeyMgmtCapabilities_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &StaIface::getKeyMgmtCapabilitiesInternal, _hidl_cb);
 }
 
 std::pair<SupplicantStatus, std::string> StaIface::getNameInternal()
@@ -1016,6 +1024,53 @@ SupplicantStatus StaIface::enableAutoReconnectInternal(bool enable)
 	return {SupplicantStatusCode::SUCCESS, ""};
 }
 
+std::pair<SupplicantStatus, uint32_t>
+StaIface::getKeyMgmtCapabilitiesInternal()
+{
+	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+	struct wpa_driver_capa capa;
+	uint32_t mask = 0;
+
+	/* Get capabilities from driver and populate the key management mask */
+	if (wpa_drv_get_capa(wpa_s, &capa) < 0) {
+		return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, mask};
+	}
+
+	/* Logic from ctrl_iface.c, NONE and IEEE8021X have no capability
+	 * flags and always enabled.
+	 */
+	mask |=
+	    (ISupplicantStaNetwork::KeyMgmtMask::NONE |
+	     ISupplicantStaNetwork::KeyMgmtMask::IEEE8021X);
+
+	if (capa.key_mgmt &
+	    (WPA_DRIVER_CAPA_KEY_MGMT_WPA | WPA_DRIVER_CAPA_KEY_MGMT_WPA2)) {
+		mask |= ISupplicantStaNetwork::KeyMgmtMask::WPA_EAP;
+	}
+
+	if (capa.key_mgmt & (WPA_DRIVER_CAPA_KEY_MGMT_WPA_PSK |
+			     WPA_DRIVER_CAPA_KEY_MGMT_WPA2_PSK)) {
+		mask |= ISupplicantStaNetwork::KeyMgmtMask::WPA_PSK;
+	}
+#ifdef CONFIG_SUITEB192
+	if (capa.key_mgmt & WPA_DRIVER_CAPA_KEY_MGMT_SUITE_B_192) {
+		mask |= ISupplicantStaNetwork::KeyMgmtMask::SUITE_B_192;
+	}
+#endif /* CONFIG_SUITEB192 */
+#ifdef CONFIG_OWE
+	if (capa.key_mgmt & WPA_DRIVER_CAPA_KEY_MGMT_OWE) {
+		mask |= ISupplicantStaNetwork::KeyMgmtMask::OWE;
+	}
+#endif /* CONFIG_OWE */
+#ifdef CONFIG_SAE
+	if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_SAE) {
+		mask |= ISupplicantStaNetwork::KeyMgmtMask::SAE;
+	}
+#endif /* CONFIG_SAE */
+
+	return {{SupplicantStatusCode::SUCCESS, ""}, mask};
+}
+
 /**
  * Retrieve the underlying |wpa_supplicant| struct
  * pointer for this iface.
@@ -1027,8 +1082,8 @@ wpa_supplicant *StaIface::retrieveIfacePtr()
 	return wpa_supplicant_get_iface(wpa_global_, ifname_.c_str());
 }
 }  // namespace implementation
-}  // namespace V1_1
-}  // namespace wifi
+}  // namespace V1_2
 }  // namespace supplicant
+}  // namespace wifi
 }  // namespace hardware
 }  // namespace android

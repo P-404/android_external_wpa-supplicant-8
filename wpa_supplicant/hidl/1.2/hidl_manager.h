@@ -32,7 +32,8 @@
 #include "supplicantvendor.h"
 #endif
 
-extern "C" {
+extern "C"
+{
 #include "utils/common.h"
 #include "utils/includes.h"
 #include "wpa_supplicant_i.h"
@@ -43,11 +44,12 @@ namespace android {
 namespace hardware {
 namespace wifi {
 namespace supplicant {
-namespace V1_1 {
+namespace V1_2 {
 namespace implementation {
-using namespace android::hardware::wifi::supplicant::V1_0;
-using namespace android::hardware::wifi::supplicant::V1_1;
+using namespace android::hardware::wifi::supplicant::V1_2;
 using V1_0::ISupplicantStaIfaceCallback;
+using V1_1::ISupplicant;
+using V1_1::ISupplicantStaIface;
 #ifdef SUPPLICANT_VENDOR_HIDL
 using namespace vendor::qti::hardware::wifi::supplicantvendor::V2_0::Implementation;
 using namespace vendor::qti::hardware::wifi::supplicant::V2_0;
@@ -136,8 +138,7 @@ public:
 	void notifyApStaDeauthorized(
 	    struct wpa_supplicant *wpa_s, const u8 *sta,
 	    const u8 *p2p_dev_addr);
-	void notifyEapError(
-	    struct wpa_supplicant *wpa_s, int error_code);
+	void notifyEapError(struct wpa_supplicant *wpa_s, int error_code);
 
 	// Methods called from hidl objects.
 	void notifyExtRadioWorkStart(struct wpa_supplicant *wpa_s, uint32_t id);
@@ -170,7 +171,7 @@ public:
 	    android::sp<ISupplicantP2pIface> *iface_object);
 	int getStaIfaceHidlObjectByIfname(
 	    const std::string &ifname,
-	    android::sp<ISupplicantStaIface> *iface_object);
+	    android::sp<V1_1::ISupplicantStaIface> *iface_object);
 	int getP2pNetworkHidlObjectByIfnameAndNetworkId(
 	    const std::string &ifname, int network_id,
 	    android::sp<ISupplicantP2pNetwork> *network_object);
@@ -438,6 +439,18 @@ static_assert(
 	WPA_KEY_MGMT_OSEN,
     "KeyMgmt value mismatch");
 static_assert(
+    static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::SAE) ==
+	WPA_KEY_MGMT_SAE,
+    "KeyMgmt value mismatch");
+static_assert(
+    static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::SUITE_B_192) ==
+	WPA_KEY_MGMT_IEEE8021X_SUITE_B_192,
+    "KeyMgmt value mismatch");
+static_assert(
+    static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::OWE) ==
+	WPA_KEY_MGMT_OWE,
+    "KeyMgmt value mismatch");
+static_assert(
     static_cast<uint32_t>(ISupplicantStaNetwork::ProtoMask::WPA) ==
 	WPA_PROTO_WPA,
     "Proto value mismatch");
@@ -478,6 +491,10 @@ static_assert(
 	WPA_CIPHER_CCMP,
     "GroupCipher value mismatch");
 static_assert(
+    static_cast<uint32_t>(ISupplicantStaNetwork::GroupCipherMask::GCMP_256) ==
+	WPA_CIPHER_GCMP_256,
+    "GroupCipher value mismatch");
+static_assert(
     static_cast<uint32_t>(
 	ISupplicantStaNetwork::GroupCipherMask::GTK_NOT_USED) ==
 	WPA_CIPHER_GTK_NOT_USED,
@@ -494,7 +511,11 @@ static_assert(
     static_cast<uint32_t>(ISupplicantStaNetwork::PairwiseCipherMask::CCMP) ==
 	WPA_CIPHER_CCMP,
     "PairwiseCipher value mismatch");
-
+static_assert(
+    static_cast<uint32_t>(
+	ISupplicantStaNetwork::PairwiseCipherMask::GCMP_256) ==
+	WPA_CIPHER_GCMP_256,
+    "PairwiseCipher value mismatch");
 static_assert(
     static_cast<uint32_t>(ISupplicantStaIfaceCallback::State::DISCONNECTED) ==
 	WPA_DISCONNECTED,
@@ -783,9 +804,9 @@ static_assert(
 	P2P_PROV_DISC_INFO_UNAVAILABLE,
     "P2P status code value mismatch");
 }  // namespace implementation
-}  // namespace V1_1
-}  // namespace wifi
+}  // namespace V1_2
 }  // namespace supplicant
+}  // namespace wifi
 }  // namespace hardware
 }  // namespace android
 #endif  // WPA_SUPPLICANT_HIDL_HIDL_MANAGER_H
