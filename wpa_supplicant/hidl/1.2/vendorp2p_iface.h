@@ -64,7 +64,7 @@ namespace supplicantvendor {
 namespace V2_0 {
 namespace Implementation {
 using namespace android::hardware::wifi::supplicant::V1_0;
-using namespace android::hardware::wifi::supplicant::V1_1::implementation;
+using namespace android::hardware::wifi::supplicant::V1_2::implementation;
 using namespace vendor::qti::hardware::wifi::supplicant::V2_0;
 using namespace android::hardware;
 

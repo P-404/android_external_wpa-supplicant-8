@@ -54,7 +54,7 @@ namespace wifi {
 namespace supplicantvendor {
 namespace V2_0 {
 namespace Implementation {
-using android::hardware::wifi::supplicant::V1_1::implementation::hidl_return_util::validateAndCall;
+using android::hardware::wifi::supplicant::V1_2::implementation::hidl_return_util::validateAndCall;
 
 VendorStaIface::VendorStaIface(struct wpa_global *wpa_global, const char ifname[])
     : wpa_global_(wpa_global), ifname_(ifname), is_valid_(true)

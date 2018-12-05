@@ -47,10 +47,10 @@ namespace wifi {
 namespace supplicantvendor{
 namespace V2_0 {
 namespace Implementation {
-using android::hardware::wifi::supplicant::V1_1::implementation::hidl_return_util::validateAndCall;
+using android::hardware::wifi::supplicant::V1_2::implementation::hidl_return_util::validateAndCall;
 using namespace android::hardware;
 using namespace android::hardware::wifi::supplicant::V1_0;
-using namespace android::hardware::wifi::supplicant::V1_1::implementation;
+using namespace android::hardware::wifi::supplicant::V1_2::implementation;
 typedef android::hardware::wifi::supplicant::V1_1::ISupplicant ISupplicant;
 using namespace vendor::qti::hardware::wifi::supplicant::V2_0;
 

@@ -76,12 +76,12 @@ public:
 
 	// Hidl methods exposed.
 	Return<void> getVendorInterface(
-	    const ISupplicant::IfaceInfo& iface_info, getVendorInterface_cb _hidl_cb) override;
+	    const android::hardware::wifi::supplicant::V1_0::ISupplicant::IfaceInfo& iface_info, getVendorInterface_cb _hidl_cb) override;
 	Return<void> listVendorInterfaces(listVendorInterfaces_cb _hidl_cb) override;
 private:
 	std::pair<SupplicantStatus, android::sp<ISupplicantVendorIface>> getVendorInterfaceInternal(
-	    const ISupplicant::IfaceInfo& iface_info);
-	std::pair<SupplicantStatus, std::vector<ISupplicant::IfaceInfo>>
+	    const android::hardware::wifi::supplicant::V1_0::ISupplicant::IfaceInfo& iface_info);
+	std::pair<SupplicantStatus, std::vector<android::hardware::wifi::supplicant::V1_0::ISupplicant::IfaceInfo>>
 	listVendorInterfacesInternal();
 	// Raw pointer to the global structure maintained by the core.
 	struct wpa_global* wpa_global_;
