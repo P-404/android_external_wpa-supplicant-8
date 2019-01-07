@@ -1852,11 +1852,16 @@ LOCAL_SHARED_LIBRARIES := \
     libhidlbase \
     libhidltransport \
     libutils \
+<<<<<<< HEAD
     liblog
 ifeq ($(SUPPLICANT_VENDOR_HIDL), y)
 LOCAL_SHARED_LIBRARIES += \
     vendor.qti.hardware.wifi.supplicant@2.0
 endif
+=======
+    liblog \
+    libssl
+>>>>>>> 205db75c6c9a16ad308f4991feba3be3ff55ca16
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
     $(LOCAL_PATH)/hidl/$(HIDL_INTERFACE_VERSION)
 include $(BUILD_STATIC_LIBRARY)
