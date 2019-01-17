@@ -100,7 +100,6 @@ extern "C"
 	    const u8 *p2p_dev_addr);
 	void wpas_hidl_notify_eap_error(
 	    struct wpa_supplicant *wpa_s, int error_code);
-<<<<<<< HEAD
 	//DPP Notifications
 	void wpas_hidl_notify_dpp_auth_success(
 	    struct wpa_supplicant *wpa_s, int initiator);
@@ -119,20 +118,6 @@ extern "C"
 	    struct wpa_supplicant *wpa_s, u8 dpp_auth_param);
 	void wpas_hidl_notify_dpp_net_id(
 	    struct wpa_supplicant *wpa_s, uint32_t net_id);
-=======
-	void wpas_hidl_notify_dpp_config_received(const char *ifname,
-		    struct wpa_ssid *ssid);
-	void wpas_hidl_notify_dpp_config_sent(const char *ifname);
-	void wpas_hidl_notify_dpp_auth_success(const char *ifname);
-	void wpas_hidl_notify_dpp_resp_pending(const char *ifname);
-	void wpas_hidl_notify_dpp_not_compatible(const char *ifname);
-	void wpas_hidl_notify_dpp_missing_auth(const char *ifname);
-	void wpas_hidl_notify_dpp_configuration_failure(const char *ifname);
-	void wpas_hidl_notify_dpp_invalid_uri(const char *ifname);
-	void wpas_hidl_notify_dpp_timeout(const char *ifname);
-	void wpas_hidl_notify_dpp_auth_failure(const char *ifname);
-	void wpas_hidl_notify_dpp_fail(const char *ifname);
->>>>>>> 205db75c6c9a16ad308f4991feba3be3ff55ca16
 #else   // CONFIG_CTRL_IFACE_HIDL
 static inline int wpas_hidl_register_interface(struct wpa_supplicant *wpa_s)
 {
@@ -238,7 +223,6 @@ static void wpas_hidl_notify_ap_sta_deauthorized(
 static void wpas_hidl_notify_eap_error(
     struct wpa_supplicant *wpa_s, int error_code)
 {}
-<<<<<<< HEAD
 //DPP Notifications
 static void wpas_hidl_notify_dpp_auth_success(
     struct wpa_supplicant *wpa_s, int initiator)
@@ -262,30 +246,6 @@ static void wpas_hidl_notify_dpp_missing_auth(
 {}
 static void wpas_hidl_notify_dpp_net_id(
     struct wpa_supplicant *wpa_s, uint32_t net_id)
-=======
-static void wpas_hidl_notify_dpp_config_received(struct wpa_supplicant *wpa_s,
-	    struct wpa_ssid *ssid)
-{}
-static void wpas_hidl_notify_dpp_config_received(struct wpa_supplicant *wpa_s,
-	    struct wpa_ssid *ssid);
-static void wpas_hidl_notify_dpp_config_sent(struct wpa_supplicant *wpa_s)
-{}
-static void wpas_hidl_notify_dpp_auth_success(struct wpa_supplicant *wpa_s)
-{}
-static void wpas_hidl_notify_dpp_resp_pending(struct wpa_supplicant *wpa_s)
-{}
-static void wpas_hidl_notify_dpp_not_compatible(struct wpa_supplicant *wpa_s)
-{}
-static void wpas_hidl_notify_dpp_missing_auth(struct wpa_supplicant *wpa_s)
-{}
-static void wpas_hidl_notify_dpp_configuration_failure(struct wpa_supplicant *wpa_s)
-{}
-static void wpas_hidl_notify_dpp_invalid_uri(struct wpa_supplicant *wpa_s)
-{}
-static void wpas_hidl_notify_dpp_timeout(struct wpa_supplicant *wpa_s)
-{}
-static void wpas_hidl_notify_dpp_failure(struct wpa_supplicant *wpa_s)
->>>>>>> 205db75c6c9a16ad308f4991feba3be3ff55ca16
 {}
 #endif  // CONFIG_CTRL_IFACE_HIDL
 
