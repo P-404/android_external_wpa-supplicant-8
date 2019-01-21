@@ -94,8 +94,17 @@ int hostapd_hidl_init(struct hapd_interfaces *interfaces)
 	vendor_service = new HostapdVendor(interfaces);
 	if (!vendor_service)
 		goto err;
-	if (vendor_service->registerAsService() != android::NO_ERROR)
-		goto err;
+	if (interfaces->hidl_service_name) {
+		wpa_printf(MSG_DEBUG, "Override Vendor HIDL service name: %s",
+			   interfaces->hidl_service_name);
+		if (vendor_service->registerAsService(interfaces->hidl_service_name)
+		    != android::NO_ERROR)
+			goto err;
+	} else {
+		wpa_printf(MSG_DEBUG, "Using default Vendor HIDL service name");
+		if (vendor_service->registerAsService() != android::NO_ERROR)
+			goto err;
+	}
 #endif /* CONFIG_USE_VENDOR_HIDL */
 
 	return 0;
