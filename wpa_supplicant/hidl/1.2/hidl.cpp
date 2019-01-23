@@ -27,6 +27,11 @@ using android::hardware::configureRpcThreadpool;
 using android::hardware::handleTransportPoll;
 using android::hardware::setupTransportPolling;
 using android::hardware::wifi::supplicant::V1_2::implementation::HidlManager;
+using namespace android::hardware::wifi::supplicant::V1_2;
+
+static void wpas_hidl_notify_dpp_success(struct wpa_supplicant *wpa_s, DppSuccessCode code);
+static void wpas_hidl_notify_dpp_failure(struct wpa_supplicant *wpa_s, DppFailureCode code);
+static void wpas_hidl_notify_dpp_progress(struct wpa_supplicant *wpa_s, DppProgressCode code);
 
 void wpas_hidl_sock_handler(
     int sock, void * /* eloop_ctx */, void * /* sock_ctx */)
@@ -664,40 +669,40 @@ void wpas_hidl_notify_eap_error(struct wpa_supplicant *wpa_s, int error_code)
 
 	hidl_manager->notifyEapError(wpa_s, error_code);
 }
-//DPP Notifications
-void wpas_hidl_notify_dpp_auth_success(
-    struct wpa_supplicant *wpa_s, int initiator)
+
+
+void wpas_hidl_notify_dpp_config_received(struct wpa_supplicant *wpa_s,
+	    struct wpa_ssid *ssid)
 {
-	if (!wpa_s)
+	if (!wpa_s || !ssid)
 		return;
 
-	wpa_printf(MSG_DEBUG, "Notifying DPP Auth Success to hidl control."
-			       " Initiator:%d", initiator);
+	wpa_printf(
+	    MSG_DEBUG,
+	    "Notifying DPP configuration received for SSID %d", ssid->id);
 
 	HidlManager *hidl_manager = HidlManager::getInstance();
 	if (!hidl_manager)
 		return;
-#ifdef SUPPLICANT_VENDOR_HIDL
-	hidl_manager->notifyDppAuthSuccess(wpa_s, initiator);
-#endif
+
+	hidl_manager->notifyDppConfigReceived(wpa_s, ssid);
 }
 
-void wpas_hidl_notify_dpp_not_compatible(
-    struct wpa_supplicant *wpa_s, u8 capab, int initiator)
+void wpas_hidl_notify_dpp_config_sent(struct wpa_supplicant *wpa_s)
 {
 	if (!wpa_s)
 		return;
 
-	wpa_printf(MSG_DEBUG, "Notifying DPP not compatible to hidl control."
-			       " Initiator:%d capab:%x", initiator, capab);
+	wpas_hidl_notify_dpp_success(wpa_s, DppSuccessCode::CONFIGURATION_SENT);
+}
 
-	HidlManager *hidl_manager = HidlManager::getInstance();
-	if (!hidl_manager)
+/* DPP Progress notifications */
+void wpas_hidl_notify_dpp_auth_success(struct wpa_supplicant *wpa_s)
+{
+	if (!wpa_s)
 		return;
 
-#ifdef SUPPLICANT_VENDOR_HIDL
-	hidl_manager->notifyDppNotCompatible(wpa_s, capab, initiator);
-#endif
+	wpas_hidl_notify_dpp_progress(wpa_s, DppProgressCode::AUTHENTICATION_SUCCESS);
 }
 
 void wpas_hidl_notify_dpp_resp_pending(struct wpa_supplicant *wpa_s)
@@ -705,90 +710,101 @@ void wpas_hidl_notify_dpp_resp_pending(struct wpa_supplicant *wpa_s)
 	if (!wpa_s)
 		return;
 
-	wpa_printf(MSG_DEBUG, "Notifying DPP response pending to hidl control.");
-
-	HidlManager *hidl_manager = HidlManager::getInstance();
-	if (!hidl_manager)
-		return;
-
-#ifdef SUPPLICANT_VENDOR_HIDL
-	hidl_manager->notifyDppResponsePending(wpa_s);
-#endif
+	wpas_hidl_notify_dpp_progress(wpa_s, DppProgressCode::RESPONSE_PENDING);
 }
 
-void wpas_hidl_notify_dpp_scan_peer_qrcode(
-    struct wpa_supplicant *wpa_s, const u8* i_bootstrap,
-    uint16_t i_bootstrap_len)
-{
-	if (!wpa_s || !i_bootstrap)
-		return;
-
-	wpa_printf(MSG_DEBUG, "Notifying DPP scan peer QR Code to hidl control."
-			       " bootstrap_len:%u", i_bootstrap_len);
-
-	HidlManager *hidl_manager = HidlManager::getInstance();
-	if (!hidl_manager)
-		return;
-
-#ifdef SUPPLICANT_VENDOR_HIDL
-	hidl_manager->notifyDppScanPeerQrCode(wpa_s, i_bootstrap, i_bootstrap_len);
-#endif
-}
-
-void wpas_hidl_notify_dpp_conf(
-    struct wpa_supplicant *wpa_s, u8 type, u8* ssid, u8 ssid_len,
-    const char *connector, struct wpabuf *c_sign, struct wpabuf *net_access,
-    uint32_t net_access_expiry, const char *passphrase, uint32_t psk_set, u8* psk)
+/* DPP Failure notifications */
+void wpas_hidl_notify_dpp_not_compatible(struct wpa_supplicant *wpa_s)
 {
 	if (!wpa_s)
 		return;
 
-	wpa_printf(MSG_DEBUG, "Notifying DPP conf to hidl control."
-			       " type:%u", type);
-
-	HidlManager *hidl_manager = HidlManager::getInstance();
-	if (!hidl_manager)
-		return;
-
-#ifdef SUPPLICANT_VENDOR_HIDL
-	hidl_manager->notifyDppConf(wpa_s, type, ssid, ssid_len,
-				    connector, c_sign, net_access,
-				    net_access_expiry, passphrase, psk_set, psk);
-#endif
+	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::NOT_COMPATIBLE);
 }
 
-void wpas_hidl_notify_dpp_missing_auth(
-    struct wpa_supplicant *wpa_s, u8 dpp_auth_param)
+void wpas_hidl_notify_dpp_missing_auth(struct wpa_supplicant *wpa_s)
+{
+	if (!wpa_s)
+		return;
+}
+
+void wpas_hidl_notify_dpp_configuration_failure(struct wpa_supplicant *wpa_s)
 {
 	if (!wpa_s)
 		return;
 
-	wpa_printf(MSG_DEBUG, "Notifying DPP Missing Auth param to hidl control."
-			       " missing param:%x", dpp_auth_param);
-
-	HidlManager *hidl_manager = HidlManager::getInstance();
-	if (!hidl_manager)
-		return;
-
-#ifdef SUPPLICANT_VENDOR_HIDL
-	hidl_manager->notifyDppMissingAuth(wpa_s, dpp_auth_param);
-#endif
+	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::CONFIGURATION);
 }
 
-void wpas_hidl_notify_dpp_net_id(
-    struct wpa_supplicant *wpa_s, uint32_t net_id)
+void wpas_hidl_notify_dpp_timeout(struct wpa_supplicant *wpa_s)
 {
 	if (!wpa_s)
 		return;
 
-	wpa_printf(MSG_DEBUG, "Notifying DPP network is added to hidl control."
-			       " network id:%u", net_id);
+	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::TIMEOUT);
+}
+
+void wpas_hidl_notify_dpp_auth_failure(struct wpa_supplicant *wpa_s)
+{
+	if (!wpa_s)
+		return;
+
+	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::AUTHENTICATION);
+}
+
+void wpas_hidl_notify_dpp_fail(struct wpa_supplicant *wpa_s)
+{
+	if (!wpa_s)
+		return;
+
+	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::FAILURE);
+}
+
+/* DPP notification helper functions */
+static void wpas_hidl_notify_dpp_success(struct wpa_supplicant *wpa_s, DppSuccessCode code)
+{
+	if (!wpa_s)
+		return;
+
+	wpa_printf(
+	    MSG_DEBUG,
+	    "Notifying DPP success event %d", code);
 
 	HidlManager *hidl_manager = HidlManager::getInstance();
 	if (!hidl_manager)
 		return;
 
-#ifdef SUPPLICANT_VENDOR_HIDL
-	hidl_manager->notifyDppNetworkId(wpa_s, net_id);
-#endif
+	hidl_manager->notifyDppSuccess(wpa_s, code);
+}
+
+static void wpas_hidl_notify_dpp_failure(struct wpa_supplicant *wpa_s, DppFailureCode code)
+{
+	if (!wpa_s)
+		return;
+
+	wpa_printf(
+	    MSG_DEBUG,
+	    "Notifying DPP failure event %d", code);
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	hidl_manager->notifyDppFailure(wpa_s, code);
+}
+
+static void wpas_hidl_notify_dpp_progress(struct wpa_supplicant *wpa_s, DppProgressCode code)
+{
+	if (!wpa_s)
+		return;
+
+	wpa_printf(
+	    MSG_DEBUG,
+	    "Notifying DPP progress event %d", code);
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	hidl_manager->notifyDppProgress(wpa_s, code);
 }

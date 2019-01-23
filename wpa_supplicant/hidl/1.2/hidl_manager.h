@@ -140,6 +140,11 @@ public:
 	    struct wpa_supplicant *wpa_s, const u8 *sta,
 	    const u8 *p2p_dev_addr);
 	void notifyEapError(struct wpa_supplicant *wpa_s, int error_code);
+	void notifyDppConfigReceived(struct wpa_supplicant *wpa_s,
+			struct wpa_ssid *config);
+	void notifyDppSuccess(struct wpa_supplicant *wpa_s, DppSuccessCode code);
+	void notifyDppFailure(struct wpa_supplicant *wpa_s, DppFailureCode code);
+	void notifyDppProgress(struct wpa_supplicant *wpa_s, DppProgressCode code);
 
 	// Methods called from hidl objects.
 	void notifyExtRadioWorkStart(struct wpa_supplicant *wpa_s, uint32_t id);
@@ -249,7 +254,11 @@ private:
 	    const std::string &ifname,
 	    const std::function<android::hardware::Return<void>(
 		android::sp<V1_1::ISupplicantStaIfaceCallback>)> &method);
-	void callWithEachP2pNetworkCallback(
+	void callWithEachStaIfaceCallback_1_2(
+	    const std::string &ifname,
+	    const std::function<android::hardware::Return<void>(
+	    android::sp<V1_2::ISupplicantStaIfaceCallback>)> &method);
+        void callWithEachP2pNetworkCallback(
 	    const std::string &ifname, int network_id,
 	    const std::function<android::hardware::Return<void>(
 		android::sp<ISupplicantP2pNetworkCallback>)> &method);
@@ -450,6 +459,14 @@ static_assert(
 static_assert(
     static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::OWE) ==
 	WPA_KEY_MGMT_OWE,
+    "KeyMgmt value mismatch");
+static_assert(
+    static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::WPA_PSK_SHA256) ==
+	WPA_KEY_MGMT_PSK_SHA256,
+    "KeyMgmt value mismatch");
+static_assert(
+    static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::WPA_EAP_SHA256) ==
+	WPA_KEY_MGMT_IEEE8021X_SHA256,
     "KeyMgmt value mismatch");
 static_assert(
     static_cast<uint32_t>(ISupplicantStaNetwork::ProtoMask::WPA) ==

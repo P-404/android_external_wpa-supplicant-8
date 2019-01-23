@@ -1100,84 +1100,111 @@ void wpas_notify_mesh_peer_disconnected(struct wpa_supplicant *wpa_s,
 
 #endif /* CONFIG_MESH */
 
-//DPP Notifications
-void wpas_notify_dpp_auth_success(void *msg_ctx, int initiator)
+/*
+ * DPP Notifications
+ */
+
+/* DPP Success notifications */
+
+void wpas_notify_dpp_config_received(struct wpa_supplicant *wpa_s,
+	    struct wpa_ssid *ssid)
 {
 #ifdef CONFIG_DPP
-	struct wpa_supplicant *wpa_s = msg_ctx;
 	if (!wpa_s)
 		return;
 
-	wpas_hidl_notify_dpp_auth_success(wpa_s, initiator);
+	wpas_hidl_notify_dpp_config_received(wpa_s, ssid);
 #endif /* CONFIG_DPP */
 }
-void wpas_notify_dpp_not_compatible(void *msg_ctx, u8 capab,
-				    int initiator)
+
+void wpas_notify_dpp_config_sent(struct wpa_supplicant *wpa_s)
 {
 #ifdef CONFIG_DPP
-	struct wpa_supplicant *wpa_s = msg_ctx;
 	if (!wpa_s)
 		return;
 
-	wpas_hidl_notify_dpp_not_compatible(wpa_s, capab, initiator);
+	wpas_hidl_notify_dpp_config_sent(wpa_s);
 #endif /* CONFIG_DPP */
 }
-void wpas_notify_dpp_resp_pending(void *msg_ctx)
+
+/* DPP Progress notifications */
+void wpas_notify_dpp_auth_success(struct wpa_supplicant *wpa_s)
 {
 #ifdef CONFIG_DPP
-	struct wpa_supplicant *wpa_s = msg_ctx;
+	if (!wpa_s)
+		return;
+
+	wpas_hidl_notify_dpp_auth_success(wpa_s);
+#endif /* CONFIG_DPP */
+}
+
+void wpas_notify_dpp_resp_pending(struct wpa_supplicant *wpa_s)
+{
+#ifdef CONFIG_DPP
 	if (!wpa_s)
 		return;
 
 	wpas_hidl_notify_dpp_resp_pending(wpa_s);
 #endif /* CONFIG_DPP */
 }
-void wpas_notify_dpp_scan_peer_qrcode(void *msg_ctx,
-				      const u8* i_bootstrap,
-				      uint16_t i_bootstrap_len)
-{
-#ifdef CONFIG_DPP
-	struct wpa_supplicant *wpa_s = msg_ctx;
-	if (!wpa_s || !i_bootstrap_len)
-		return;
 
-	wpas_hidl_notify_dpp_scan_peer_qrcode(wpa_s, i_bootstrap,
-					      i_bootstrap_len);
-#endif /* CONFIG_DPP */
-}
-void wpas_notify_dpp_conf(void *msg_ctx, u8 type, u8* ssid,
-			  u8 ssid_len, const char *connector,
-			  struct wpabuf *c_sign, struct wpabuf *net_access,
-			  uint32_t net_access_expiry, const char *passphrase,
-			  uint32_t psk_set, u8 *psk)
+/* DPP Failure notifications */
+void wpas_notify_dpp_not_compatible(struct wpa_supplicant *wpa_s)
 {
 #ifdef CONFIG_DPP
-	struct wpa_supplicant *wpa_s = msg_ctx;
 	if (!wpa_s)
 		return;
 
-	wpas_hidl_notify_dpp_conf(wpa_s, type, ssid, ssid_len, connector, c_sign,
-				  net_access, net_access_expiry, passphrase,
-				  psk_set, psk);
+	wpas_hidl_notify_dpp_not_compatible(wpa_s);
 #endif /* CONFIG_DPP */
 }
-void wpas_notify_dpp_missing_auth(void *msg_ctx, u8 dpp_auth_param)
+
+void wpas_notify_dpp_missing_auth(struct wpa_supplicant *wpa_s)
 {
 #ifdef CONFIG_DPP
-	struct wpa_supplicant *wpa_s = msg_ctx;
 	if (!wpa_s)
 		return;
 
-	wpas_hidl_notify_dpp_missing_auth(wpa_s, dpp_auth_param);
+	wpas_hidl_notify_dpp_missing_auth(wpa_s);
 #endif /* CONFIG_DPP */
 }
-void wpas_notify_dpp_net_id(void *msg_ctx, uint32_t net_id)
+
+void wpas_notify_dpp_configuration_failure(struct wpa_supplicant *wpa_s)
 {
 #ifdef CONFIG_DPP
-	struct wpa_supplicant *wpa_s = msg_ctx;
 	if (!wpa_s)
 		return;
 
-	wpas_hidl_notify_dpp_net_id(wpa_s, net_id);
+	wpas_hidl_notify_dpp_configuration_failure(wpa_s);
+#endif /* CONFIG_DPP */
+}
+
+void wpas_notify_dpp_timeout(struct wpa_supplicant *wpa_s)
+{
+#ifdef CONFIG_DPP
+	if (!wpa_s)
+		return;
+
+	wpas_hidl_notify_dpp_timeout(wpa_s);
+#endif /* CONFIG_DPP */
+}
+
+void wpas_notify_dpp_auth_failure(struct wpa_supplicant *wpa_s)
+{
+#ifdef CONFIG_DPP
+	if (!wpa_s)
+		return;
+
+	wpas_hidl_notify_dpp_auth_failure(wpa_s);
+#endif /* CONFIG_DPP */
+}
+
+void wpas_notify_dpp_failure(struct wpa_supplicant *wpa_s)
+{
+#ifdef CONFIG_DPP
+	if (!wpa_s)
+		return;
+
+	wpas_hidl_notify_dpp_fail(wpa_s);
 #endif /* CONFIG_DPP */
 }

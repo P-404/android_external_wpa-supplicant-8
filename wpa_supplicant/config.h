@@ -1469,6 +1469,43 @@ struct wpa_config {
 	 *	profile automatically
 	 */
 	int dpp_config_processing;
+
+	/**
+	 * p2p_device_random_mac_addr - P2P Device MAC address policy default
+	 *
+	 * 0 = use permanent MAC address
+	 * 1 = use random MAC address on creating the interface if there is no persistent groups.
+	 *
+	 * By default, permanent MAC address is used.
+	 */
+	int p2p_device_random_mac_addr;
+
+	/**
+	 * p2p_device_persistent_mac_addr - Record last used MAC address
+	 *
+	 * If there are saved persistent groups, P2P cannot generate another random MAC address,
+	 * and need to restore to last used MAC address.
+	 * format: aa:bb:cc:dd:ee:ff
+	 */
+	char *p2p_device_persistent_mac_addr;
+
+	/**
+	 * p2p_interface_random_mac_addr - P2P Interface MAC address policy default
+	 *
+	 * 0 = use permanent MAC address
+	 * 1 = use random MAC address on creating the interface.
+	 *
+	 * By default, permanent MAC address is used.
+	 */
+	int p2p_interface_random_mac_addr;
+
+	/**
+	 * bss_no_flush_when_down - Whether to flush BSS entries when the interface is disabled
+	 *
+	 * 0 = Flush BSS entries when the interface becomes disabled (Default)
+	 * 1 = Do not flush BSS entries when the interface becomes disabled
+	 */
+	int bss_no_flush_when_down;
 };
 
 
