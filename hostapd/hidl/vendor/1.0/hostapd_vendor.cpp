@@ -202,10 +202,13 @@ std::string AddOrUpdateHostapdConfig(
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "channel", std::to_string(iface_params.channelParams.channel).c_str()));
 	}
 
+	// reset fields to default
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[SHORT-GI-20] [GF] [DSSS_CCK-40] [LSIG-TXOP-PROT]"));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "0"));
+
 	switch (iface_params.channelParams.band) {
 	case IHostapd::Band::BAND_2_4_GHZ:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "g"));
-		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[SHORT-GI-20] [GF] [DSSS_CCK-40] [LSIG-TXOP-PROT]"));
 		break;
 	case IHostapd::Band::BAND_5_GHZ:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "a"));
