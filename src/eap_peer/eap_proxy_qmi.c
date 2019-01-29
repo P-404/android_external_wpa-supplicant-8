@@ -879,7 +879,7 @@ static void eap_proxy_schedule_thread(void *eloop_ctx, void *timeout_ctx)
 
         // Make note of new thread creation, so that we can take care of joining.
         if (eap_proxy != NULL)
-                eap_proxy->qmi_thread_joined = false;
+                eap_proxy->qmi_thread_joined = FALSE;
 
         ret = pthread_create(&eap_proxy->thread_id, NULL, eap_proxy_post_init, eap_proxy);
         if(ret < 0)
@@ -939,7 +939,7 @@ static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy)
         if (!eap_proxy->qmi_thread_joined) {
                 wpa_printf(MSG_ERROR, "eap_proxy: pthread_join on eap_proxy=%p", eap_proxy);
                 pthread_join(eap_proxy->thread_id, NULL);
-                eap_proxy->qmi_thread_joined = true;
+                eap_proxy->qmi_thread_joined = TRUE;
         }
         eap_proxy->proxy_state = EAP_PROXY_DISABLED;
         wpa_uim = eap_proxy->wpa_uim;
