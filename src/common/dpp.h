@@ -445,19 +445,4 @@ void dpp_pkex_free(struct dpp_pkex *pkex);
 
 char * dpp_corrupt_connector_signature(const char *connector);
 
-//DPP Notifications
-void wpas_notify_dpp_auth_success(void *msg_ctx, int initiator);
-void wpas_notify_dpp_not_compatible(void *msg_ctx, u8 capab, int initiator);
-void wpas_notify_dpp_resp_pending(void *msg_ctx);
-void wpas_notify_dpp_scan_peer_qrcode(void *msg_ctx,
-				      const u8* i_bootstrap,
-				      uint16_t i_bootstrap_len);
-void wpas_notify_dpp_conf(void *msg_ctx, u8 type, u8* ssid,
-			  u8 ssid_len, const char *connector,
-			  struct wpabuf *c_sign, struct wpabuf *net_access,
-			  uint32_t net_access_expiry, const char *passphrase,
-			  uint32_t psk_set, u8 *psk);
-void wpas_notify_dpp_missing_auth(void *msg_ctx, u8 dpp_auth_param);
-void wpas_notify_dpp_net_id(void *msg_ctx, uint32_t net_id);
-
 #endif /* DPP_H */

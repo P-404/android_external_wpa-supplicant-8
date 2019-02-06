@@ -100,24 +100,18 @@ extern "C"
 	    const u8 *p2p_dev_addr);
 	void wpas_hidl_notify_eap_error(
 	    struct wpa_supplicant *wpa_s, int error_code);
-	//DPP Notifications
-	void wpas_hidl_notify_dpp_auth_success(
-	    struct wpa_supplicant *wpa_s, int initiator);
-	void wpas_hidl_notify_dpp_not_compatible(
-	    struct wpa_supplicant *wpa_s, u8 capab, int initiator);
+	void wpas_hidl_notify_dpp_config_received(struct wpa_supplicant *wpa_s,
+		    struct wpa_ssid *ssid);
+	void wpas_hidl_notify_dpp_config_sent(struct wpa_supplicant *wpa_s);
+	void wpas_hidl_notify_dpp_auth_success(struct wpa_supplicant *wpa_s);
 	void wpas_hidl_notify_dpp_resp_pending(struct wpa_supplicant *wpa_s);
-	void wpas_hidl_notify_dpp_scan_peer_qrcode(
-	    struct wpa_supplicant *wpa_s, const u8* i_bootstrap,
-	    uint16_t i_bootstrap_len);
-	void wpas_hidl_notify_dpp_conf(
-	    struct wpa_supplicant *wpa_s, u8 type, u8* ssid, u8 ssid_len,
-	    const char *connector, struct wpabuf *c_sign, struct wpabuf *net_access,
-	    uint32_t net_access_expiry, const char *passphrase, uint32_t psk_set,
-	    u8 *psk);
-	void wpas_hidl_notify_dpp_missing_auth(
-	    struct wpa_supplicant *wpa_s, u8 dpp_auth_param);
-	void wpas_hidl_notify_dpp_net_id(
-	    struct wpa_supplicant *wpa_s, uint32_t net_id);
+	void wpas_hidl_notify_dpp_not_compatible(struct wpa_supplicant *wpa_s);
+	void wpas_hidl_notify_dpp_missing_auth(struct wpa_supplicant *wpa_s);
+	void wpas_hidl_notify_dpp_configuration_failure(struct wpa_supplicant *wpa_s);
+	void wpas_hidl_notify_dpp_invalid_uri(struct wpa_supplicant *wpa_s);
+	void wpas_hidl_notify_dpp_timeout(struct wpa_supplicant *wpa_s);
+	void wpas_hidl_notify_dpp_auth_failure(struct wpa_supplicant *wpa_s);
+	void wpas_hidl_notify_dpp_fail(struct wpa_supplicant *wpa_s);
 #else   // CONFIG_CTRL_IFACE_HIDL
 static inline int wpas_hidl_register_interface(struct wpa_supplicant *wpa_s)
 {
