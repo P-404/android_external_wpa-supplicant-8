@@ -1665,9 +1665,11 @@ ieee802_11_allowed_address(struct hostapd_data *hapd, const u8 *addr,
 				      is_probe_req);
 
 	if (res == HOSTAPD_ACL_REJECT) {
-		wpa_printf(MSG_INFO,
-			   "Station " MACSTR " not allowed to authenticate",
-			   MAC2STR(addr));
+		if (!is_probe_req)
+			wpa_printf(MSG_DEBUG,
+				   "Station " MACSTR
+				   " not allowed to authenticate",
+				   MAC2STR(addr));
 		return HOSTAPD_ACL_REJECT;
 	}
 
@@ -2583,10 +2585,14 @@ static u16 check_assoc_ies(struct hostapd_data *hapd, struct sta_info *sta,
 		if (resp != WLAN_STATUS_SUCCESS)
 			return resp;
 #ifdef CONFIG_IEEE80211W
-		if ((sta->flags & WLAN_STA_MFP) && !sta->sa_query_timed_out &&
+		if ((sta->flags & (WLAN_STA_ASSOC | WLAN_STA_MFP)) ==
+		    (WLAN_STA_ASSOC | WLAN_STA_MFP) &&
+		    !sta->sa_query_timed_out &&
 		    sta->sa_query_count > 0)
 			ap_check_sa_query_timeout(hapd, sta);
-		if ((sta->flags & WLAN_STA_MFP) && !sta->sa_query_timed_out &&
+		if ((sta->flags & (WLAN_STA_ASSOC | WLAN_STA_MFP)) ==
+		    (WLAN_STA_ASSOC | WLAN_STA_MFP) &&
+		    !sta->sa_query_timed_out &&
 		    (!reassoc || sta->auth_alg != WLAN_AUTH_FT)) {
 			/*
 			 * STA has already been associated with MFP and SA
@@ -4050,9 +4056,22 @@ static void handle_auth_cb(struct hostapd_data *hapd,
 	u16 auth_alg, auth_transaction, status_code;
 	struct sta_info *sta;
 
+	if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.auth)) {
+		wpa_printf(MSG_INFO, "handle_auth_cb - too short payload (len=%lu)",
+			   (unsigned long) len);
+
+		/*
+		 * Initialize status_code here because we are not able to read
+		 * it from the short payload.
+		 */
+		status_code = WLAN_STATUS_UNSPECIFIED_FAILURE;
+		goto fail;
+	}
+
 	sta = ap_get_sta(hapd, mgmt->da);
 	if (!sta) {
-		wpa_printf(MSG_INFO, "handle_auth_cb: STA " MACSTR " not found",
+		wpa_printf(MSG_DEBUG, "handle_auth_cb: STA " MACSTR
+			   " not found",
 			   MAC2STR(mgmt->da));
 		return;
 	}
@@ -4065,12 +4084,6 @@ static void handle_auth_cb(struct hostapd_data *hapd,
 		hostapd_logger(hapd, mgmt->da, HOSTAPD_MODULE_IEEE80211,
 			       HOSTAPD_LEVEL_NOTICE,
 			       "did not acknowledge authentication response");
-		goto fail;
-	}
-
-	if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.auth)) {
-		wpa_printf(MSG_INFO, "handle_auth_cb - too short payload (len=%lu)",
-			   (unsigned long) len);
 		goto fail;
 	}
 
