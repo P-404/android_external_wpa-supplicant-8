@@ -317,6 +317,7 @@ void wpa_supplicant_mark_disassoc(struct wpa_supplicant *wpa_s)
 
 	wpas_rrm_reset(wpa_s);
 	wpa_s->wnmsleep_used = 0;
+	wnm_clear_coloc_intf_reporting(wpa_s);
 
 #ifdef CONFIG_TESTING_OPTIONS
 	wpa_s->last_tk_alg = WPA_ALG_NONE;
@@ -716,6 +717,7 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 					"   skip OWE transition BSS (selection count %d does not exceed %d)",
 					ssid->owe_transition_bss_select_count,
 					MAX_OWE_TRANSITION_BSS_SELECT_COUNT);
+			wpa_s->owe_transition_search = 1;
 			return 0;
 		}
 		if (debug_print)
@@ -1953,6 +1955,7 @@ static int wpas_select_network_from_last_scan(struct wpa_supplicant *wpa_s,
 	if (wpa_s->p2p_mgmt)
 		return 0; /* no normal connection on p2p_mgmt interface */
 
+	wpa_s->owe_transition_search = 0;
 	selected = wpa_supplicant_pick_network(wpa_s, &ssid);
 
 #ifdef CONFIG_MESH
@@ -2054,6 +2057,17 @@ static int wpas_select_network_from_last_scan(struct wpa_supplicant *wpa_s,
 				return 0;
 			}
 #endif /* CONFIG_WPS */
+#ifdef CONFIG_OWE
+			if (wpa_s->owe_transition_search) {
+				wpa_dbg(wpa_s, MSG_DEBUG,
+					"OWE: Use shorter wait during transition mode search");
+				timeout_sec = 0;
+				timeout_usec = 500000;
+				wpa_supplicant_req_new_scan(wpa_s, timeout_sec,
+							    timeout_usec);
+				return 0;
+			}
+#endif /* CONFIG_OWE */
 			if (wpa_supplicant_req_sched_scan(wpa_s))
 				wpa_supplicant_req_new_scan(wpa_s, timeout_sec,
 							    timeout_usec);
@@ -3988,6 +4002,16 @@ static void wpas_event_assoc_reject(struct wpa_supplicant *wpa_s,
 	}
 #endif /* CONFIG_SAE */
 
+#ifdef CONFIG_DPP
+	if (wpa_s->current_ssid &&
+	    wpa_s->current_ssid->key_mgmt == WPA_KEY_MGMT_DPP &&
+	    !data->assoc_reject.timed_out) {
+		wpa_dbg(wpa_s, MSG_DEBUG, "DPP: Drop PMKSA cache entry");
+		wpa_sm_aborted_cached(wpa_s->wpa);
+		wpa_sm_pmksa_cache_flush(wpa_s->wpa, wpa_s->current_ssid);
+	}
+#endif /* CONFIG_DPP */
+
 #ifdef CONFIG_FILS
 	/* Update ERP next sequence number */
 	if (wpa_s->auth_alg == WPA_AUTH_ALG_FILS) {
@@ -4317,6 +4341,7 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 #endif /* CONFIG_AP */
 
 		wpas_p2p_update_channel_list(wpa_s, WPAS_P2P_CHANNEL_UPDATE_CS);
+		wnm_clear_coloc_intf_reporting(wpa_s);
 		break;
 #ifdef CONFIG_AP
 #ifdef NEED_AP_MLME

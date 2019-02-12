@@ -1646,6 +1646,10 @@ static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx)
 	case 0: /* Bits 0-7 */
 		break;
 	case 1: /* Bits 8-15 */
+		if (wpa_s->conf->coloc_intf_reporting) {
+			/* Bit 13 - Collocated Interference Reporting */
+			*pos |= 0x20;
+		}
 		break;
 	case 2: /* Bits 16-23 */
 #ifdef CONFIG_WNM
@@ -3076,6 +3080,11 @@ static void wpas_start_assoc_cb(struct wpa_radio_work *work, int deinit)
 				"MFP: require MFP");
 			params.mgmt_frame_protection =
 				MGMT_FRAME_PROTECTION_REQUIRED;
+#ifdef CONFIG_OWE
+		} else if (!rsn && (ssid->key_mgmt & WPA_KEY_MGMT_OWE) &&
+			   !ssid->owe_only) {
+			params.mgmt_frame_protection = NO_MGMT_FRAME_PROTECTION;
+#endif /* CONFIG_OWE */
 		}
 	}
 #endif /* CONFIG_IEEE80211W */
