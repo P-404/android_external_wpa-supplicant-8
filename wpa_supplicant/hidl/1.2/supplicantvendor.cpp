@@ -53,6 +53,7 @@ using namespace android::hardware::wifi::supplicant::V1_0;
 using namespace android::hardware::wifi::supplicant::V1_2::implementation;
 typedef android::hardware::wifi::supplicant::V1_1::ISupplicant ISupplicant;
 using namespace vendor::qti::hardware::wifi::supplicant::V2_0;
+using vendor::qti::hardware::wifi::supplicant::V2_1::ISupplicantVendorStaIface;
 
 SupplicantVendor::SupplicantVendor(struct wpa_global* global) : wpa_global_(global) {}
 bool SupplicantVendor::isValid()

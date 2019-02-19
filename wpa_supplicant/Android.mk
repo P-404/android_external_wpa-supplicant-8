@@ -1489,7 +1489,7 @@ endif
 
 ifdef CONFIG_SUPPLICANT_VENDOR_HIDL
 SUPPLICANT_VENDOR_HIDL=y
-SUPPLICANT_VENDOR_HIDL_VERSION=2.0
+SUPPLICANT_VENDOR_HIDL_VERSION=2.1
 L_CFLAGS += -DSUPPLICANT_VENDOR_HIDL
 endif
 
@@ -1761,6 +1761,7 @@ LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.1
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.2
 ifeq ($(SUPPLICANT_VENDOR_HIDL), y)
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.0
+LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.1
 endif
 LOCAL_SHARED_LIBRARIES += libhidlbase libhidltransport libhwbinder libutils libbase
 LOCAL_STATIC_LIBRARIES += libwpa_hidl
@@ -1845,7 +1846,8 @@ LOCAL_SHARED_LIBRARIES := \
     libssl
 ifeq ($(SUPPLICANT_VENDOR_HIDL), y)
 LOCAL_SHARED_LIBRARIES += \
-    vendor.qti.hardware.wifi.supplicant@2.0
+    vendor.qti.hardware.wifi.supplicant@2.0 \
+    vendor.qti.hardware.wifi.supplicant@2.1
 endif
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
     $(LOCAL_PATH)/hidl/$(HIDL_INTERFACE_VERSION)

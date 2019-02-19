@@ -44,7 +44,7 @@
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaIface.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaIfaceCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaNetwork.h>
-#include <vendor/qti/hardware/wifi/supplicant/2.0/ISupplicantVendorStaIface.h>
+#include <vendor/qti/hardware/wifi/supplicant/2.1/ISupplicantVendorStaIface.h>
 #include <vendor/qti/hardware/wifi/supplicant/2.0/ISupplicantVendorStaNetwork.h>
 #include <vendor/qti/hardware/wifi/supplicant/2.0/ISupplicantVendorStaIfaceCallback.h>
 
@@ -63,13 +63,14 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace supplicantvendor {
-namespace V2_0 {
+namespace V2_1 {
 namespace Implementation {
 using namespace android::hardware::wifi::supplicant::V1_0;
 using namespace android::hardware::wifi::supplicant::V1_2::implementation;
-using namespace vendor::qti::hardware::wifi::supplicant::V2_0;
+using namespace vendor::qti::hardware::wifi::supplicant::V2_1;
 using namespace android::hardware;
-
+using supplicant::V2_0::ISupplicantVendorStaIfaceCallback;
+using supplicant::V2_0::ISupplicantVendorNetwork;
 /**
  * Implementation of VendorStaIface hidl object. Each unique hidl
  * object is used for control operations on a specific interface
@@ -133,6 +134,8 @@ public:
 	    const hidl_string& ssid, const hidl_string& password, bool isAp,
 	    bool isDpp, int32_t conf_id, int32_t expiry, dppStartAuth_cb _hidl_cb) override;
 	Return<void> dppConfiguratorGetKey(uint32_t id, dppConfiguratorGetKey_cb _hidl_cb) override;
+	Return<void> getWifiGenerationStatus(
+                getWifiGenerationStatus_cb _hidl_cb) override;
 
 private:
 	// Corresponding worker functions for the HIDL methods.
@@ -169,6 +172,7 @@ private:
 	    const std::string &ssid, const std::string &password, bool isAp,
 	    bool isDpp, int32_t conf_id, int32_t expiry);
 	std::pair<SupplicantStatus, std::string> dppConfiguratorGetKeyInternal(uint32_t id);
+	std::pair<SupplicantStatus, WifiGenerationStatus> getWifiGenerationStatusInternal();
 	// Reference to the global wpa_struct. This is assumed to be valid for
 	// the lifetime of the process.
 	struct wpa_global* wpa_global_;

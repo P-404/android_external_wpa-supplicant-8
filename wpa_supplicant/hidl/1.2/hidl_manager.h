@@ -53,7 +53,9 @@ using V1_1::ISupplicant;
 using V1_1::ISupplicantStaIface;
 #ifdef SUPPLICANT_VENDOR_HIDL
 using namespace vendor::qti::hardware::wifi::supplicantvendor::V2_0::Implementation;
+using namespace vendor::qti::hardware::wifi::supplicantvendor::V2_1::Implementation;
 using namespace vendor::qti::hardware::wifi::supplicant::V2_0;
+using vendor::qti::hardware::wifi::supplicant::V2_1::ISupplicantVendorStaIface;
 #endif
 
 /**

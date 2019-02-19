@@ -57,7 +57,7 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace supplicantvendor {
-namespace V2_0 {
+namespace V2_1 {
 namespace Implementation {
 using android::hardware::wifi::supplicant::V1_2::implementation::hidl_return_util::validateAndCall;
 
@@ -200,6 +200,14 @@ Return<void> VendorStaIface::dppConfiguratorGetKey(uint32_t id, dppConfiguratorG
 	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
 	    &VendorStaIface::dppConfiguratorGetKeyInternal, _hidl_cb, id);
 }
+
+Return<void> VendorStaIface::getWifiGenerationStatus(getWifiGenerationStatus_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
+	    &VendorStaIface::getWifiGenerationStatusInternal, _hidl_cb);
+}
+
 SupplicantStatus VendorStaIface::registerCallbackInternal(
     const android::sp<ISupplicantVendorStaIfaceCallback> &callback)
 {
@@ -498,6 +506,55 @@ std::pair<SupplicantStatus, std::string> VendorStaIface::dppConfiguratorGetKeyIn
         return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
 #endif /* CONFIG_DPP */
 }
+
+std::pair<SupplicantStatus, WifiGenerationStatus>
+	VendorStaIface::getWifiGenerationStatusInternal()
+{
+	WifiGenerationStatus wifi_generation_status =  {};
+	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+
+	if (!wpa_s) {
+		return {{SupplicantStatusCode::FAILURE_IFACE_UNKNOWN, ""},
+			std::move(wifi_generation_status)};
+	}
+
+	if (wpa_s->wpa_state < WPA_ASSOCIATED)
+		return {{SupplicantStatusCode::FAILURE_UNKNOWN,
+			 "not associated"},
+			std::move(wifi_generation_status)};
+
+	if (wpa_s->connection_set) {
+		if (wpa_s->connection_he) {
+			wifi_generation_status.generation = 6;
+		} else if (wpa_s->connection_vht) {
+			wifi_generation_status.generation = 5;
+		} else if (wpa_s->connection_ht) {
+			wifi_generation_status.generation = 4;
+		} else {
+			wifi_generation_status.generation = 0;
+		}
+	} else {
+		wifi_generation_status.generation = 0;
+	}
+
+	if (wpa_s->connection_vht_max_eight_spatial_streams)
+		wifi_generation_status.vhtMax8SpatialStreamsSupport = true;
+
+	if (wpa_s->connection_twt)
+		wifi_generation_status.twtSupport = true;
+
+	wpa_printf(MSG_INFO, "getWifiGenerationStatusInternal: "
+			"generation = %d, twtSupport = %s,"
+			" vhtMax8SpatialStreamsSupport = %s",
+			wifi_generation_status.generation,
+			wifi_generation_status.twtSupport ? "true" : "false",
+			wifi_generation_status.vhtMax8SpatialStreamsSupport ?
+				"true" : "false");
+
+	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""},
+		std::move(wifi_generation_status)};
+}
+
 /**
  * Retrieve the underlying |wpa_supplicant| struct
  * pointer for this iface.
