@@ -1,6 +1,6 @@
 /*
  * hostapd / main()
- * Copyright (c) 2002-2017, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2002-2019, Jouni Malinen <j@w1.fi>
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -260,7 +260,7 @@ static int hostapd_driver_init(struct hostapd_iface *iface)
  *
  * This function is used to parse configuration file for a full interface (one
  * or more BSSes sharing the same radio) and allocate memory for the BSS
- * interfaces. No actiual driver operations are started.
+ * interfaces. No actual driver operations are started.
  */
 static struct hostapd_iface *
 hostapd_interface_init(struct hapd_interfaces *interfaces, const char *if_name,
@@ -463,7 +463,7 @@ static void show_version(void)
 		"hostapd v" VERSION_STR "\n"
 		"User space daemon for IEEE 802.11 AP management,\n"
 		"IEEE 802.1X/WPA/WPA2/EAP/RADIUS Authenticator\n"
-		"Copyright (c) 2002-2017, Jouni Malinen <j@w1.fi> "
+		"Copyright (c) 2002-2019, Jouni Malinen <j@w1.fi> "
 		"and contributors\n");
 }
 
