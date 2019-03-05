@@ -29,7 +29,6 @@ using android::hardware::setupTransportPolling;
 using android::hardware::wifi::supplicant::V1_2::implementation::HidlManager;
 using namespace android::hardware::wifi::supplicant::V1_2;
 
-static void wpas_hidl_notify_dpp_success(struct wpa_supplicant *wpa_s, DppSuccessCode code);
 static void wpas_hidl_notify_dpp_failure(struct wpa_supplicant *wpa_s, DppFailureCode code);
 static void wpas_hidl_notify_dpp_progress(struct wpa_supplicant *wpa_s, DppProgressCode code);
 
@@ -693,7 +692,15 @@ void wpas_hidl_notify_dpp_config_sent(struct wpa_supplicant *wpa_s)
 	if (!wpa_s)
 		return;
 
-	wpas_hidl_notify_dpp_success(wpa_s, DppSuccessCode::CONFIGURATION_SENT);
+	wpa_printf(
+	    MSG_DEBUG,
+	    "Notifying DPP configuration sent");
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	hidl_manager->notifyDppConfigSent(wpa_s);
 }
 
 /* DPP Progress notifications */
@@ -761,22 +768,6 @@ void wpas_hidl_notify_dpp_fail(struct wpa_supplicant *wpa_s)
 }
 
 /* DPP notification helper functions */
-static void wpas_hidl_notify_dpp_success(struct wpa_supplicant *wpa_s, DppSuccessCode code)
-{
-	if (!wpa_s)
-		return;
-
-	wpa_printf(
-	    MSG_DEBUG,
-	    "Notifying DPP success event %d", code);
-
-	HidlManager *hidl_manager = HidlManager::getInstance();
-	if (!hidl_manager)
-		return;
-
-	hidl_manager->notifyDppSuccess(wpa_s, code);
-}
-
 static void wpas_hidl_notify_dpp_failure(struct wpa_supplicant *wpa_s, DppFailureCode code)
 {
 	if (!wpa_s)
