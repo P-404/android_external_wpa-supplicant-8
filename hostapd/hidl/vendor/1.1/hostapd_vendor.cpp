@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -35,6 +35,8 @@
 #include <vector>
 #include <set>
 #include <iostream>
+#include <cutils/properties.h>
+#include <net/if.h>
 
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
@@ -63,9 +65,9 @@ constexpr char kQsapSetFmt[] = "softap qccmd set%s %s=%s";
 using android::hardware::hidl_array;
 using android::base::StringPrintf;
 using android::hardware::wifi::hostapd::V1_0::IHostapd;
-using vendor::qti::hardware::wifi::hostapd::V1_0::IHostapdVendor;
+using vendor::qti::hardware::wifi::hostapd::V1_1::IHostapdVendor;
 
-using namespace vendor::qti::hardware::wifi::hostapd::V1_0::implementation::qsap_handler;
+using namespace vendor::qti::hardware::wifi::hostapd::V1_1::implementation::qsap_handler;
 
 // wrapper to call qsap command.
 int qsap_cmd(std::string cmd) {
@@ -122,7 +124,8 @@ std::string AddOrUpdateHostapdConfig(
     const IHostapdVendor::VendorIfaceParams& v_iface_params,
     const IHostapd::NetworkParams& nw_params)
 {
-	IHostapd::IfaceParams iface_params = v_iface_params.ifaceParams;
+	IHostapd::IfaceParams iface_params = v_iface_params.VendorV1_0.ifaceParams;
+	IHostapd::ChannelParams channelParams = v_iface_params.vendorChannelParams.channelParams;
 	if (nw_params.ssid.size() >
 	    static_cast<uint32_t>(
 		IHostapd::ParamSizeLimits::SSID_MAX_LEN_IN_BYTES)) {
@@ -146,20 +149,17 @@ std::string AddOrUpdateHostapdConfig(
 	}
 
 	// Decide configuration file to be used.
-	bool dual_mode = false;
 	std::string dual_str;
 	std::string file_path;
 
-	if (v_iface_params.bridgeIfaceName.empty()) {
+	if (v_iface_params.VendorV1_0.bridgeIfaceName.empty()) {
 		file_path = StringPrintf(kConfFileNameFmt, "");
 		dual_str = "";
-	} else if (iface_params.channelParams.band == IHostapd::Band::BAND_2_4_GHZ) {
+	} else if (channelParams.band == IHostapd::Band::BAND_2_4_GHZ) {
 		file_path = StringPrintf(kConfFileNameFmt, "_dual2g");
-		dual_mode = true;
 		dual_str = " dual2g";
-	} else if (iface_params.channelParams.band == IHostapd::Band::BAND_5_GHZ) {
+	} else if (channelParams.band == IHostapd::Band::BAND_5_GHZ) {
 		file_path = StringPrintf(kConfFileNameFmt, "_dual5g");
-		dual_mode = true;
 		dual_str = " dual5g";
 	}
 	const char *dual_mode_str = dual_str.c_str();
@@ -193,33 +193,46 @@ std::string AddOrUpdateHostapdConfig(
 	}
 
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "acs_exclude_dfs", "0"));
-	if (iface_params.channelParams.enableAcs) {
+	if (channelParams.enableAcs) {
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "channel", "0"));
-		if (iface_params.channelParams.acsShouldExcludeDfs) {
+		if (channelParams.acsShouldExcludeDfs) {
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "acs_exclude_dfs", "1"));
 		}
+		std::string chanlist_as_string;
+		for (const auto &range :
+		     v_iface_params.vendorChannelParams.acsChannelRanges) {
+			if (range.start != range.end) {
+				chanlist_as_string +=
+					StringPrintf("%d-%d ", range.start, range.end);
+			} else {
+				chanlist_as_string += StringPrintf("%d ", range.start);
+			}
+		}
+		if (!chanlist_as_string.empty()) {
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "chanlist", chanlist_as_string.c_str()));
+		}
 	} else {
-		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "channel", std::to_string(iface_params.channelParams.channel).c_str()));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "channel", std::to_string(channelParams.channel).c_str()));
 	}
 
 	// reset fields to default
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[SHORT-GI-20] [GF] [DSSS_CCK-40] [LSIG-TXOP-PROT]"));
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "0"));
 
-	switch (iface_params.channelParams.band) {
+	switch (channelParams.band) {
 	case IHostapd::Band::BAND_2_4_GHZ:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "g"));
 		break;
 	case IHostapd::Band::BAND_5_GHZ:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "a"));
-		if (iface_params.channelParams.enableAcs) {
+		if (channelParams.enableAcs) {
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[HT40+]"));
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "1"));
 		}
 		break;
 	case IHostapd::Band::BAND_ANY:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "any"));
-		if (iface_params.channelParams.enableAcs) {
+		if (channelParams.enableAcs) {
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[HT40+]"));
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "1"));
 		}
@@ -239,11 +252,11 @@ std::string AddOrUpdateHostapdConfig(
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "accept_mac_file", "/data/vendor/wifi/hostapd/hostapd.accept"));
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "deny_mac_file", "/data/vendor/wifi/hostapd/hostapd.deny"));
 
-	if (dual_mode)
-		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "bridge", v_iface_params.bridgeIfaceName.c_str()));
+	if (!v_iface_params.VendorV1_0.bridgeIfaceName.empty())
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "bridge", v_iface_params.VendorV1_0.bridgeIfaceName.c_str()));
 
-	if (!v_iface_params.countryCode.empty())
-		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "country_code", v_iface_params.countryCode.c_str()));
+	if (!v_iface_params.VendorV1_0.countryCode.empty())
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "country_code", v_iface_params.VendorV1_0.countryCode.c_str()));
 
 	return file_path;
 }
@@ -291,6 +304,38 @@ void callWithEachIfaceCallback(
 		}
 	}
 }
+
+// hostapd core functions accept "C" style function pointers, so use global
+// functions to pass to the hostapd core function and store the corresponding
+// std::function methods to be invoked.
+//
+// NOTE: Using the pattern from the vendor HAL (wifi_legacy_hal.cpp).
+//
+// Callback to be invoked once setup is complete
+std::function<void(struct hostapd_data*)> on_setup_complete_internal_callback;
+void onAsyncSetupCompleteCb(void* ctx)
+{
+	struct hostapd_data* iface_hapd = (struct hostapd_data*)ctx;
+	if (on_setup_complete_internal_callback) {
+		on_setup_complete_internal_callback(iface_hapd);
+		// Invalidate this callback since we don't want this firing
+		// again.
+		on_setup_complete_internal_callback = nullptr;
+	}
+}
+
+std::function<void(struct hostapd_data*, const u8 *mac_addr, int authorized,
+		   const u8 *p2p_dev_addr)> on_sta_authorized_internal_callback;
+void onAsyncStaAuthorizedCb(void* ctx, const u8 *mac_addr, int authorized,
+			    const u8 *p2p_dev_addr)
+{
+	struct hostapd_data* iface_hapd = (struct hostapd_data*)ctx;
+	if (on_sta_authorized_internal_callback) {
+		on_sta_authorized_internal_callback(iface_hapd, mac_addr,
+			authorized, p2p_dev_addr);
+	}
+}
+
 }  // namespace
 
 
@@ -300,7 +345,7 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace hostapd {
-namespace V1_0 {
+namespace V1_1 {
 namespace implementation {
 
 using namespace android::hardware;
@@ -312,14 +357,24 @@ using qsap_handler::run_qsap_cmd;
 
 HostapdVendor::HostapdVendor(struct hapd_interfaces* interfaces)
     : interfaces_(interfaces)
-{}
+{
+}
 
 Return<void> HostapdVendor::addVendorAccessPoint(
-    const VendorIfaceParams& iface_params, const NetworkParams& nw_params,
+    const V1_0::IHostapdVendor::VendorIfaceParams& iface_params, const NetworkParams& nw_params,
     addVendorAccessPoint_cb _hidl_cb)
 {
 	return call(
 	    this, &HostapdVendor::addVendorAccessPointInternal, _hidl_cb, iface_params,
+	    nw_params);
+}
+
+Return<void> HostapdVendor::addVendorAccessPoint_1_1(
+    const VendorIfaceParams& iface_params, const NetworkParams& nw_params,
+    addVendorAccessPoint_cb _hidl_cb)
+{
+	return call(
+	    this, &HostapdVendor::addVendorAccessPointInternal_1_1, _hidl_cb, iface_params,
 	    nw_params);
 }
 
@@ -337,25 +392,49 @@ Return<void> HostapdVendor::setHostapdParams(
 	    this, &HostapdVendor::setHostapdParamsInternal, _hidl_cb, cmd);
 }
 
+Return<void> HostapdVendor::setDebugParams(
+    IHostapdVendor::DebugLevel level, bool show_timestamp, bool show_keys,
+    setDebugParams_cb _hidl_cb)
+{
+	return call(
+	    this, &HostapdVendor::setDebugParamsInternal, _hidl_cb, level,
+	    show_timestamp, show_keys);
+}
+
+Return<IHostapdVendor::DebugLevel> HostapdVendor::getDebugLevel()
+{
+	return (IHostapdVendor::DebugLevel)wpa_debug_level;
+}
 Return<void> HostapdVendor::registerVendorCallback(
     const hidl_string& iface_name,
-    const android::sp<IHostapdVendorIfaceCallback> &callback,
+    const android::sp<V1_0::IHostapdVendorIfaceCallback> &callback,
     registerVendorCallback_cb _hidl_cb)
 {
 	return call(
 	    this, &HostapdVendor::registerCallbackInternal, _hidl_cb, iface_name, callback);
 }
 
+Return<void> HostapdVendor::registerVendorCallback_1_1(
+    const hidl_string& iface_name,
+    const android::sp<IHostapdVendorIfaceCallback> &callback,
+    registerVendorCallback_cb _hidl_cb)
+{
+	return call(
+	    this, &HostapdVendor::registerCallbackInternal_1_1, _hidl_cb, iface_name, callback);
+}
+
 HostapdStatus HostapdVendor::addVendorAccessPointInternal(
+    const V1_0::IHostapdVendor::VendorIfaceParams& v_iface_params, const NetworkParams& nw_params)
+{
+	// Deprecated support for this API
+	return {HostapdStatusCode::FAILURE_UNKNOWN, "Not supported"};
+}
+
+
+HostapdStatus HostapdVendor::__addVendorAccessPointInternal_1_1(
     const VendorIfaceParams& v_iface_params, const NetworkParams& nw_params)
 {
-	IfaceParams iface_params = v_iface_params.ifaceParams;
-	if (hostapd_get_iface(interfaces_, iface_params.ifaceName.c_str())) {
-		wpa_printf(
-		    MSG_ERROR, "Interface %s already present",
-		    iface_params.ifaceName.c_str());
-		return {HostapdStatusCode::FAILURE_IFACE_EXISTS, ""};
-	}
+	IfaceParams iface_params = v_iface_params.VendorV1_0.ifaceParams;
 	const auto conf_file_path =
 	    AddOrUpdateHostapdConfig(v_iface_params, nw_params);
 	if (conf_file_path.empty()) {
@@ -383,13 +462,71 @@ HostapdStatus HostapdVendor::addVendorAccessPointInternal(
 		    iface_params.ifaceName.c_str());
 		return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
+
+	// Register the setup complete callbacks
+	on_setup_complete_internal_callback =
+	    [this](struct hostapd_data* iface_hapd) {
+		    wpa_printf(
+			MSG_DEBUG, "AP interface setup completed - state %s",
+			hostapd_state_text(iface_hapd->iface->state));
+		    if (iface_hapd->iface->state == HAPD_IFACE_DISABLED) {
+			    callWithEachHostapdIfaceCallback(
+				iface_hapd->conf->iface,
+				std::bind(
+				&IHostapdVendorIfaceCallback::onFailure, std::placeholders::_1,
+				iface_hapd->conf->iface));
+		    }
+	    };
+	iface_hapd->setup_complete_cb = onAsyncSetupCompleteCb;
+	iface_hapd->setup_complete_cb_ctx = iface_hapd;
+
+	// Listen for new Sta connect/disconnect indication.
+	on_sta_authorized_internal_callback =
+	    [this](struct hostapd_data* iface_hapd, const u8 *mac_addr,
+		   int authorized, const u8 *p2p_dev_addr) {
+		wpa_printf(MSG_DEBUG, "vendor hidl: [%s] notify sta " MACSTR " %s",
+			   iface_hapd->conf->iface, MAC2STR(mac_addr),
+			   (authorized) ? "Connected" : "Disconnected");
+		if (authorized)
+			callWithEachHostapdIfaceCallback(
+			    iface_hapd->conf->iface,
+			    std::bind(
+			    &IHostapdVendorIfaceCallback::onStaConnected, std::placeholders::_1,
+			    mac_addr));
+		else
+			callWithEachHostapdIfaceCallback(
+			    iface_hapd->conf->iface,
+			    std::bind(
+			    &IHostapdVendorIfaceCallback::onStaDisconnected, std::placeholders::_1,
+			    mac_addr));
+	    };
+	iface_hapd->sta_authorized_cb = onAsyncStaAuthorizedCb;
+	iface_hapd->sta_authorized_cb_ctx = iface_hapd;
+
 	return {HostapdStatusCode::SUCCESS, ""};
+}
+
+
+HostapdStatus HostapdVendor::addVendorAccessPointInternal_1_1(
+    const VendorIfaceParams& v1_1_iface_params, const NetworkParams& nw_params)
+{
+	VendorIfaceParams v_iface_params = v1_1_iface_params;
+	IfaceParams iface_params = v_iface_params.VendorV1_0.ifaceParams;
+	if (hostapd_get_iface(interfaces_, iface_params.ifaceName.c_str())) {
+		wpa_printf(
+		    MSG_ERROR, "Interface %s already present",
+		    iface_params.ifaceName.c_str());
+		return {HostapdStatusCode::FAILURE_IFACE_EXISTS, ""};
+	}
+
+	return __addVendorAccessPointInternal_1_1(v_iface_params, nw_params);
 }
 
 HostapdStatus HostapdVendor::removeVendorAccessPointInternal(const std::string& iface_name)
 {
 	std::vector<char> remove_iface_param_vec(
 	    iface_name.begin(), iface_name.end() + 1);
+
 	if (hostapd_remove_iface(interfaces_, remove_iface_param_vec.data()) <
 	    0) {
 		wpa_printf(
@@ -397,6 +534,7 @@ HostapdStatus HostapdVendor::removeVendorAccessPointInternal(const std::string& 
 		    iface_name.c_str());
 		return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
+
 	return {HostapdStatusCode::SUCCESS, ""};
 }
 
@@ -408,29 +546,22 @@ HostapdStatus HostapdVendor::setHostapdParamsInternal(const std::string& cmd)
 	return {HostapdStatusCode::SUCCESS, ""};
 }
 
-int HostapdVendor::onStaConnected(uint8_t * Macaddr, char *iface_name)
+HostapdStatus HostapdVendor::setDebugParamsInternal(
+    IHostapdVendor::DebugLevel level, bool show_timestamp, bool show_keys)
 {
-	// Invoke the |onStaConnected| method on all Hostapd registered callbacks.
-	callWithEachHostapdIfaceCallback(
-	    iface_name,
-	    std::bind(
-	    &IHostapdVendorIfaceCallback::onStaConnected, std::placeholders::_1,
-	    Macaddr));
-	return 0;
-}
-
-int HostapdVendor::onStaDisconnected(uint8_t * Macaddr, char *iface_name)
-{
-	// Invoke the |onStaDisconnected| method on all Hostapd registered callbacks.
-	callWithEachHostapdIfaceCallback(
-	    iface_name,
-	    std::bind(
-	    &IHostapdVendorIfaceCallback::onStaDisconnected, std::placeholders::_1,
-	    Macaddr));
-	return 0;
+	set_log_level(static_cast<uint32_t>(level), show_timestamp, show_keys);
+	return {HostapdStatusCode::SUCCESS, ""};
 }
 
 HostapdStatus HostapdVendor::registerCallbackInternal(
+    const std::string& iface_name,
+    const android::sp<V1_0::IHostapdVendorIfaceCallback> &callback)
+{
+	// Deprecated support for this callback
+	return {HostapdStatusCode::FAILURE_UNKNOWN, "Not supported"};
+}
+
+HostapdStatus HostapdVendor::registerCallbackInternal_1_1(
     const std::string& iface_name,
     const android::sp<IHostapdVendorIfaceCallback> &callback)
 {
@@ -438,6 +569,7 @@ HostapdStatus HostapdVendor::registerCallbackInternal(
 	   wpa_printf(MSG_ERROR, "FAILED to register Hostapd Vendor IfaceCallback");
 	   return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
+
 	return {HostapdStatusCode::SUCCESS, ""};
 }
 
@@ -475,7 +607,7 @@ void HostapdVendor::callWithEachHostapdIfaceCallback(
 }
 
 }  // namespace implementation
-}  // namespace V1_0
+}  // namespace V1_1
 }  // namespace hostapd
 }  // namespace wifi
 }  // namespace hardware

@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -28,28 +28,47 @@
  */
 
 /* qsap interface for hostapd daemon */
-
-#ifndef QSAP_HANDLER_H
-#define QSAP_HANDLER_H
+#include "string"
+#include "qsap_handler.h"
+#include <qsap_api.h>
 
 namespace vendor {
 namespace qti {
 namespace hardware {
 namespace wifi {
 namespace hostapd {
-namespace V1_0 {
+namespace V1_1 {
 namespace implementation {
 namespace qsap_handler {
 
-int run_qsap_cmd(int argc, char** argv);
+int run_qsap_cmd(int argc, char** argv) {
+	int ret = 0;
+
+	if (argc < 3)
+		return -1;
+
+	if (!strcmp(argv[1], "qccmd")) {
+		ret = qsap_hostd_exec(argc, argv);
+	} else if (!strcmp(argv[1], "create") &&
+		qsap_add_or_remove_interface(argv[2], 1)) {
+	} else if (!strcmp(argv[1], "remove") &&
+		qsap_add_or_remove_interface(argv[2], 0)) {
+	} else if (!strcmp(argv[1], "bridge")) {
+		ret = qsap_control_bridge(argc, argv);
+	} else if (!strcmp(argv[1], "setsoftap")) {
+		ret = qsapsetSoftap(argc, argv);
+	} else {
+		ret = -1;
+	}
+
+	return ret;
+}
 
 }  // namespace qsap_handler
 }  // namespace implementation
-}  // namespace V1_0
+}  // namespace V1_1
 }  // namespace hostapd
 }  // namespace wifi
 }  // namespace hardware
 }  // namespace qti
 }  // namespace vendor
-
-#endif /* QSAP_HANDLER_H */
