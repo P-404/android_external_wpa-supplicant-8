@@ -2178,9 +2178,20 @@ void HidlManager::callWithEachStaNetworkCallback(
 
 int HidlManager::registerVendorHidlService(struct wpa_global *global)
 {
+	::android::status_t status;
+
 	// Create the vendor hidl service object and register it.
 	supplicantvendor_object_ = new SupplicantVendor(global);
-	if (supplicantvendor_object_->registerAsService() != android::NO_ERROR) {
+	if (global->params.hidl_service_name) {
+		wpa_printf(MSG_DEBUG, "hidl_register vendor service name %s",
+			   global->params.hidl_service_name);
+		status = supplicantvendor_object_->registerAsService(global->params.hidl_service_name);
+	} else {
+		wpa_printf(MSG_DEBUG, "hidl_register vendor service name default");
+		status = supplicantvendor_object_->registerAsService();
+	}
+
+	if (status != android::NO_ERROR) {
 		wpa_printf(MSG_ERROR,"Failed to Register Vendor HIDL service");
 		return 1;
 	}
