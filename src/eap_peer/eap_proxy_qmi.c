@@ -148,7 +148,7 @@ static unsigned int session_type;
 static Boolean wpa_qmi_register_events(int sim_num, wpa_uim_struct_type *wpa_uim);
 static Boolean wpa_qmi_read_card_imsi(int sim_num, wpa_uim_struct_type *wpa_uim);
 static Boolean wpa_qmi_read_card_status(int sim_num, wpa_uim_struct_type *wpa_uim);
-static Boolean wpa_qmi_register_auth_inds(struct eap_proxy_sm *eap_proxy);
+static Boolean wpa_qmi_register_auth_inds(int sim_num, struct eap_proxy_sm *eap_proxy);
 
 #endif
 #define EAP_SUB_TYPE_SIM_START     0x0a
@@ -242,9 +242,9 @@ fail:
 	return;
 }
 
-static Boolean wpa_qmi_register_auth_inds(struct eap_proxy_sm *eap_proxy)
+static Boolean wpa_qmi_register_auth_inds(int sim_num, struct eap_proxy_sm *eap_proxy)
 {
-        qmi_client_error_type               qmi_err_code      = 0;
+        qmi_client_error_type qmi_err_code = QMI_NO_ERR;
         auth_indication_register_resp_msg_v01  event_resp_msg;
         auth_indication_register_req_msg_v01 event_reg_params;
 
@@ -257,7 +257,7 @@ static Boolean wpa_qmi_register_auth_inds(struct eap_proxy_sm *eap_proxy)
 
         wpa_printf(MSG_ERROR, "registering for notification codes\n");
         qmi_err_code = qmi_client_send_msg_sync(
-                        eap_proxy->qmi_auth_svc_client_ptr[eap_proxy->user_selected_sim],
+                        eap_proxy->qmi_auth_svc_client_ptr[sim_num],
                         QMI_AUTH_INDICATION_REGISTER_REQ_V01,
                         (void *) &event_reg_params,
                         sizeof(auth_indication_register_req_msg_v01),
@@ -694,7 +694,7 @@ void wpa_qmi_handle_ssr(qmi_client_type user_handle, qmi_client_error_type error
 
 static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
 {
-        int qmiErrorCode;
+        int qmiErrorCode = QMI_NO_ERR;
         qmi_idl_service_object_type qmi_client_service_obj[MAX_NO_OF_SIM_SUPPORTED];
         int index;
         static Boolean flag = FALSE;
@@ -764,10 +764,22 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
                                         10000,
                                         &wpa_uim[index].qmi_uim_svc_client_ptr);
 
-                        if ((wpa_uim[index].qmi_uim_svc_client_ptr == NULL) || (qmiErrorCode > 0)) {
+                        if ((wpa_uim[index].qmi_uim_svc_client_ptr == NULL) || (qmiErrorCode != QMI_NO_ERR)) {
                                 wpa_printf(MSG_ERROR, "eap_proxy: Could not register with QMI UIM"
-                                        "Service, qmi_uim_svc_client_ptr: %p,qmi_err_code: %d\n",
+                                        " Service, qmi_uim_svc_client_ptr: %p,qmi_err_code: %d\n",
                                         wpa_uim[index].qmi_uim_svc_client_ptr, qmiErrorCode);
+                                wpa_uim[index].qmi_uim_svc_client_ptr = NULL;
+                                flag = FALSE;
+                                continue;
+                        }
+                        /* Register the card events with the QMI / UIM */
+                        // TODO: Should we treat sim read failure as eap_proxy_init failure ?
+                        wpa_qmi_register_events(index, wpa_uim);
+                        qmiErrorCode = qmi_client_register_error_cb(
+                                wpa_uim[index].qmi_uim_svc_client_ptr, wpa_qmi_handle_ssr, eap_proxy);
+                        if (qmiErrorCode != QMI_NO_ERR) {
+                                wpa_printf(MSG_ERROR, "eap_proxy: qmi_client_register_error_cb()-"
+                                           " Failed to register callbacks %d\n", qmiErrorCode);
                                 wpa_uim[index].qmi_uim_svc_client_ptr = NULL;
                                 flag = FALSE;
                                 continue;
@@ -775,14 +787,8 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
                         eap_proxy->qmi_uim_svc_client_initialized[index] = TRUE;
 
                         wpa_printf (MSG_ERROR, "eap_proxy: QMI uim service client initialized with"
-                                "success tid is %d %p %d\n",
+                                " success tid is %d %p %d\n",
                                 gettid(), wpa_uim[index].qmi_uim_svc_client_ptr, qmiErrorCode);
-                        /* Register the card events with the QMI / UIM */
-                        wpa_qmi_register_events(index, wpa_uim);
-                        qmiErrorCode = qmi_client_register_error_cb(
-                                wpa_uim[index].qmi_uim_svc_client_ptr, wpa_qmi_handle_ssr, eap_proxy);
-                        wpa_printf(MSG_ERROR,
-                                "eap_proxy: qmi_client_register_error_cb() status %d\n", qmiErrorCode);
                 } else
                         wpa_printf (MSG_ERROR, "eap_proxy: QMI uim service client is already init"
                                 "ialized tid is %d \n", gettid());
@@ -800,20 +806,27 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
                                                         &eap_proxy->qmi_auth_svc_client_ptr[index]);
 
 
-                if ((eap_proxy->qmi_auth_svc_client_ptr[index] == NULL) || (qmiErrorCode > 0)) {
+                if ((eap_proxy->qmi_auth_svc_client_ptr[index] == NULL) || (qmiErrorCode != QMI_NO_ERR)) {
                         wpa_printf(MSG_ERROR, "eap_proxy: Could not register with QMI auth Service "
                                         "qmi_auth_svc_client_ptr: %p,qmi_err_code: %d\n",
                                         eap_proxy->qmi_auth_svc_client_ptr[index], qmiErrorCode);
                         eap_proxy->qmi_auth_svc_client_ptr[index] = NULL;
+                        eap_proxy->qmi_uim_svc_client_initialized[index] = FALSE;
                         flag = FALSE;
                         continue;
                 }
                 wpa_printf (MSG_ERROR, "eap_proxy: QMI auth service client initialized with success"
                         " tid is %d  %p eapol_proxy=%p\n", gettid(),
                                 eap_proxy->qmi_auth_svc_client_ptr[index], eap_proxy);
-                flag = TRUE;
                 /* Register for the notifications from QMI / AUTH */
-                wpa_qmi_register_auth_inds(eap_proxy);
+                if (wpa_qmi_register_auth_inds(index, eap_proxy) == FALSE) {
+                        eap_proxy->qmi_auth_svc_client_ptr[index] = NULL;
+                        eap_proxy->qmi_uim_svc_client_initialized[index] = FALSE;
+                        wpa_printf (MSG_ERROR, "eap_proxy: wpa_qmi_register_auth_inds failed");
+                        flag = FALSE;
+                        continue;
+                }
+                flag = TRUE;
 #endif /* SIM_AKA_IDENTITY_IMSI */
         }
 
