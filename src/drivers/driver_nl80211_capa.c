@@ -1278,6 +1278,8 @@ static void qca_nl80211_get_features(struct wpa_driver_nl80211_data *drv)
 		drv->capa.flags |= WPA_DRIVER_FLAGS_OCE_AP;
 	if (check_feature(QCA_WLAN_VENDOR_FEATURE_OCE_STA_CFON, &info))
 		drv->capa.flags |= WPA_DRIVER_FLAGS_OCE_STA_CFON;
+	if (check_feature(QCA_WLAN_VENDOR_FEATURE_TWT, &info))
+		drv->capa.flags |= WPA_DRIVER_FLAGS_SUPPORT_TWT;
 	os_free(info.flags);
 }
 
