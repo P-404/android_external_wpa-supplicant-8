@@ -157,21 +157,11 @@ public:
 	// DPP Callbacks
 	void notifyDppAuthSuccess(
 	    struct wpa_supplicant *wpa_s, int initiator);
-	void notifyDppNotCompatible(
-	    struct wpa_supplicant *wpa_s, u8 capab, int initiator);
-	void notifyDppResponsePending(struct wpa_supplicant *wpa_s);
-	void notifyDppScanPeerQrCode(
-	    struct wpa_supplicant *wpa_s, const u8* i_bootstrap,
-	    uint16_t i_bootstrap_len);
 	void notifyDppConf(
 	    struct wpa_supplicant *wpa_s, u8 type, u8* ssid, u8 ssid_len,
 	    const char *connector, struct wpabuf *c_sign, struct wpabuf *net_access,
 	    uint32_t net_access_expiry, const char *passphrase, uint32_t psk_set,
 	    u8 *psk);
-	void notifyDppMissingAuth(
-	    struct wpa_supplicant *wpa_s, u8 dpp_auth_param);
-	void notifyDppNetworkId(
-	    struct wpa_supplicant *wpa_s, uint32_t net_id);
 #endif
 
 	int getP2pIfaceHidlObjectByIfname(

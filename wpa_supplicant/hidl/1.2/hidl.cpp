@@ -710,6 +710,14 @@ void wpas_hidl_notify_dpp_auth_success(struct wpa_supplicant *wpa_s)
 		return;
 
 	wpas_hidl_notify_dpp_progress(wpa_s, DppProgressCode::AUTHENTICATION_SUCCESS);
+#ifdef SUPPLICANT_VENDOR_HIDL
+	wpa_printf(MSG_DEBUG, "Notifying DPP Auth Success to hidl control.");
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+	hidl_manager->notifyDppAuthSuccess(wpa_s, 0 /*Irrelivent to user*/);
+#endif
 }
 
 void wpas_hidl_notify_dpp_resp_pending(struct wpa_supplicant *wpa_s)
@@ -798,4 +806,26 @@ static void wpas_hidl_notify_dpp_progress(struct wpa_supplicant *wpa_s, DppProgr
 		return;
 
 	hidl_manager->notifyDppProgress(wpa_s, code);
+}
+//Vendor DPP Notifications
+void wpas_hidl_notify_dpp_conf(
+    struct wpa_supplicant *wpa_s, u8 type, u8* ssid, u8 ssid_len,
+    const char *connector, struct wpabuf *c_sign, struct wpabuf *net_access,
+    uint32_t net_access_expiry, const char *passphrase, uint32_t psk_set, u8* psk)
+{
+	if (!wpa_s)
+		return;
+
+	wpa_printf(MSG_DEBUG, "Notifying DPP conf to hidl control."
+			       " type:%u", type);
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+#ifdef SUPPLICANT_VENDOR_HIDL
+	hidl_manager->notifyDppConf(wpa_s, type, ssid, ssid_len,
+				    connector, c_sign, net_access,
+				    net_access_expiry, passphrase, psk_set, psk);
+#endif
 }

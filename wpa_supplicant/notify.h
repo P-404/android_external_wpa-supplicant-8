@@ -185,4 +185,11 @@ void wpas_notify_dpp_timeout(struct wpa_supplicant *wpa_s);
 void wpas_notify_dpp_auth_failure(struct wpa_supplicant *wpa_s);
 void wpas_notify_dpp_failure(struct wpa_supplicant *wpa_s);
 
+//Vendor dpp notification
+void wpas_notify_dpp_conf(void *msg_ctx, u8 type, u8* ssid,
+			  u8 ssid_len, const char *connector,
+			  struct wpabuf *c_sign, struct wpabuf *net_access,
+			  uint32_t net_access_expiry, const char *passphrase,
+			  uint32_t psk_set, u8 *psk);
+
 #endif /* NOTIFY_H */

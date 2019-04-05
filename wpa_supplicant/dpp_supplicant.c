@@ -973,6 +973,11 @@ static int wpas_dpp_handle_config_obj(struct wpa_supplicant *wpa_s,
 	}
 
 	wpas_notify_dpp_configuration_failure(wpa_s);
+	wpas_notify_dpp_conf(wpa_s, DPP_CONF_RECEIVED, auth->ssid,
+			    auth->ssid_len, auth->connector,
+			    auth->c_sign_key, auth->net_access_key,
+			    auth->net_access_key_expiry, auth->passphrase,
+			    auth->psk_set, auth->psk);
 	return wpas_dpp_process_config(wpa_s, auth);
 }
 
@@ -1039,6 +1044,8 @@ fail:
 	if (status != DPP_STATUS_OK) {
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_FAILED);
 		wpas_notify_dpp_configuration_failure(wpa_s);
+		wpas_notify_dpp_conf(wpa_s, DPP_CONF_FAILED, NULL, 0, NULL, NULL, NULL, 0,
+				     NULL, 0, NULL);
 	}
 #ifdef CONFIG_DPP2
 	if (auth->peer_version >= 2 &&
@@ -1862,6 +1869,8 @@ wpas_dpp_gas_req_handler(void *ctx, const u8 *sa, const u8 *query,
 	if (!resp) {
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_FAILED);
 		wpas_notify_dpp_configuration_failure(wpa_s);
+		wpas_notify_dpp_conf(wpa_s, DPP_CONF_FAILED, NULL, 0, NULL, NULL, NULL, 0,
+				     NULL, 0, NULL);
 	}
 	auth->conf_resp = resp;
 	return resp;
@@ -1910,10 +1919,13 @@ wpas_dpp_gas_status_handler(void *ctx, struct wpabuf *resp, int ok)
 	if (ok) {
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_SENT);
 		wpas_notify_dpp_config_sent(wpa_s);
-	}
-	else {
+		wpas_notify_dpp_conf(wpa_s, DPP_CONF_SENT, NULL, 0, NULL, NULL, NULL, 0,
+				     NULL, 0, NULL);
+	} else {
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_FAILED);
 		wpas_notify_dpp_configuration_failure(wpa_s);
+		wpas_notify_dpp_conf(wpa_s, DPP_CONF_FAILED, NULL, 0, NULL, NULL, NULL, 0,
+				     NULL, 0, NULL);
 	}
 	dpp_auth_deinit(wpa_s->dpp_auth);
 	wpa_s->dpp_auth = NULL;
