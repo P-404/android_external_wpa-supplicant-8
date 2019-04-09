@@ -760,6 +760,8 @@ struct wpa_supplicant {
 	unsigned int connection_ht:1;
 	unsigned int connection_vht:1;
 	unsigned int connection_he:1;
+	unsigned int connection_vht_max_eight_spatial_streams:1;
+	unsigned int connection_twt:1;
 
 	struct os_reltime last_mac_addr_change;
 	int last_mac_addr_style;
