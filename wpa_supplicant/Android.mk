@@ -1841,7 +1841,8 @@ LOCAL_SHARED_LIBRARIES := \
     libhidlbase \
     libhidltransport \
     libutils \
-    liblog
+    liblog \
+    libssl
 ifeq ($(SUPPLICANT_VENDOR_HIDL), y)
 LOCAL_SHARED_LIBRARIES += \
     vendor.qti.hardware.wifi.supplicant@2.0

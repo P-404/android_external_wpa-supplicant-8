@@ -39,12 +39,17 @@
 #include "vendorsta_iface.h"
 
 extern "C" {
+#include "utils/includes.h"
+#include "utils/common.h"
 #include "utils/eloop.h"
 #include "gas_query.h"
 #include "interworking.h"
 #include "hs20_supplicant.h"
 #include "wps_supplicant.h"
 #include "dpp_supplicant.h"
+#ifdef CONFIG_DPP
+#include "common/dpp.h"
+#endif
 }
 
 namespace vendor {
@@ -325,7 +330,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppBootstrapGenerateInterna
 	std::string mac_str(addr);
 	cmd += (is_zero_ether_addr(mac_addr.data())) ? "" : " mac="+mac_str;
 
-	ret = wpas_dpp_bootstrap_gen(wpa_s, cmd.c_str());
+	ret = dpp_bootstrap_gen(wpa_s->dpp, cmd.c_str());
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
@@ -337,7 +342,8 @@ std::pair<SupplicantStatus, std::string> VendorStaIface::dppGetUriInternal(uint3
 {
 #ifdef CONFIG_DPP
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
-	const char* uri_data = wpas_dpp_bootstrap_get_uri(wpa_s, id);
+	const char* uri_data = dpp_bootstrap_get_uri(wpa_s->dpp, id);
+
 	if (!uri_data)
 		return {SupplicantStatus{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
 
@@ -361,7 +367,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppBootstrapRemoveInternal(
 	else
 		val = std::to_string(id);
 
-	ret = wpas_dpp_bootstrap_remove(wpa_s, val.c_str());
+	ret = dpp_bootstrap_remove(wpa_s->dpp, val.c_str());
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
@@ -415,7 +421,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppConfiguratorAddInternal(
 	cmd += (key.empty()) ? "" : " key="+key;
 	cmd += (!expiry) ? "" : " expiry="+std::to_string(expiry);
 
-	ret = wpas_dpp_configurator_add(wpa_s, cmd.c_str());
+	ret = dpp_configurator_add(wpa_s->dpp, cmd.c_str());
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
@@ -435,7 +441,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppConfiguratorRemoveIntern
 	else
 		val = std::to_string(id);
 
-	ret = wpas_dpp_configurator_remove(wpa_s, val.c_str());
+	ret = dpp_configurator_remove(wpa_s->dpp, val.c_str());
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
@@ -481,7 +487,7 @@ std::pair<SupplicantStatus, std::string> VendorStaIface::dppConfiguratorGetKeyIn
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 #define CONFIGURATOR_KEY_LEN 2048
 	char key_buf[CONFIGURATOR_KEY_LEN];
-	int ret = wpas_dpp_configurator_get_key(wpa_s, id, key_buf, CONFIGURATOR_KEY_LEN);
+	int ret = dpp_configurator_get_key_id(wpa_s->dpp, id, key_buf, CONFIGURATOR_KEY_LEN);
 	if (ret < 0)
 		return {SupplicantStatus{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
 
