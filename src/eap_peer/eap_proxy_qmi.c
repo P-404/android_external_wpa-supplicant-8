@@ -1121,7 +1121,7 @@ static void handle_qmi_eap_reply(
         wpa_printf(MSG_ERROR, "eap_proxy: %s started\n", __func__);
         if (eap_proxy == NULL) {
                 wpa_printf(MSG_ERROR, "eap_proxy: eap_proxy is NULL");
-                return;
+                goto done;
         }
         if (QMI_STATE_RESP_PENDING == eap_proxy->qmi_state) {
 
@@ -1134,20 +1134,20 @@ static void handle_qmi_eap_reply(
                                         " the request: sysErrorCode=%d\n",
                                         sysErrCode);
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-                        return;
+                        goto done;
                 }
 
                 if (NULL == rspData) {
                         wpa_printf(MSG_ERROR, "eap_proxy: Response data is NULL\n");
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-                        return;
+                        goto done;
                 }
                 if((QMI_AUTH_SEND_EAP_PACKET_REQ_V01 != msg_id) &&
                    (QMI_AUTH_SEND_EAP_PACKET_EXT_REQ_V01 != msg_id))
                 {
                         wpa_printf(MSG_ERROR, "eap_proxy: Invalid msgId =%d\n", msg_id);
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-                        return;
+                        goto done;
                 }
 
                 /* ensure the reply packet exists  */
@@ -1157,7 +1157,7 @@ static void handle_qmi_eap_reply(
                                 " error %d result %d\n", rspData->eap_response_pkt_len,
                                 rspData->resp.error, rspData->resp.result);
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-                        return;
+                        goto done;
                 }
 
                 length = rspData->eap_response_pkt_len;
@@ -1173,8 +1173,7 @@ static void handle_qmi_eap_reply(
                         wpa_printf(MSG_ERROR, "eap_proxy: Unable to allocate memory for"
                                         " reply packet\n");
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-
-                        return;
+                        goto done;
                 }
 
                 /* copy the response data to the allocated buffer */
@@ -1187,6 +1186,11 @@ static void handle_qmi_eap_reply(
                 dump_buff(resp_data, length);
         }
 
+done:
+        if (rspData != NULL) {
+                os_free(rspData);
+                rspData = NULL;
+        }
         return;
 }
 
@@ -1197,11 +1201,11 @@ static enum eap_proxy_status eap_proxy_process(struct eap_proxy_sm  *eap_proxy,
         int qmiErrorCode = QMI_NO_ERR;
         enum eap_proxy_status proxy_status = EAP_PROXY_SUCCESS;
         auth_send_eap_packet_req_msg_v01 eap_send_packet_req;
-        auth_send_eap_packet_resp_msg_v01 eap_send_packet_resp;
+        auth_send_eap_packet_resp_msg_v01 *eap_send_packet_resp = NULL;
         qmi_txn_handle async_txn_hdl = 0;
 
         auth_send_eap_packet_ext_req_msg_v01 eap_send_packet_ext_req;
-        auth_send_eap_packet_ext_resp_msg_v01 eap_send_packet_ext_resp;
+        auth_send_eap_packet_ext_resp_msg_v01 *eap_send_packet_ext_resp = NULL;
 
 
         hdr = (struct eap_hdr *)eapReqData;
@@ -1243,21 +1247,11 @@ static enum eap_proxy_status eap_proxy_process(struct eap_proxy_sm  *eap_proxy,
         wpa_printf(MSG_ERROR, "eap_proxy: ***********Dump ReqData len %d***********",
                 eapReqDataLen);
         dump_buff(eapReqData, eapReqDataLen);
-        if (eapReqDataLen <= QMI_AUTH_EAP_REQ_PACKET_MAX_V01) {
-                os_memset(&eap_send_packet_req, 0, sizeof(auth_send_eap_packet_req_msg_v01));
-                os_memset(&eap_send_packet_resp, 0, sizeof(auth_send_eap_packet_resp_msg_v01));
-                eap_send_packet_req.eap_request_pkt_len = eapReqDataLen ;
-                memcpy(eap_send_packet_req.eap_request_pkt, eapReqData, eapReqDataLen);
-        } else if (eapReqDataLen <= QMI_AUTH_EAP_REQ_PACKET_EXT_MAX_V01) {
-                os_memset(&eap_send_packet_ext_req, 0,
-                        sizeof(auth_send_eap_packet_ext_req_msg_v01));
-                os_memset(&eap_send_packet_ext_resp, 0,
-                        sizeof(auth_send_eap_packet_ext_resp_msg_v01));
-                eap_send_packet_ext_req.eap_request_ext_pkt_len = eapReqDataLen;
-                memcpy(eap_send_packet_ext_req.eap_request_ext_pkt, eapReqData, eapReqDataLen);
-        } else {
-                        wpa_printf(MSG_ERROR, "eap_proxy: Error in eap_send_packet_req\n");
-                        return EAP_PROXY_FAILURE;
+
+        if ((eapReqDataLen > QMI_AUTH_EAP_REQ_PACKET_MAX_V01) &&
+            (eapReqDataLen > QMI_AUTH_EAP_REQ_PACKET_EXT_MAX_V01)) {
+                wpa_printf(MSG_ERROR, "eap_proxy: Error in eap_send_packet_req\n");
+                return EAP_PROXY_FAILURE;
         }
 
         wpa_printf(MSG_ERROR, "eap_proxy: SIM selected by User: Selected sim = %d\n",
@@ -1271,13 +1265,36 @@ static enum eap_proxy_status eap_proxy_process(struct eap_proxy_sm  *eap_proxy,
         wpa_printf (MSG_ERROR, "eap_proxy: In eap_proxy_process case %d\n", hdr->code);
         eap_proxy->qmi_state = QMI_STATE_RESP_PENDING;
 
+        if (eapReqDataLen <= QMI_AUTH_EAP_REQ_PACKET_MAX_V01) {
+                os_memset(&eap_send_packet_req, 0, sizeof(auth_send_eap_packet_req_msg_v01));
+                eap_send_packet_req.eap_request_pkt_len = eapReqDataLen ;
+                memcpy(eap_send_packet_req.eap_request_pkt, eapReqData, eapReqDataLen);
+
+                eap_send_packet_resp = os_zalloc(sizeof(auth_send_eap_packet_resp_msg_v01));
+                if (eap_send_packet_resp == NULL) {
+                        wpa_printf(MSG_ERROR, "Error allocating memory for eap_packet_resp_msg");
+                        return EAP_PROXY_FAILURE;
+                }
+        } else if (eapReqDataLen <= QMI_AUTH_EAP_REQ_PACKET_EXT_MAX_V01) {
+                os_memset(&eap_send_packet_ext_req, 0,
+                        sizeof(auth_send_eap_packet_ext_req_msg_v01));
+                eap_send_packet_ext_req.eap_request_ext_pkt_len = eapReqDataLen;
+                memcpy(eap_send_packet_ext_req.eap_request_ext_pkt, eapReqData, eapReqDataLen);
+
+                eap_send_packet_ext_resp = os_zalloc(sizeof(auth_send_eap_packet_ext_resp_msg_v01));
+                if (eap_send_packet_ext_resp == NULL) {
+                        wpa_printf(MSG_ERROR, "Error allocating memory for eap_send_packet_ext_resp");
+                        return EAP_PROXY_FAILURE;
+                }
+        }
+
         if(eapReqDataLen <= QMI_AUTH_EAP_REQ_PACKET_MAX_V01) {
                 qmiErrorCode = qmi_client_send_msg_async(
                                 eap_proxy->qmi_auth_svc_client_ptr[eap_proxy->user_selected_sim],
                                 QMI_AUTH_SEND_EAP_PACKET_REQ_V01,
                                 (void *) &eap_send_packet_req,
                                 sizeof(auth_send_eap_packet_req_msg_v01),
-                                (void *) &eap_send_packet_resp,
+                                (void *) eap_send_packet_resp,
                                 sizeof(auth_send_eap_packet_resp_msg_v01),
                                 &handle_qmi_eap_reply, eap_proxy,
                                 &async_txn_hdl);
@@ -1287,7 +1304,7 @@ static enum eap_proxy_status eap_proxy_process(struct eap_proxy_sm  *eap_proxy,
                                 QMI_AUTH_SEND_EAP_PACKET_EXT_REQ_V01,
                                 (void *) &eap_send_packet_ext_req,
                                 sizeof(auth_send_eap_packet_ext_req_msg_v01),
-                                (void *) &eap_send_packet_ext_resp,
+                                (void *) eap_send_packet_ext_resp,
                                 sizeof(auth_send_eap_packet_ext_resp_msg_v01),
                                 &handle_qmi_eap_reply, eap_proxy,
                                 &async_txn_hdl);
@@ -1296,20 +1313,14 @@ static enum eap_proxy_status eap_proxy_process(struct eap_proxy_sm  *eap_proxy,
         if (QMI_NO_ERR != qmiErrorCode) {
                 wpa_printf(MSG_ERROR, "QMI-ERROR Error in sending EAP packet;"
                                 " error_code=%d\n", qmiErrorCode);
-                eap_proxy->proxy_state = EAP_PROXY_DISCARD;
-                eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapNoResp, TRUE);
-                eap_proxy->qmi_state = QMI_STATE_RESP_PENDING;
-                return EAP_PROXY_FAILURE;
+                goto fail;
         } else {
                 wpa_printf (MSG_ERROR, "eap_proxy: In eap_proxy_process case %d\n", hdr->code);
                 switch (hdr->code) {
                 case EAP_CODE_SUCCESS:
                         if (EAP_PROXY_SUCCESS !=
                                 eap_proxy_qmi_response_wait(eap_proxy)) {
-                                eap_proxy->proxy_state = EAP_PROXY_DISCARD;
-                                eap_proxy_eapol_sm_set_bool(eap_proxy,
-                                                        EAPOL_eapNoResp, TRUE);
-                                return EAP_PROXY_FAILURE;
+                                goto fail;
                         } else if( eap_proxy->proxy_state == EAP_PROXY_AUTH_SUCCESS ) {
                                 eap_proxy_get_keys(eap_proxy);
                                 eap_proxy_eapol_sm_set_bool(eap_proxy,
@@ -1385,10 +1396,7 @@ static enum eap_proxy_status eap_proxy_process(struct eap_proxy_sm  *eap_proxy,
                                         eap_proxy->proxy_state = EAP_PROXY_SEND_RESPONSE;
                         if (EAP_PROXY_SUCCESS !=
                                 eap_proxy_qmi_response_wait(eap_proxy)) {
-                                eap_proxy->proxy_state = EAP_PROXY_DISCARD;
-                                eap_proxy_eapol_sm_set_bool(eap_proxy,
-                                                        EAPOL_eapNoResp, TRUE);
-                                return EAP_PROXY_FAILURE;
+                                goto fail;
                         } else {
                                 eap_proxy_eapol_sm_set_bool(eap_proxy,
                                                         EAPOL_eapResp, TRUE);
@@ -1404,14 +1412,22 @@ static enum eap_proxy_status eap_proxy_process(struct eap_proxy_sm  *eap_proxy,
                 default:
                         wpa_printf(MSG_ERROR, "eap_proxy: Error in sending EAP packet;"
                                          " error_code=%d\n", qmiErrorCode);
-                        eap_proxy->proxy_state = EAP_PROXY_DISCARD;
-                        eap_proxy_eapol_sm_set_bool(eap_proxy,
-                                EAPOL_eapNoResp, TRUE);
-                        return EAP_PROXY_FAILURE;
+                        goto fail;
                 }
         }
 
         return EAP_PROXY_SUCCESS;
+
+fail:
+        if (eap_send_packet_resp != NULL)
+            os_free(eap_send_packet_resp);
+        if (eap_send_packet_ext_resp != NULL)
+            os_free(eap_send_packet_ext_resp);
+
+        eap_proxy->proxy_state = EAP_PROXY_DISCARD;
+        eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapNoResp, TRUE);
+
+        return EAP_PROXY_FAILURE;
 }
 
 
