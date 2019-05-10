@@ -63,17 +63,16 @@ void wpas_notify_supplicant_deinitialized(struct wpa_global *global)
 
 int wpas_notify_iface_added(struct wpa_supplicant *wpa_s)
 {
-	if (wpa_s->p2p_mgmt)
-		return 0;
+	if (!wpa_s->p2p_mgmt) {
+		if (wpas_dbus_register_interface(wpa_s))
+			return -1;
+	}
 
 #ifdef CONFIG_HIDL
 	/* HIDL interface wants to keep track of the P2P mgmt iface. */
 	if (wpas_hidl_register_interface(wpa_s))
 		return -1;
 #endif
-
-	if (wpas_dbus_register_interface(wpa_s))
-		return -1;
 
 	return 0;
 }
