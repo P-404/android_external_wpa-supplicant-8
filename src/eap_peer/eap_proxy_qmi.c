@@ -98,6 +98,9 @@ static inline pid_t gettid(void)
 #endif
 #endif
 
+// Lock to serialize concurrent calls to eloop_register_timeout.
+static pthread_mutex_t eloop_lock = PTHREAD_MUTEX_INITIALIZER;
+
 static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy);
 static void eap_proxy_eapol_sm_set_bool(struct eap_proxy_sm *sm,
                          enum eapol_bool_var var, Boolean value);
@@ -680,16 +683,10 @@ void wpa_qmi_handle_ssr(qmi_client_type user_handle, qmi_client_error_type error
 {
         struct eap_proxy_sm *eap_proxy = err_cb_data;
 
-        pthread_mutex_lock(&(eap_proxy->lock));       // Lock
+        pthread_mutex_lock(&eloop_lock);       // Lock
         wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
-
-        if (eap_proxy->qmi_ssr_in_progress) {
-                wpa_printf(MSG_ERROR, "eap_proxy: qmi_ssr_in_progress for eap_proxy=%p Skip another.", eap_proxy);
-        } else {
-                eap_proxy->qmi_ssr_in_progress = TRUE;
-                eloop_register_timeout(0, 0, wpa_qmi_register_notification, eap_proxy, NULL);
-        }
-        pthread_mutex_unlock(&(eap_proxy->lock));      // Unlock
+        eloop_register_timeout(0, 0, wpa_qmi_register_notification, eap_proxy, NULL);
+        pthread_mutex_unlock(&eloop_lock);      // Unlock
 }
 
 static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
@@ -697,7 +694,7 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
         int qmiErrorCode = QMI_NO_ERR;
         qmi_idl_service_object_type qmi_client_service_obj[MAX_NO_OF_SIM_SUPPORTED];
         int index;
-        static Boolean flag = FALSE;
+        Boolean flag = FALSE;
         int ret = 0;
         wpa_uim_struct_type *wpa_uim = eap_proxy->wpa_uim;
 #ifdef CONFIG_EAP_PROXY_MDM_DETECT
@@ -775,14 +772,18 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
                         /* Register the card events with the QMI / UIM */
                         // TODO: Should we treat sim read failure as eap_proxy_init failure ?
                         wpa_qmi_register_events(index, wpa_uim);
-                        qmiErrorCode = qmi_client_register_error_cb(
-                                wpa_uim[index].qmi_uim_svc_client_ptr, wpa_qmi_handle_ssr, eap_proxy);
-                        if (qmiErrorCode != QMI_NO_ERR) {
-                                wpa_printf(MSG_ERROR, "eap_proxy: qmi_client_register_error_cb()-"
-                                           " Failed to register callbacks %d\n", qmiErrorCode);
-                                wpa_uim[index].qmi_uim_svc_client_ptr = NULL;
-                                flag = FALSE;
-                                continue;
+
+                        // register for SSR once per interface.
+                        if (flag == FALSE) {
+                                qmiErrorCode = qmi_client_register_error_cb(
+                                        wpa_uim[index].qmi_uim_svc_client_ptr, wpa_qmi_handle_ssr, eap_proxy);
+                                if (qmiErrorCode != QMI_NO_ERR) {
+                                        wpa_printf(MSG_ERROR, "eap_proxy: qmi_client_register_error_cb()-"
+                                                   " Failed to register callbacks %d\n", qmiErrorCode);
+                                        wpa_uim[index].qmi_uim_svc_client_ptr = NULL;
+                                        flag = FALSE;
+                                        continue;
+                                }
                         }
                         eap_proxy->qmi_uim_svc_client_initialized[index] = TRUE;
 
@@ -836,7 +837,6 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
                 return;
         }
 
-        eap_proxy->qmi_ssr_in_progress = FALSE;
         eap_proxy->proxy_state = EAP_PROXY_IDLE;
         eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapSuccess, FALSE);
         eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapFail, FALSE);
@@ -905,12 +905,6 @@ eap_proxy_init(void *eapol_ctx, const struct eapol_callbacks *eapol_cb,
         eap_proxy->msg_ctx = msg_ctx;
 
         eap_proxy->proxy_state = EAP_PROXY_DISABLED;
-
-        ret = pthread_mutex_init(&(eap_proxy->lock), NULL);
-        if (ret != 0) {
-               wpa_printf(MSG_ERROR, "eap_proxy: mutex init failed ret=%d", ret);
-               goto fail;
-        }
 
         /* delay the qmi client initialization after the eloop_run starts,
         * in order to avoid the case of daemonize enabled, which exits the
@@ -1022,7 +1016,6 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 {
         eap_proxy_qmi_deinit(eap_proxy);
         if (eap_proxy != NULL) {
-            pthread_mutex_destroy(&(eap_proxy->lock));
             os_free(eap_proxy);
             eap_proxy = NULL;
             wpa_printf(MSG_INFO, "eap_proxy: eap_proxy Deinitialzed\n");
