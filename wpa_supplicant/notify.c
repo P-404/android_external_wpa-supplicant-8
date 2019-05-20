@@ -1239,3 +1239,21 @@ void wpas_notify_dpp_failure(struct wpa_supplicant *wpa_s)
 	wpas_hidl_notify_dpp_fail(wpa_s);
 #endif /* CONFIG_DPP */
 }
+
+//Vendor DPP notifications
+void wpas_notify_dpp_conf(void *msg_ctx, u8 type, u8* ssid,
+			  u8 ssid_len, const char *connector,
+			  struct wpabuf *c_sign, struct wpabuf *net_access,
+			  uint32_t net_access_expiry, const char *passphrase,
+			  uint32_t psk_set, u8 *psk)
+{
+#ifdef CONFIG_DPP
+	struct wpa_supplicant *wpa_s = msg_ctx;
+	if (!wpa_s)
+		return;
+
+	wpas_hidl_notify_dpp_conf(wpa_s, type, ssid, ssid_len, connector, c_sign,
+				  net_access, net_access_expiry, passphrase,
+				  psk_set, psk);
+#endif /* CONFIG_DPP */
+}

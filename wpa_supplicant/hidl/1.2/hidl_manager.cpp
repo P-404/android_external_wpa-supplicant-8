@@ -2430,6 +2430,68 @@ void HidlManager::callWithEachVendorP2pIfaceCallback(
 	callWithEachIfaceCallback(ifname, method, vendor_p2p_iface_callbacks_map_);
 }
 #endif
+
+#ifdef SUPPLICANT_VENDOR_HIDL
+/* Implement Vendor Iface for DPP callbacks */
+
+void HidlManager::notifyDppAuthSuccess(
+    struct wpa_supplicant *wpa_s, int initiator)
+{
+	if (!wpa_s)
+		return;
+
+	if (vendor_sta_iface_object_map_.find(wpa_s->ifname) ==
+	    vendor_sta_iface_object_map_.end())
+		return;
+
+	if (checkForVendorStaIfaceCallback(wpa_s->ifname) == true) {
+		callWithEachVendorStaIfaceCallback(
+		    wpa_s->ifname, std::bind(
+		       &ISupplicantVendorStaIfaceCallback::onDppAuthSuccess,
+		       std::placeholders::_1, initiator ? true : false));
+	}
+}
+
+void HidlManager::notifyDppConf(
+    struct wpa_supplicant *wpa_s, u8 type, u8* ssid, u8 ssid_len,
+    const char *connector, struct wpabuf *c_sign, struct wpabuf *net_access,
+    uint32_t net_access_expiry, const char *passphrase, uint32_t psk_set, u8 *psk)
+{
+	if (!wpa_s)
+		return;
+
+	if (vendor_sta_iface_object_map_.find(wpa_s->ifname) ==
+	    vendor_sta_iface_object_map_.end())
+		return;
+
+	std::vector<uint8_t> hidl_ssid;
+	std::vector<uint8_t> hidl_c_sign;
+	std::vector<uint8_t> hidl_net_access;
+	std::vector<uint8_t> hidl_psk;
+	if (type == 2 /* RECEIVE */) {
+		if (ssid_len)
+			hidl_ssid.assign(ssid, ssid + ssid_len);
+
+		if (c_sign)
+		    hidl_c_sign = misc_utils::convertWpaBufToVector(c_sign);
+
+		if (net_access)
+		    hidl_net_access = misc_utils::convertWpaBufToVector(net_access);
+
+		if (psk_set)
+			hidl_psk.assign(psk, psk + PMK_LEN);
+	}
+
+	if (checkForVendorStaIfaceCallback(wpa_s->ifname) == true) {
+		callWithEachVendorStaIfaceCallback(
+		    wpa_s->ifname, std::bind(
+		       &ISupplicantVendorStaIfaceCallback::onDppConf,
+		       std::placeholders::_1, type, hidl_ssid, connector,
+		       hidl_c_sign, hidl_net_access, net_access_expiry,
+		       passphrase, hidl_psk));
+	}
+}
+#endif //endif SUPPLICANT_VENDOR_HIDL
 }  // namespace implementation
 }  // namespace V1_2
 }  // namespace supplicant

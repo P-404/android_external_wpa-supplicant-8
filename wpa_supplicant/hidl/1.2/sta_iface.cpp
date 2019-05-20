@@ -20,6 +20,8 @@ extern "C"
 #include "interworking.h"
 #include "hs20_supplicant.h"
 #include "wps_supplicant.h"
+#include "dpp_supplicant.h"
+#include "dpp.h"
 }
 
 namespace {
@@ -1132,8 +1134,6 @@ StaIface::getKeyMgmtCapabilitiesInternal()
 std::pair<SupplicantStatus, uint32_t>
 StaIface::addDppPeerUriInternal(const std::string& uri)
 {
-// TODO(b/123027013): Implement DPP changes
-#if 0
 #ifdef CONFIG_DPP
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	int32_t id;
@@ -1144,14 +1144,11 @@ StaIface::addDppPeerUriInternal(const std::string& uri)
 		return {{SupplicantStatusCode::SUCCESS, ""}, id};
 	}
 #endif
-#endif
 	return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, -1};
 }
 
 SupplicantStatus StaIface::removeDppUriInternal(uint32_t bootstrap_id)
 {
-// TODO(b/123027013): Implement DPP changes
-#if 0
 #ifdef CONFIG_DPP
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	std::string bootstrap_id_str;
@@ -1167,7 +1164,6 @@ SupplicantStatus StaIface::removeDppUriInternal(uint32_t bootstrap_id)
 		return {SupplicantStatusCode::SUCCESS, ""};
 	}
 #endif
-#endif
 	return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 }
 
@@ -1176,8 +1172,6 @@ SupplicantStatus StaIface::startDppConfiguratorInitiatorInternal(
 		const std::string& ssid, const std::string& password,
 		const std::string& psk, DppNetRole net_role, DppAkm security_akm)
 {
-// TODO(b/123027013): Implement DPP changes
-#if 0
 #ifdef CONFIG_DPP
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	std::string cmd = "";
@@ -1266,14 +1260,11 @@ SupplicantStatus StaIface::startDppConfiguratorInitiatorInternal(
 		return {SupplicantStatusCode::SUCCESS, ""};
 	}
 #endif
-#endif
 	return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 }
 
 SupplicantStatus StaIface::startDppEnrolleeInitiatorInternal(uint32_t peer_bootstrap_id,
 			uint32_t own_bootstrap_id) {
-// TODO(b/123027013): Implement DPP changes
-#if 0
 #ifdef CONFIG_DPP
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	std::string cmd = "";
@@ -1293,7 +1284,6 @@ SupplicantStatus StaIface::startDppEnrolleeInitiatorInternal(uint32_t peer_boots
 	if (wpas_dpp_auth_init(wpa_s, cmd.c_str()) == 0) {
 		return {SupplicantStatusCode::SUCCESS, ""};
 	}
-#endif
 #endif
 	return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 }
