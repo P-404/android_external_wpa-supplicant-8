@@ -441,7 +441,7 @@ SupplicantStatus VendorStaNetwork::setDppNetAccessKeyInternal(
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 #endif /* CONFIG_DPP */
 }
 
@@ -455,7 +455,7 @@ SupplicantStatus VendorStaNetwork::setDppNetAccessKeyExpiryInternal(uint32_t exp
 	resetInternalStateAfterParamsUpdate();
 	return {SupplicantStatusCode::SUCCESS, ""};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 #endif /* CONFIG_DPP */
 }
 
@@ -470,7 +470,7 @@ SupplicantStatus VendorStaNetwork::setDppCsignInternal(
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 #endif /* CONFIG_DPP */
 }
 
