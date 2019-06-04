@@ -16,6 +16,14 @@ ifeq ($(BOARD_WLAN_DEVICE), qcwcn)
   CONFIG_DRIVER_NL80211_QCA=y
 endif
 
+ifndef QC_WIFI_NO_WPA3
+  CONFIG_OWE=y
+  CONFIG_DPP=y
+  CONFIG_SAE=y
+  CONFIG_SUITEB=y
+  CONFIG_SUITEB192=y
+endif
+
 include $(LOCAL_PATH)/android.config
 
 # To ignore possible wrong network configurations

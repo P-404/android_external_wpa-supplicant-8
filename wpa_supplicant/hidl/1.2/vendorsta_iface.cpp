@@ -309,7 +309,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppAddBootstrapQrcodeIntern
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, -1};
 #endif /* CONFIG_DPP */
 }
 
@@ -342,7 +342,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppBootstrapGenerateInterna
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, -1};
 #endif /* CONFIG_DPP */
 }
 
@@ -379,7 +379,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppBootstrapRemoveInternal(
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, -1};
 #endif /* CONFIG_DPP */
 }
 
@@ -401,7 +401,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppListenInternal(
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, -1};
 #endif /* CONFIG_DPP */
 }
 
@@ -433,7 +433,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppConfiguratorAddInternal(
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, -1};
 #endif /* CONFIG_DPP */
 }
 
@@ -453,7 +453,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppConfiguratorRemoveIntern
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, -1};
 #endif /* CONFIG_DPP */
 }
 
@@ -485,7 +485,7 @@ std::pair<SupplicantStatus, int32_t> VendorStaIface::dppStartAuthInternal(
 
 	return {SupplicantStatus{SupplicantStatusCode::SUCCESS, ""}, ret};
 #else /* CONFIG_DPP */
-        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+        return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, -1};
 #endif /* CONFIG_DPP */
 }
 
