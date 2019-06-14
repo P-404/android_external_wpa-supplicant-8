@@ -53,12 +53,17 @@ static int wpa_to_android_level(int level)
 	return ANDROID_LOG_DEBUG;
 }
 
-void set_log_level(int level)
+void set_log_level(int log_level, int debug_timestamp, int debug_show_keys)
 {
-if (level == 1)
-	wpa_debug_level = MSG_EXCESSIVE;
-else
-	wpa_debug_level = MSG_INFO;
+	if (log_level < MSG_EXCESSIVE || log_level > MSG_ERROR) {
+		wpa_debug_level = MSG_INFO;
+		wpa_debug_timestamp = 0;
+		wpa_debug_show_keys = 0;
+		return;
+	}
+	wpa_debug_level = log_level;
+	wpa_debug_timestamp = debug_timestamp ? 1 : 0;
+	wpa_debug_show_keys = debug_show_keys ? 1 : 0;
 }
 
 
