@@ -127,9 +127,9 @@ static char bin_to_hexchar(u8 ch);
 static void wpa_qmi_client_indication_cb
 (
         qmi_client_type                user_handle,
-        unsigned long                  msg_id,
-        unsigned char                 *ind_buf_ptr,
-        int                            ind_buf_len,
+        unsigned int                   msg_id,
+        void                          *ind_buf_ptr,
+        unsigned int                   ind_buf_len,
         void                          *ind_cb_data
 );
 static void dump_buff(u8 *buff, int len);
@@ -163,9 +163,9 @@ static Boolean wpa_qmi_register_auth_inds(int sim_num, struct eap_proxy_sm *eap_
 static void wpa_qmi_client_indication_cb
 (
         qmi_client_type                user_handle,
-        unsigned long                  msg_id,
-        unsigned char                 *ind_buf_ptr,
-        int                            ind_buf_len,
+        unsigned int                   msg_id,
+        void                          *ind_buf_ptr,
+        unsigned int                   ind_buf_len,
         void                          *ind_cb_data
 )
 {
@@ -177,7 +177,7 @@ static void wpa_qmi_client_indication_cb
 	struct wpa_supplicant *wpa_s = NULL;
 	u32 i, card_info_len = 0;
 
-	wpa_printf(MSG_ERROR, "eap_proxy: %s: msg_id=0x%lx", __func__, msg_id);
+	wpa_printf(MSG_ERROR, "eap_proxy: %s: msg_id=0x%08x", __func__, msg_id);
 
 	if (user_handle == NULL) {
 		wpa_printf(MSG_ERROR, "eap_proxy: qmi_client_type missing in callback");
@@ -236,7 +236,7 @@ static void wpa_qmi_client_indication_cb
 			}
 			break;
 		default:
-			wpa_printf(MSG_ERROR, "eap_proxy: Unknown QMI Indicaiton %lu", msg_id);
+			wpa_printf(MSG_ERROR, "eap_proxy: Unknown QMI Indicaiton %u", msg_id);
 			break;
 		}
 	}
