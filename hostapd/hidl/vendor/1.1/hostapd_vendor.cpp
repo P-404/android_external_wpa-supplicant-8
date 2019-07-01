@@ -133,7 +133,10 @@ std::string AddOrUpdateHostapdConfig(
 		    MSG_ERROR, "Invalid SSID size: %zu", nw_params.ssid.size());
 		return "";
 	}
-	if ((nw_params.encryptionType != IHostapd::EncryptionType::NONE) &&
+	if ((v_iface_params.vendorEncryptionType != IHostapdVendor::VendorEncryptionType::NONE) &&
+#ifdef CONFIG_OWE
+	    (v_iface_params.vendorEncryptionType != IHostapdVendor::VendorEncryptionType::OWE) &&
+#endif
 	    (nw_params.pskPassphrase.size() <
 		 static_cast<uint32_t>(
 		     IHostapd::ParamSizeLimits::
@@ -155,6 +158,14 @@ std::string AddOrUpdateHostapdConfig(
 	if (v_iface_params.VendorV1_0.bridgeIfaceName.empty()) {
 		file_path = StringPrintf(kConfFileNameFmt, "");
 		dual_str = "";
+#ifdef CONFIG_OWE
+	} else if (!v_iface_params.oweTransIfaceName.empty()) {
+		// QSAP can't clear owe_transition_ifname and bridge fields
+		// when switching from OWE to SAE/WPA2-PSK,
+		// so create a new file which is shared by OWE-transition BSSes
+		file_path = StringPrintf(kConfFileNameFmt, "_owe");
+		dual_str = " owe";
+#endif
 	} else if (channelParams.band == IHostapd::Band::BAND_2_4_GHZ) {
 		file_path = StringPrintf(kConfFileNameFmt, "_dual2g");
 		dual_str = " dual2g";
@@ -174,23 +185,53 @@ std::string AddOrUpdateHostapdConfig(
 	const std::string ssid_as_string = ss.str();
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ssid2", ssid_as_string.c_str()));
 
-	switch (nw_params.encryptionType) {
-	case IHostapd::EncryptionType::NONE:
+	switch (v_iface_params.vendorEncryptionType) {
+	case IHostapdVendor::VendorEncryptionType::NONE:
 		// no security params
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "0"));
 		break;
-	case IHostapd::EncryptionType::WPA:
+	case IHostapdVendor::VendorEncryptionType::WPA:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "4"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "WPA-PSK"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.pskPassphrase.c_str()));
 		break;
-	case IHostapd::EncryptionType::WPA2:
+	case IHostapdVendor::VendorEncryptionType::WPA2:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "WPA-PSK"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.pskPassphrase.c_str()));
 		break;
+#ifdef CONFIG_SAE
+	case IHostapdVendor::VendorEncryptionType::SAE:
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
+		// SAE transition mode works with single SAP, So set supported AKMs to both SAE and WPA-PSK
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "SAE WPA-PSK"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.pskPassphrase.c_str()));
+		// setting PMF optional(ieee80211w = 1) allows STA to connect using WPA2-PSK AKM
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211w", "1"));
+		// sae_require_mfp = 1 mandates PMF when STA tries to connect using SAE AKM
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "sae_require_mfp", "1"));
+		break;
+#endif
+#ifdef CONFIG_OWE
+	case IHostapdVendor::VendorEncryptionType::OWE:
+		// In OWE transition mode also OWE SAP is independent from linked OPEN SAP.
+		// So OWE SAP security settings are same irrespective OWE transition mode enabled or not.
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "OWE"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211w", "2"));
+		break;
+#endif
 	default:
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
 		return "";
 	}
+
+#ifdef CONFIG_OWE
+	if (!v_iface_params.oweTransIfaceName.empty()) {
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "owe_transition_ifname",
+			 v_iface_params.oweTransIfaceName.c_str()));
+	}
+#endif
 
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "acs_exclude_dfs", "0"));
 	if (channelParams.enableAcs) {
