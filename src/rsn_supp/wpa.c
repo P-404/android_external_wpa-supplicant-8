@@ -1320,10 +1320,10 @@ static int wpa_supplicant_validate_ie(struct wpa_sm *sm,
 		return -1;
 	}
 
-	if ((ie->wpa_ie && sm->ap_wpa_ie &&
+	if ((ie->wpa_ie && sm->ap_wpa_ie && !sm->adaptive11r_key_mgmt &&
 	     (ie->wpa_ie_len != sm->ap_wpa_ie_len ||
 	      os_memcmp(ie->wpa_ie, sm->ap_wpa_ie, ie->wpa_ie_len) != 0)) ||
-	    (ie->rsn_ie && sm->ap_rsn_ie &&
+	    (ie->rsn_ie && sm->ap_rsn_ie && !sm->adaptive11r_key_mgmt &&
 	     wpa_compare_rsn_ie(wpa_key_mgmt_ft(sm->key_mgmt),
 				sm->ap_rsn_ie, sm->ap_rsn_ie_len,
 				ie->rsn_ie, ie->rsn_ie_len))) {
@@ -3027,6 +3027,8 @@ int wpa_sm_set_param(struct wpa_sm *sm, enum wpa_sm_conf_params param,
 	case WPA_PARAM_OCV:
 		sm->ocv = value;
 		break;
+	case WPA_PARAM_ADAPT_FT_KEY_MGMT:
+		sm->adaptive11r_key_mgmt = value;
 	default:
 		break;
 	}
