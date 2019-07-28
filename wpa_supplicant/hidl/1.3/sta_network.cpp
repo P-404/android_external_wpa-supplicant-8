@@ -920,12 +920,29 @@ SupplicantStatus StaNetwork::setAuthAlgInternal(uint32_t auth_alg_mask)
 	return {SupplicantStatusCode::SUCCESS, ""};
 }
 
+bool StaNetwork::isWigig()
+{
+	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+
+	if (!wpa_s->hw.modes)
+		return false;
+
+	for (int m = 0; m < wpa_s->hw.num_modes; m++) {
+		if (wpa_s->hw.modes[m].mode == HOSTAPD_MODE_IEEE80211AD)
+			return true;
+	}
+
+	return false;
+}
+
 SupplicantStatus StaNetwork::setGroupCipherInternal(uint32_t group_cipher_mask)
 {
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	if (group_cipher_mask & ~kAllowedGroupCipherMask) {
 		return {SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
 	}
+	if (isWigig() && group_cipher_mask & ISupplicantStaNetwork::GroupCipherMask::GCMP_256)
+	    group_cipher_mask |= WPA_CIPHER_GCMP;
 	wpa_ssid->group_cipher = group_cipher_mask;
 	wpa_printf(MSG_MSGDUMP, "group_cipher: 0x%x", wpa_ssid->group_cipher);
 	resetInternalStateAfterParamsUpdate();
@@ -939,6 +956,8 @@ SupplicantStatus StaNetwork::setPairwiseCipherInternal(
 	if (pairwise_cipher_mask & ~kAllowedPairwisewCipherMask) {
 		return {SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
 	}
+	if (isWigig() && pairwise_cipher_mask & ISupplicantStaNetwork::PairwiseCipherMask::GCMP_256)
+	    pairwise_cipher_mask |= WPA_CIPHER_GCMP;
 	wpa_ssid->pairwise_cipher = pairwise_cipher_mask;
 	wpa_printf(
 	    MSG_MSGDUMP, "pairwise_cipher: 0x%x", wpa_ssid->pairwise_cipher);
