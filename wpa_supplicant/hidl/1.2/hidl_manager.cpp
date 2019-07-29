@@ -1452,9 +1452,8 @@ void HidlManager::notifyP2pGroupStarted(
 		return;
 
 	// For group notifications, need to use the parent iface for callbacks.
-	struct wpa_supplicant *wpa_s = wpa_group_s->parent;
-	if (p2p_iface_object_map_.find(wpa_s->ifname) ==
-	    p2p_iface_object_map_.end())
+	struct wpa_supplicant *wpa_s = getP2pIfaceForNotifications(wpa_group_s);
+	if (!wpa_s)
 		return;
 
 	uint32_t hidl_freq = wpa_group_s->current_bss
@@ -1485,9 +1484,8 @@ void HidlManager::notifyP2pGroupRemoved(
 		return;
 
 	// For group notifications, need to use the parent iface for callbacks.
-	struct wpa_supplicant *wpa_s = wpa_group_s->parent;
-	if (p2p_iface_object_map_.find(wpa_s->ifname) ==
-	    p2p_iface_object_map_.end())
+	struct wpa_supplicant *wpa_s = getP2pIfaceForNotifications(wpa_group_s);
+	if (!wpa_s)
 		return;
 
 	bool hidl_is_go = (std::string(role) == "GO");
@@ -1596,11 +1594,13 @@ void HidlManager::notifyApStaAuthorized(
 {
 	if (!wpa_s || !wpa_s->parent || !sta)
 		return;
-	if (p2p_iface_object_map_.find(wpa_s->parent->ifname) ==
-	    p2p_iface_object_map_.end())
+
+	wpa_supplicant *target_wpa_s = getP2pIfaceForNotifications(wpa_s);
+	if (!target_wpa_s)
 		return;
+
 	callWithEachP2pIfaceCallback(
-	    wpa_s->parent->ifname,
+	    target_wpa_s->ifname,
 	    std::bind(
 		&ISupplicantP2pIfaceCallback::onStaAuthorized,
 		std::placeholders::_1, sta,
@@ -1612,12 +1612,13 @@ void HidlManager::notifyApStaDeauthorized(
 {
 	if (!wpa_s || !wpa_s->parent || !sta)
 		return;
-	if (p2p_iface_object_map_.find(wpa_s->parent->ifname) ==
-	    p2p_iface_object_map_.end())
+
+	wpa_supplicant *target_wpa_s = getP2pIfaceForNotifications(wpa_s);
+	if (!target_wpa_s)
 		return;
 
 	callWithEachP2pIfaceCallback(
-	    wpa_s->parent->ifname,
+	    target_wpa_s->ifname,
 	    std::bind(
 		&ISupplicantP2pIfaceCallback::onStaDeauthorized,
 		std::placeholders::_1, sta,
@@ -1994,6 +1995,35 @@ int HidlManager::addStaNetworkCallbackHidlObject(
 	return addNetworkCallbackHidlObjectToMap(
 	    ifname, network_id, callback, on_hidl_died_fctor,
 	    sta_network_callbacks_map_);
+}
+
+/**
+ * Finds the correct |wpa_supplicant| object for P2P notifications
+ *
+ * @param wpa_s the |wpa_supplicant| that triggered the P2P event.
+ * @return appropriate |wpa_supplicant| object or NULL if not found.
+ */
+struct wpa_supplicant *HidlManager::getP2pIfaceForNotifications(
+	    struct wpa_supplicant *wpa_s)
+{
+	if (!wpa_s || !wpa_s->parent)
+		return NULL;
+
+	struct wpa_supplicant *target_wpa_s = wpa_s->parent;
+	if (p2p_iface_object_map_.find(target_wpa_s->ifname) ==
+	    p2p_iface_object_map_.end()) {
+		// try P2P device if available
+		if (target_wpa_s->p2pdev && target_wpa_s->p2pdev->p2p_mgmt) {
+			target_wpa_s = target_wpa_s->p2pdev;
+			if (p2p_iface_object_map_.find(target_wpa_s->ifname) ==
+			    p2p_iface_object_map_.end())
+				return NULL;
+		} else {
+			return NULL;
+		}
+	}
+
+	return target_wpa_s;
 }
 
 /**
