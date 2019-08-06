@@ -98,7 +98,8 @@ enum wpa_sm_conf_params {
 	WPA_PARAM_MGMT_GROUP,
 	WPA_PARAM_RSN_ENABLED,
 	WPA_PARAM_MFP,
-	WPA_PARAM_OCV
+	WPA_PARAM_OCV,
+	WPA_PARAM_ADAPT_FT_KEY_MGMT
 };
 
 struct rsn_supp_config {
