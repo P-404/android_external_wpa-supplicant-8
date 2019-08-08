@@ -2322,7 +2322,7 @@ static const struct parse_data ssid_fields[] = {
 #endif /* CONFIG_OCV */
 	{ FUNC(peerkey) /* obsolete - removed */ },
 	{ INT_RANGE(mixed_cell, 0, 1) },
-	{ INT_RANGE(frequency, 0, 65000) },
+	{ INT_RANGE(frequency, 0, 70200) },
 	{ INT_RANGE(fixed_freq, 0, 1) },
 	{ INT_RANGE(enable_edmg, 0, 1) },
 	{ INT_RANGE(edmg_channel, 9, 13) },
