@@ -1417,7 +1417,7 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 
 #ifdef CONFIG_IEEE80211R
 	wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_ADAPT_FT_KEY_MGMT, 0);
-	if ((sel & WPA_KEY_MGMT_PSK) || (sel & WPA_KEY_MGMT_IEEE8021X)) {
+	if (bss && ((sel & WPA_KEY_MGMT_PSK) || (sel & WPA_KEY_MGMT_IEEE8021X))) {
 		adaptive_11r_ie = wpa_bss_get_vendor_ie(bss, ADAPTIVE_11R_IE_VENDOR_TYPE);
 
 		if (adaptive_11r_ie) {
