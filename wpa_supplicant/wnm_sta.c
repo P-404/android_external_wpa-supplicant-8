@@ -452,7 +452,8 @@ static void wnm_parse_neighbor_report_elem(struct neighbor_report *rep,
 		break;
 	case WNM_NEIGHBOR_BSS_TERMINATION_DURATION:
 		if (elen < 10) {
-			wpa_printf(MSG_DEBUG, "WNM: Too short bss_term_tsf");
+			wpa_printf(MSG_DEBUG,
+				   "WNM: Too short BSS termination duration");
 			break;
 		}
 		rep->bss_term_tsf = WPA_GET_LE64(pos);
@@ -924,9 +925,9 @@ static int wnm_nei_rep_add_bss(struct wpa_supplicant *wpa_s,
 	if (ie && ie[1] >= 1) {
 		vht_oper = (struct ieee80211_vht_operation *) (ie + 2);
 
-		if (vht_oper->vht_op_info_chwidth == VHT_CHANWIDTH_80MHZ ||
-		    vht_oper->vht_op_info_chwidth == VHT_CHANWIDTH_160MHZ ||
-		    vht_oper->vht_op_info_chwidth == VHT_CHANWIDTH_80P80MHZ)
+		if (vht_oper->vht_op_info_chwidth == CHANWIDTH_80MHZ ||
+		    vht_oper->vht_op_info_chwidth == CHANWIDTH_160MHZ ||
+		    vht_oper->vht_op_info_chwidth == CHANWIDTH_80P80MHZ)
 			vht = vht_oper->vht_op_info_chwidth;
 	}
 

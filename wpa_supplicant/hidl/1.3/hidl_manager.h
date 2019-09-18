@@ -44,13 +44,14 @@ namespace android {
 namespace hardware {
 namespace wifi {
 namespace supplicant {
-namespace V1_2 {
+namespace V1_3 {
 namespace implementation {
 using namespace android::hardware::wifi::supplicant::V1_2;
 using V1_0::ISupplicantP2pIface;
 using V1_0::ISupplicantStaIfaceCallback;
 using V1_1::ISupplicant;
 using V1_1::ISupplicantStaIface;
+using V1_2::ISupplicantStaNetwork;
 #ifdef SUPPLICANT_VENDOR_HIDL
 using namespace vendor::qti::hardware::wifi::supplicantvendor::V2_0::Implementation;
 using namespace vendor::qti::hardware::wifi::supplicantvendor::V2_1::Implementation;
@@ -814,7 +815,7 @@ static_assert(
 	P2P_PROV_DISC_INFO_UNAVAILABLE,
     "P2P status code value mismatch");
 }  // namespace implementation
-}  // namespace V1_2
+}  // namespace V1_3
 }  // namespace supplicant
 }  // namespace wifi
 }  // namespace hardware

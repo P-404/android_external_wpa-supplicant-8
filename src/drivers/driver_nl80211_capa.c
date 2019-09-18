@@ -1396,6 +1396,57 @@ static void phy_info_freq(struct hostapd_hw_modes *mode,
 		chan->dfs_cac_ms = nla_get_u32(
 			tb_freq[NL80211_FREQUENCY_ATTR_DFS_CAC_TIME]);
 	}
+
+	chan->wmm_rules_valid = 0;
+	if (tb_freq[NL80211_FREQUENCY_ATTR_WMM]) {
+		static struct nla_policy wmm_policy[NL80211_WMMR_MAX + 1] = {
+			[NL80211_WMMR_CW_MIN] = { .type = NLA_U16 },
+			[NL80211_WMMR_CW_MAX] = { .type = NLA_U16 },
+			[NL80211_WMMR_AIFSN] = { .type = NLA_U8 },
+			[NL80211_WMMR_TXOP] = { .type = NLA_U16 },
+		};
+		struct nlattr *nl_wmm;
+		struct nlattr *tb_wmm[NL80211_WMMR_MAX + 1];
+		int rem_wmm, ac, count = 0;
+
+		nla_for_each_nested(nl_wmm, tb_freq[NL80211_FREQUENCY_ATTR_WMM],
+				    rem_wmm) {
+			if (nla_parse_nested(tb_wmm, NL80211_WMMR_MAX, nl_wmm,
+					     wmm_policy)) {
+				wpa_printf(MSG_DEBUG,
+					   "nl80211: Failed to parse WMM rules attribute");
+				return;
+			}
+			if (!tb_wmm[NL80211_WMMR_CW_MIN] ||
+			    !tb_wmm[NL80211_WMMR_CW_MAX] ||
+			    !tb_wmm[NL80211_WMMR_AIFSN] ||
+			    !tb_wmm[NL80211_WMMR_TXOP]) {
+				wpa_printf(MSG_DEBUG,
+					   "nl80211: Channel is missing WMM rule attribute");
+				return;
+			}
+			ac = nl_wmm->nla_type;
+			if (ac < 0 || ac >= WMM_AC_NUM) {
+				wpa_printf(MSG_DEBUG,
+					   "nl80211: Invalid AC value %d", ac);
+				return;
+			}
+
+			chan->wmm_rules[ac].min_cwmin =
+				nla_get_u16(tb_wmm[NL80211_WMMR_CW_MIN]);
+			chan->wmm_rules[ac].min_cwmax =
+				nla_get_u16(tb_wmm[NL80211_WMMR_CW_MAX]);
+			chan->wmm_rules[ac].min_aifs =
+				nla_get_u8(tb_wmm[NL80211_WMMR_AIFSN]);
+			chan->wmm_rules[ac].max_txop =
+				nla_get_u16(tb_wmm[NL80211_WMMR_TXOP]) / 32;
+			count++;
+		}
+
+		/* Set valid flag if all the AC rules are present */
+		if (count == WMM_AC_NUM)
+			chan->wmm_rules_valid = 1;
+	}
 }
 
 
@@ -1502,26 +1553,32 @@ static int phy_info_rates(struct hostapd_hw_modes *mode, struct nlattr *tb)
 }
 
 
-static int phy_info_iftype(struct hostapd_hw_modes *mode,
-			   struct nlattr *nl_iftype)
+static void phy_info_iftype_copy(struct he_capabilities *he_capab,
+				 enum ieee80211_op_mode opmode,
+				 struct nlattr **tb, struct nlattr **tb_flags)
 {
-	struct nlattr *tb[NL80211_BAND_IFTYPE_ATTR_MAX + 1];
-	struct he_capabilities *he_capab = &mode->he_capab;
-	struct nlattr *tb_flags[NL80211_IFTYPE_MAX + 1];
+	enum nl80211_iftype iftype;
 	size_t len;
 
-	nla_parse(tb, NL80211_BAND_IFTYPE_ATTR_MAX,
-		  nla_data(nl_iftype), nla_len(nl_iftype), NULL);
+	switch (opmode) {
+	case IEEE80211_MODE_INFRA:
+		iftype = NL80211_IFTYPE_STATION;
+		break;
+	case IEEE80211_MODE_IBSS:
+		iftype = NL80211_IFTYPE_ADHOC;
+		break;
+	case IEEE80211_MODE_AP:
+		iftype = NL80211_IFTYPE_AP;
+		break;
+	case IEEE80211_MODE_MESH:
+		iftype = NL80211_IFTYPE_MESH_POINT;
+		break;
+	default:
+		return;
+	}
 
-	if (!tb[NL80211_BAND_IFTYPE_ATTR_IFTYPES])
-		return NL_STOP;
-
-	if (nla_parse_nested(tb_flags, NL80211_IFTYPE_MAX,
-			     tb[NL80211_BAND_IFTYPE_ATTR_IFTYPES], NULL))
-		return NL_STOP;
-
-	if (!nla_get_flag(tb_flags[NL80211_IFTYPE_AP]))
-		return NL_OK;
+	if (!nla_get_flag(tb_flags[iftype]))
+		return;
 
 	he_capab->he_supported = 1;
 
@@ -1564,6 +1621,28 @@ static int phy_info_iftype(struct hostapd_hw_modes *mode,
 			  nla_data(tb[NL80211_BAND_IFTYPE_ATTR_HE_CAP_PPE]),
 			  len);
 	}
+}
+
+
+static int phy_info_iftype(struct hostapd_hw_modes *mode,
+			   struct nlattr *nl_iftype)
+{
+	struct nlattr *tb[NL80211_BAND_IFTYPE_ATTR_MAX + 1];
+	struct nlattr *tb_flags[NL80211_IFTYPE_MAX + 1];
+	unsigned int i;
+
+	nla_parse(tb, NL80211_BAND_IFTYPE_ATTR_MAX,
+		  nla_data(nl_iftype), nla_len(nl_iftype), NULL);
+
+	if (!tb[NL80211_BAND_IFTYPE_ATTR_IFTYPES])
+		return NL_STOP;
+
+	if (nla_parse_nested(tb_flags, NL80211_IFTYPE_MAX,
+			     tb[NL80211_BAND_IFTYPE_ATTR_IFTYPES], NULL))
+		return NL_STOP;
+
+	for (i = 0; i < IEEE80211_MODE_NUM; i++)
+		phy_info_iftype_copy(&mode->he_capab[i], i, tb, tb_flags);
 
 	return NL_OK;
 }
