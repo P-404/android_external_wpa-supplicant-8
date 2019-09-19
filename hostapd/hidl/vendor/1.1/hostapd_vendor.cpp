@@ -647,6 +647,13 @@ void HostapdVendor::callWithEachHostapdIfaceCallback(
 	callWithEachIfaceCallback(ifname, method, vendor_hostapd_callbacks_map_);
 }
 
+void HostapdVendor::invalidate()
+{
+	wpa_printf(MSG_DEBUG, "invalidate hostapd vendor callbacks");
+	on_setup_complete_internal_callback = nullptr;
+	on_sta_authorized_internal_callback = nullptr;
+}
+
 }  // namespace implementation
 }  // namespace V1_1
 }  // namespace hostapd
