@@ -16,15 +16,16 @@ ifeq ($(BOARD_WLAN_DEVICE), qcwcn)
   CONFIG_DRIVER_NL80211_QCA=y
 endif
 
-ifndef QC_WIFI_NO_WPA3
-  CONFIG_OWE=y
-  CONFIG_DPP=y
-  CONFIG_SAE=y
-  CONFIG_SUITEB=y
-  CONFIG_SUITEB192=y
-endif
-
 include $(LOCAL_PATH)/android.config
+
+ifeq ($(call is-board-platform-in-list,sdm660 msm8998),true)
+  $(warning "Disabling WPA3 support in wpa_supplicant for $(TARGET_BOARD_PLATFORM)")
+  CONFIG_OWE=n
+  CONFIG_DPP=n
+  CONFIG_SAE=n
+  CONFIG_MESH=n
+  CONFIG_SUITEB192=n
+endif
 
 # To ignore possible wrong network configurations
 L_CFLAGS = -DWPA_IGNORE_CONFIG_ERRORS
@@ -242,7 +243,7 @@ NEED_SHA256=y
 NEED_AES_OMAC1=y
 endif
 
-ifdef CONFIG_SUITEB192
+ifeq ($(CONFIG_SUITEB192),y)
 L_CFLAGS += -DCONFIG_SUITEB192
 NEED_SHA384=y
 endif
@@ -266,7 +267,7 @@ NEED_SHA256=y
 NEED_AES_OMAC1=y
 endif
 
-ifdef CONFIG_MESH
+ifeq ($(CONFIG_MESH),y)
 NEED_80211_COMMON=y
 NEED_SHA256=y
 NEED_AES_SIV=y
@@ -278,14 +279,14 @@ OBJS += mesh_mpm.c
 OBJS += mesh_rsn.c
 endif
 
-ifdef CONFIG_SAE
+ifeq ($(CONFIG_SAE),y)
 L_CFLAGS += -DCONFIG_SAE
 OBJS += src/common/sae.c
 NEED_ECC=y
 NEED_DH_GROUPS=y
 endif
 
-ifdef CONFIG_DPP
+ifeq ($(CONFIG_DPP),y)
 L_CFLAGS += -DCONFIG_DPP
 OBJS += src/common/dpp.c
 OBJS += dpp_supplicant.c
@@ -304,7 +305,7 @@ L_CFLAGS += -DCONFIG_DPP2
 endif
 endif
 
-ifdef CONFIG_OWE
+ifeq ($(CONFIG_OWE),y)
 L_CFLAGS += -DCONFIG_OWE
 NEED_ECC=y
 NEED_HMAC_SHA256_KDF=y
@@ -952,7 +953,7 @@ L_CFLAGS += -DEAP_SERVER_WSC
 OBJS += src/ap/wps_hostapd.c
 OBJS += src/eap_server/eap_server_wsc.c
 endif
-ifdef CONFIG_DPP
+ifeq ($(CONFIG_DPP),y)
 OBJS += src/ap/dpp_hostapd.c
 OBJS += src/ap/gas_query_ap.c
 endif
