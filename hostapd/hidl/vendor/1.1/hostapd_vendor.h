@@ -102,6 +102,7 @@ public:
 	int addVendorIfaceCallbackHidlObject(
 	    const std::string &ifname,
 	    const android::sp<IHostapdVendorIfaceCallback> &callback);
+	void invalidate();
 
 private:
 	// Corresponding worker functions for the HIDL methods.
