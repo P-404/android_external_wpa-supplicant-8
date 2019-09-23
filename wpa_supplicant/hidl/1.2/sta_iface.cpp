@@ -22,6 +22,7 @@ extern "C"
 #include "wps_supplicant.h"
 #include "dpp_supplicant.h"
 #include "dpp.h"
+#include "scan.h"
 }
 
 namespace {
@@ -925,6 +926,13 @@ SupplicantStatus StaIface::startWpsPbcInternal(
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	const uint8_t *bssid_addr =
 	    is_zero_ether_addr(bssid.data()) ? nullptr : bssid.data();
+
+	// disable scan mac randomization for wps pbc
+	if ((wpa_s->mac_addr_rand_supported & MAC_ADDR_RAND_SCAN)
+            && (wpa_s->mac_addr_rand_enable & MAC_ADDR_RAND_SCAN)) {
+		wpas_mac_addr_rand_scan_clear(wpa_s, MAC_ADDR_RAND_SCAN);
+	}
+
 	if (wpas_wps_start_pbc(wpa_s, bssid_addr, 0, 0)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}

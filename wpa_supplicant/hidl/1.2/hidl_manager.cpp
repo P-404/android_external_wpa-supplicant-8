@@ -59,6 +59,25 @@ const std::string getNetworkObjectMapKey(
 }
 
 /**
+ * Enable scan mac randomization for STA interfaces
+ */
+void enableScanMacRandomization(struct wpa_supplicant *wpa_s)
+{
+	// Turn on scan mac randomization only if driver supports.
+	if (wpa_s->mac_addr_rand_supported & MAC_ADDR_RAND_SCAN) {
+		if (wpa_s->mac_addr_rand_enable & MAC_ADDR_RAND_SCAN)
+			return;
+
+		if (wpas_mac_addr_rand_scan_set(
+			wpa_s, MAC_ADDR_RAND_SCAN, nullptr, nullptr)) {
+			wpa_printf(
+			    MSG_ERROR,
+			    "Failed to enable scan mac randomization");
+		}
+	}
+}
+
+/**
  * Add callback to the corresponding list after linking to death on the
  * corresponding hidl object reference.
  */
@@ -545,18 +564,11 @@ int HidlManager::registerInterface(struct wpa_supplicant *wpa_s)
 #endif
 		sta_iface_callbacks_map_[wpa_s->ifname] =
 		    std::vector<android::sp<ISupplicantStaIfaceCallback>>();
+
 		// Turn on Android specific customizations for STA interfaces
-		// here!
-		//
-		// Turn on scan mac randomization only if driver supports.
-		if (wpa_s->mac_addr_rand_supported & MAC_ADDR_RAND_SCAN) {
-			if (wpas_mac_addr_rand_scan_set(
-				wpa_s, MAC_ADDR_RAND_SCAN, nullptr, nullptr)) {
-				wpa_printf(
-				    MSG_ERROR,
-				    "Failed to enable scan mac randomization");
-			}
-		}
+		// here
+		enableScanMacRandomization(wpa_s);
+
 #ifdef SUPPLICANT_VENDOR_HIDL
 		vendor_sta_iface_callbacks_map_[wpa_s->ifname] =
 			std::vector<android::sp<ISupplicantVendorStaIfaceCallback>>();
@@ -1211,6 +1223,10 @@ void HidlManager::notifyWpsEventFail(
 		    config_error),
 		static_cast<ISupplicantStaIfaceCallback::WpsErrorIndication>(
 		    error_indication)));
+
+	// enable Scan Mac Randomization for STA interfaces
+	if (!isP2pIface(wpa_s))
+		enableScanMacRandomization(wpa_s);
 }
 
 void HidlManager::notifyWpsEventSuccess(struct wpa_supplicant *wpa_s)
@@ -1226,6 +1242,10 @@ void HidlManager::notifyWpsEventSuccess(struct wpa_supplicant *wpa_s)
 	    wpa_s->ifname, std::bind(
 			       &ISupplicantStaIfaceCallback::onWpsEventSuccess,
 			       std::placeholders::_1));
+
+	// enable Scan Mac Randomization for STA interfaces
+	if (!isP2pIface(wpa_s))
+		enableScanMacRandomization(wpa_s);
 }
 
 void HidlManager::notifyWpsEventPbcOverlap(struct wpa_supplicant *wpa_s)
@@ -1242,6 +1262,10 @@ void HidlManager::notifyWpsEventPbcOverlap(struct wpa_supplicant *wpa_s)
 	    std::bind(
 		&ISupplicantStaIfaceCallback::onWpsEventPbcOverlap,
 		std::placeholders::_1));
+
+	// enable Scan Mac Randomization for STA interfaces
+	if (!isP2pIface(wpa_s))
+		enableScanMacRandomization(wpa_s);
 }
 
 void HidlManager::notifyP2pDeviceFound(
