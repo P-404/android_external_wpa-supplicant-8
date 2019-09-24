@@ -103,6 +103,19 @@ typedef struct {
         int                                   qmi_msg_lib_handle;
 } wpa_uim_struct_type;
 
+struct qmi_cb_data {
+        struct dl_list list;
+
+        /* Common data for a QMI callback */
+        qmi_client_type userHandle;
+        unsigned int msg_id;
+        void *buf;
+        unsigned int buflen;
+        void *userdata;
+
+        /* additional data for eap_reply */
+        qmi_client_error_type err_code;
+};
 
 struct eap_proxy_sm {
         qmi_client_type qmi_auth_svc_client_ptr[MAX_NO_OF_SIM_SUPPORTED];
@@ -132,6 +145,8 @@ struct eap_proxy_sm {
         u8 *emsk;
         // To check if eap_proxy_sm for curernt interface is initialized/in use
         Boolean initialized;
+        /* list to maintain qmi_cb_data list */
+        struct dl_list callback;
 };
 
 int eap_proxy_allowed_method(struct eap_peer_config *config, int vendor,

@@ -174,22 +174,24 @@ static struct eap_proxy_sm * get_next_eap_proxy()
 }
 
 #ifdef SIM_AKA_IDENTITY_IMSI
-static void wpa_qmi_client_indication_cb
-(
-        qmi_client_type                user_handle,
-        unsigned int                   msg_id,
-        void                          *ind_buf_ptr,
-        unsigned int                   ind_buf_len,
-        void                          *ind_cb_data
-)
+static void __wpa_qmi_client_indication_cb(void *eloop_ctx, void *timeout_ctx)
 {
 	u32 decoded_payload_len = 0;
 	qmi_client_error_type qmi_err = QMI_NO_ERR;
 	void * decoded_payload = NULL;
-	struct eap_proxy_sm *eap_proxy = ind_cb_data;
 	uim_status_change_ind_msg_v01* status_change_ind_ptr = NULL;
-	struct wpa_supplicant *wpa_s = NULL;
 	u32 i, card_info_len = 0;
+
+	struct qmi_cb_data *cb_data = (struct qmi_cb_data *)eloop_ctx;
+	qmi_client_type user_handle = cb_data->userHandle;
+	unsigned int msg_id = cb_data->msg_id;
+	void *ind_buf_ptr = cb_data->buf;
+	unsigned int ind_buf_len = cb_data->buflen;
+	struct eap_proxy_sm *eap_proxy = (struct eap_proxy_sm *)cb_data->userdata;
+
+	// Done with callback data, let's get rid of it.
+	dl_list_del(&cb_data->list);
+	os_free(cb_data);
 
 	wpa_printf(MSG_ERROR, "eap_proxy: %s: msg_id=0x%08x", __func__, msg_id);
 
@@ -257,6 +259,33 @@ static void wpa_qmi_client_indication_cb
 fail:
 	os_free(decoded_payload);
 	return;
+}
+
+static void wpa_qmi_client_indication_cb
+(
+        qmi_client_type                user_handle,
+        unsigned int                   msg_id,
+        void                          *ind_buf_ptr,
+        unsigned int                   ind_buf_len,
+        void                          *ind_cb_data
+)
+{
+        struct eap_proxy_sm *eap_proxy = (struct eap_proxy_sm *)ind_cb_data;
+        struct qmi_cb_data *cb_data;
+
+        pthread_mutex_lock(&eloop_lock);       // Lock
+        wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
+
+        cb_data = os_zalloc(sizeof(*cb_data));;
+        cb_data->userHandle = user_handle;
+        cb_data->msg_id = msg_id;
+        cb_data->buf = ind_buf_ptr;
+        cb_data->buflen = ind_buf_len;
+        cb_data->userdata = ind_cb_data;
+        dl_list_add(&eap_proxy->callback, &cb_data->list);
+        eloop_register_timeout(0, 0, __wpa_qmi_client_indication_cb, cb_data, NULL);
+        pthread_mutex_unlock(&eloop_lock);      // Unlock
+
 }
 
 static Boolean wpa_qmi_register_auth_inds(int sim_num, struct eap_proxy_sm *eap_proxy)
@@ -922,6 +951,7 @@ eap_proxy_init(void *eapol_ctx, const struct eapol_callbacks *eapol_cb,
         eap_proxy->msg_ctx = msg_ctx;
 
         eap_proxy->proxy_state = EAP_PROXY_DISABLED;
+        dl_list_init(&eap_proxy->callback);
 
         /* delay the qmi client initialization after the eloop_run starts,
         * in order to avoid the case of daemonize enabled, which exits the
@@ -1028,33 +1058,49 @@ static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy)
 
 }
 
+static void eap_proxy_clear_callbacks(struct eap_proxy_sm *eap_proxy)
+{
+        struct qmi_cb_data *tmp, *prev;
+        dl_list_for_each_safe(tmp, prev, &eap_proxy->callback,
+                              struct qmi_cb_data, list) {
+                dl_list_del(&tmp->list);
+                os_free(tmp);
+        }
+}
+
 void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 {
         eap_proxy_qmi_deinit(eap_proxy);
+        // clear any pending callback.
+        eap_proxy_clear_callbacks(eap_proxy);
         if (eap_proxy->initialized) {
             eap_proxy->initialized = FALSE;
             wpa_printf(MSG_INFO, "eap_proxy: eap_proxy Deinitialzed\n");
         }
 }
 
-/* Call-back function to process an authentication result indication
-*  from QMI EAP service */
-static void handle_qmi_eap_ind(qmi_client_type user_handle,
-                               unsigned int msg_id,
-                               void* ind_buf,
-                               unsigned int ind_buf_len,
-                               void* ind_cb_data)
+void __handle_qmi_eap_ind(void *eloop_ctx, void *timeout_ctx)
 {
         qmi_client_error_type qmi_err;
         auth_eap_session_result_ind_msg_v01 eap_session_result;
         memset(&eap_session_result, 0, sizeof(auth_eap_session_result_ind_msg_v01));
         eap_session_result.eap_result = -1;
-        struct eap_proxy_sm *sm = (struct eap_proxy_sm *)ind_cb_data;
+
+        struct qmi_cb_data *cb_data = (struct qmi_cb_data *)eloop_ctx;
+        qmi_client_type user_handle = cb_data->userHandle;
+        unsigned int msg_id = cb_data->msg_id;
+        void* ind_buf = cb_data->buf;
+        unsigned int ind_buf_len = cb_data->buflen;
+        struct eap_proxy_sm *sm = (struct eap_proxy_sm *)cb_data->userdata;
+
+        // Done with callback data, let's get rid of it.
+        dl_list_del(&cb_data->list);
+        os_free(cb_data);
 
         auth_eap_notification_code_ind_msg_v01 eap_notification;
         memset(&eap_notification, 0, sizeof(auth_eap_notification_code_ind_msg_v01));
 
-        wpa_printf(MSG_ERROR, "eap_proxy: Handle_qmi_eap_ind msgId =%d  sm=%p\n", msg_id,sm);
+        wpa_printf(MSG_ERROR, "eap_proxy: %s msgId =%d  sm=%p\n", __func__, msg_id, sm);
         /* Decode */
 
         switch(msg_id)
@@ -1076,13 +1122,13 @@ static void handle_qmi_eap_ind(qmi_client_type user_handle,
                             (QMI_STATE_RESP_TIME_OUT != sm->qmi_state)) {
                                 sm->proxy_state = EAP_PROXY_AUTH_SUCCESS;
                                 sm->qmi_state = QMI_STATE_RESP_RECEIVED;
-                                wpa_printf(MSG_ERROR, "eap_proxy: Handle_qmi_eap_ind EAP PROXY AUTH"
-                                        " SUCCESS %p set to %d\n",
+                                wpa_printf(MSG_ERROR, "eap_proxy: %s EAP PROXY AUTH"
+                                        " SUCCESS %p set to %d\n", __func__,
                                         (void *)&sm->qmi_state, sm->qmi_state);
                         } else {
                                 sm->proxy_state = EAP_PROXY_AUTH_FAILURE;
-                                wpa_printf(MSG_ERROR, "eap_proxy: Handle_qmi_eap_ind EAP PROXY AUTH"
-                                        " FAILURE \n");
+                                wpa_printf(MSG_ERROR, "eap_proxy: %s EAP PROXY AUTH"
+                                        " FAILURE \n", __func__);
                         }
                         sm->srvc_result = EAP_PROXY_QMI_SRVC_SUCCESS;
                         break;
@@ -1110,6 +1156,31 @@ static void handle_qmi_eap_ind(qmi_client_type user_handle,
         }
 
 
+}
+
+/* Call-back function to process an authentication result indication
+*  from QMI EAP service */
+static void handle_qmi_eap_ind(qmi_client_type user_handle,
+                               unsigned int msg_id,
+                               void* ind_buf,
+                               unsigned int ind_buf_len,
+                               void* ind_cb_data)
+{
+        struct eap_proxy_sm *eap_proxy = (struct eap_proxy_sm *)ind_cb_data;
+        struct qmi_cb_data *cb_data;
+
+        pthread_mutex_lock(&eloop_lock);       // Lock
+        wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
+
+        cb_data = os_zalloc(sizeof(*cb_data));;
+        cb_data->userHandle = user_handle;
+        cb_data->msg_id = msg_id;
+        cb_data->buf = ind_buf;
+        cb_data->buflen = ind_buf_len;
+        cb_data->userdata = ind_cb_data;
+        dl_list_add(&eap_proxy->callback, &cb_data->list);
+        eloop_register_timeout(0, 0, __handle_qmi_eap_ind, cb_data, NULL);
+        pthread_mutex_unlock(&eloop_lock);      // Unlock
 }
 
 
