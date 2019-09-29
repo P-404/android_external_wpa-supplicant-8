@@ -1040,8 +1040,8 @@ static void handle_auth_sae(struct hostapd_data *hapd, struct sta_info *sta,
 
 		hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE80211,
 			       HOSTAPD_LEVEL_DEBUG,
-			       "start SAE authentication (RX commit, status=%u)",
-			       status_code);
+			       "start SAE authentication (RX commit, status=%u (%s))",
+			       status_code, status2str(status_code));
 
 		if ((hapd->conf->mesh & MESH_ENABLED) &&
 		    status_code == WLAN_STATUS_ANTI_CLOGGING_TOKEN_REQ &&
@@ -1184,8 +1184,8 @@ static void handle_auth_sae(struct hostapd_data *hapd, struct sta_info *sta,
 	} else if (auth_transaction == 2) {
 		hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE80211,
 			       HOSTAPD_LEVEL_DEBUG,
-			       "SAE authentication (RX confirm, status=%u)",
-			       status_code);
+			       "SAE authentication (RX confirm, status=%u (%s))",
+			       status_code, status2str(status_code));
 		if (status_code != WLAN_STATUS_SUCCESS)
 			goto remove_sta;
 		if (sta->sae->state >= SAE_CONFIRMED ||
@@ -1226,8 +1226,9 @@ static void handle_auth_sae(struct hostapd_data *hapd, struct sta_info *sta,
 	} else {
 		hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE80211,
 			       HOSTAPD_LEVEL_DEBUG,
-			       "unexpected SAE authentication transaction %u (status=%u)",
-			       auth_transaction, status_code);
+			       "unexpected SAE authentication transaction %u (status=%u (%s))",
+			       auth_transaction, status_code,
+			       status2str(status_code));
 		if (status_code != WLAN_STATUS_SUCCESS)
 			goto remove_sta;
 		resp = WLAN_STATUS_UNKNOWN_AUTH_TRANSACTION;
@@ -1823,6 +1824,8 @@ prepare_auth_resp_fils(struct hostapd_data *hapd,
 			}
 
 			sta->fils_erp_pmkid_set = 0;
+			wpa_auth_add_fils_pmk_pmkid(sta->wpa_sm, pmk, pmk_len,
+						    sta->fils_erp_pmkid);
 			if (!hapd->conf->disable_pmksa_caching &&
 			    wpa_auth_pmksa_add2(
 				    hapd->wpa_auth, sta->addr,
@@ -2323,8 +2326,11 @@ static void handle_auth(struct hostapd_data *hapd,
 		sta->flags &= ~(WLAN_STA_ASSOC | WLAN_STA_AUTH |
 				WLAN_STA_AUTHORIZED);
 
-		if (hostapd_sta_add(hapd, sta->addr, 0, 0, NULL, 0, 0,
-				    NULL, NULL, sta->flags, 0, 0, 0, 0)) {
+		if (hostapd_sta_add(hapd, sta->addr, 0, 0,
+				    sta->supported_rates,
+				    sta->supported_rates_len,
+				    0, NULL, NULL, NULL, 0,
+				    sta->flags, 0, 0, 0, 0)) {
 			hostapd_logger(hapd, sta->addr,
 				       HOSTAPD_MODULE_IEEE80211,
 				       HOSTAPD_LEVEL_NOTICE,
@@ -2962,10 +2968,6 @@ static u16 check_assoc_ies(struct hostapd_data *hapd, struct sta_info *sta,
 		if (resp != WLAN_STATUS_SUCCESS)
 			return resp;
 
-		resp = copy_sta_vht_oper(hapd, sta, elems.vht_operation);
-		if (resp != WLAN_STATUS_SUCCESS)
-			return resp;
-
 		resp = set_sta_vht_opmode(hapd, sta, elems.vht_opmode_notif);
 		if (resp != WLAN_STATUS_SUCCESS)
 			return resp;
@@ -2986,6 +2988,15 @@ static u16 check_assoc_ies(struct hostapd_data *hapd, struct sta_info *sta,
 			return resp;
 	}
 #endif /* CONFIG_IEEE80211AC */
+#ifdef CONFIG_IEEE80211AX
+	if (hapd->iconf->ieee80211ax) {
+		resp = copy_sta_he_capab(hapd, sta, IEEE80211_MODE_AP,
+					 elems.he_capabilities,
+					 elems.he_capabilities_len);
+		if (resp != WLAN_STATUS_SUCCESS)
+			return resp;
+	}
+#endif /* CONFIG_IEEE80211AX */
 
 #ifdef CONFIG_P2P
 	if (elems.p2p) {
@@ -3348,6 +3359,7 @@ static int add_associated_sta(struct hostapd_data *hapd,
 {
 	struct ieee80211_ht_capabilities ht_cap;
 	struct ieee80211_vht_capabilities vht_cap;
+	struct ieee80211_he_capabilities he_cap;
 	int set = 1;
 
 	/*
@@ -3400,6 +3412,12 @@ static int add_associated_sta(struct hostapd_data *hapd,
 	if (sta->flags & WLAN_STA_VHT)
 		hostapd_get_vht_capab(hapd, sta->vht_capabilities, &vht_cap);
 #endif /* CONFIG_IEEE80211AC */
+#ifdef CONFIG_IEEE80211AX
+	if (sta->flags & WLAN_STA_HE) {
+		hostapd_get_he_capab(hapd, sta->he_capab, &he_cap,
+				     sta->he_capab_len);
+	}
+#endif /* CONFIG_IEEE80211AX */
 
 	/*
 	 * Add the station with forced WLAN_STA_ASSOC flag. The sta->flags
@@ -3411,6 +3429,8 @@ static int add_associated_sta(struct hostapd_data *hapd,
 			    sta->listen_interval,
 			    sta->flags & WLAN_STA_HT ? &ht_cap : NULL,
 			    sta->flags & WLAN_STA_VHT ? &vht_cap : NULL,
+			    sta->flags & WLAN_STA_HE ? &he_cap : NULL,
+			    sta->flags & WLAN_STA_HE ? sta->he_capab_len : 0,
 			    sta->flags | WLAN_STA_ASSOC, sta->qosinfo,
 			    sta->vht_opmode, sta->p2p_ie ? 1 : 0,
 			    set)) {
@@ -3561,6 +3581,15 @@ static u16 send_assoc_resp(struct hostapd_data *hapd, struct sta_info *sta,
 		p = hostapd_eid_vht_operation(hapd, p);
 	}
 #endif /* CONFIG_IEEE80211AC */
+
+#ifdef CONFIG_IEEE80211AX
+	if (hapd->iconf->ieee80211ax) {
+		p = hostapd_eid_he_capab(hapd, p, IEEE80211_MODE_AP);
+		p = hostapd_eid_he_operation(hapd, p);
+		p = hostapd_eid_spatial_reuse(hapd, p);
+		p = hostapd_eid_he_mu_edca_parameter_set(hapd, p);
+	}
+#endif /* CONFIG_IEEE80211AX */
 
 	p = hostapd_eid_ext_capab(hapd, p);
 	p = hostapd_eid_bss_max_idle_period(hapd, p);
