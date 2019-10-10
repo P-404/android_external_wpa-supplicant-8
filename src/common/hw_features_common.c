@@ -360,7 +360,8 @@ int check_40mhz_2g4(struct hostapd_hw_modes *mode,
 
 int hostapd_set_freq_params(struct hostapd_freq_params *data,
 			    enum hostapd_hw_mode mode,
-			    int freq, int channel, int ht_enabled,
+			    int freq, int channel, int enable_edmg,
+			    u8 edmg_channel, int ht_enabled,
 			    int vht_enabled, int sec_channel_offset,
 			    int vht_oper_chwidth, int center_segment0,
 			    int center_segment1, u32 vht_caps)
@@ -375,6 +376,9 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 	data->center_freq1 = freq + sec_channel_offset * 10;
 	data->center_freq2 = 0;
 	data->bandwidth = sec_channel_offset ? 40 : 20;
+
+	hostapd_encode_edmg_chan(enable_edmg, edmg_channel, channel,
+				 &data->edmg);
 
 	if (data->vht_enabled) switch (vht_oper_chwidth) {
 	case VHT_CHANWIDTH_USE_HT:
