@@ -276,7 +276,13 @@ static void wpa_qmi_client_indication_cb
         pthread_mutex_lock(&eloop_lock);       // Lock
         wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
 
-        cb_data = os_zalloc(sizeof(*cb_data));;
+        cb_data = os_zalloc(sizeof(*cb_data));
+        if (cb_data == NULL) {
+                wpa_printf(MSG_ERROR, "eap_proxy: failed to allocate memory");
+                pthread_mutex_unlock(&eloop_lock); // Unlock
+                return;
+        }
+
         cb_data->userHandle = user_handle;
         cb_data->msg_id = msg_id;
         cb_data->buf = ind_buf_ptr;
@@ -1172,7 +1178,13 @@ static void handle_qmi_eap_ind(qmi_client_type user_handle,
         pthread_mutex_lock(&eloop_lock);       // Lock
         wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
 
-        cb_data = os_zalloc(sizeof(*cb_data));;
+        cb_data = os_zalloc(sizeof(*cb_data));
+        if (cb_data == NULL) {
+                wpa_printf(MSG_ERROR, "eap_proxy: failed to allocate memory");
+                pthread_mutex_unlock(&eloop_lock); // Unlock
+                return;
+        }
+
         cb_data->userHandle = user_handle;
         cb_data->msg_id = msg_id;
         cb_data->buf = ind_buf;
