@@ -1155,6 +1155,7 @@ LOCAL_STATIC_LIBRARIES += libhostapd_hidl
 ifdef HOSTAPD_USE_VENDOR_HIDL
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.hostapd@1.0 \
     vendor.qti.hardware.wifi.hostapd@1.1 \
+    vendor.qti.hardware.wifi.hostapd@1.2 \
     libqsap_sdk
 endif
 endif
@@ -1214,7 +1215,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
     $(LOCAL_PATH)/hidl/$(HIDL_INTERFACE_VERSION)
 
 ifdef HOSTAPD_USE_VENDOR_HIDL
-VENDOR_HIDL_INTERFACE_VERSION = 1.1
+VENDOR_HIDL_INTERFACE_VERSION = 1.2
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/hidl/$(HIDL_INTERFACE_VERSION)
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/hidl/vendor/$(VENDOR_HIDL_INTERFACE_VERSION)
 ifeq ($(BOARD_HAS_QCOM_WLAN), true)
@@ -1227,6 +1228,7 @@ LOCAL_SRC_FILES += \
 LOCAL_SHARED_LIBRARIES += \
     vendor.qti.hardware.wifi.hostapd@1.0 \
     vendor.qti.hardware.wifi.hostapd@1.1 \
+    vendor.qti.hardware.wifi.hostapd@1.2 \
     libqsap_sdk
 LOCAL_HEADER_LIBRARIES := libqsap_headers
 endif

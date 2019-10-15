@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -37,7 +37,7 @@
 #include <android-base/macros.h>
 
 #include <android/hardware/wifi/hostapd/1.0/IHostapd.h>
-#include <vendor/qti/hardware/wifi/hostapd/1.1/IHostapdVendor.h>
+#include <vendor/qti/hardware/wifi/hostapd/1.2/IHostapdVendor.h>
 #include <vendor/qti/hardware/wifi/hostapd/1.1/IHostapdVendorIfaceCallback.h>
 
 extern "C"
@@ -53,7 +53,7 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace hostapd {
-namespace V1_1 {
+namespace V1_2 {
 namespace implementation {
 
 using namespace android::hardware;
@@ -67,7 +67,7 @@ typedef IHostapd::NetworkParams NetworkParams;
  * object is used core for global control operations on
  * hostapd.
  */
-class HostapdVendor : public V1_1::IHostapdVendor
+class HostapdVendor : public V1_2::IHostapdVendor
 {
 public:
 	HostapdVendor(hapd_interfaces* interfaces);
@@ -79,7 +79,10 @@ public:
 	    const V1_0::IHostapdVendor::VendorIfaceParams& iface_params, const NetworkParams& nw_params,
 	    addVendorAccessPoint_cb _hidl_cb) override;
 	Return<void> addVendorAccessPoint_1_1(
-	    const VendorIfaceParams& iface_params, const NetworkParams& nw_params,
+	    const V1_1::IHostapdVendor::VendorIfaceParams& iface_params, const NetworkParams& nw_params,
+	    addVendorAccessPoint_cb _hidl_cb) override;
+	Return<void> addVendorAccessPoint_1_2(
+	    const VendorIfaceParams& iface_params, const VendorNetworkParams& nw_params,
 	    addVendorAccessPoint_cb _hidl_cb) override;
 	Return<void> removeVendorAccessPoint(
 	    const hidl_string& iface_name,
@@ -93,15 +96,20 @@ public:
 	    registerVendorCallback_cb _hidl_cb) override;
 	Return<void> registerVendorCallback_1_1(
 	    const hidl_string& iface_name,
-	    const android::sp<IHostapdVendorIfaceCallback>& callback,
+	    const android::sp<V1_1::IHostapdVendorIfaceCallback>& callback,
 	    registerVendorCallback_cb _hidl_cb) override;
 	Return<void> setDebugParams(
 	    IHostapdVendor::DebugLevel level, bool show_timestamp, bool show_keys,
 	    setDebugParams_cb _hidl_cb) override;
 	Return<IHostapdVendor::DebugLevel> getDebugLevel() override;
+	Return<void> listInterfaces(listInterfaces_cb _hidl_cb) override;
+	Return<void> hostapdCmd(
+	    const hidl_string& ifname,
+	    const hidl_string& cmd,
+	    hostapdCmd_cb _hidl_cb) override;
 	int addVendorIfaceCallbackHidlObject(
 	    const std::string &ifname,
-	    const android::sp<IHostapdVendorIfaceCallback> &callback);
+	    const android::sp<V1_1::IHostapdVendorIfaceCallback> &callback);
 	void invalidate();
 
 private:
@@ -109,9 +117,13 @@ private:
 	HostapdStatus addVendorAccessPointInternal(
 	    const V1_0::IHostapdVendor::VendorIfaceParams& iface_params, const NetworkParams& nw_params);
 	HostapdStatus __addVendorAccessPointInternal_1_1(
-	    const VendorIfaceParams& iface_params, const NetworkParams& nw_params);
+	    const V1_1::IHostapdVendor::VendorIfaceParams& iface_params, const NetworkParams& nw_params);
 	HostapdStatus addVendorAccessPointInternal_1_1(
-	    const VendorIfaceParams& iface_params, const NetworkParams& nw_params);
+	    const V1_1::IHostapdVendor::VendorIfaceParams& iface_params, const NetworkParams& nw_params);
+	HostapdStatus __addVendorAccessPointInternal_1_2(
+	    const VendorIfaceParams& iface_params, const VendorNetworkParams& nw_params);
+	HostapdStatus addVendorAccessPointInternal_1_2(
+	    const VendorIfaceParams& iface_params, const VendorNetworkParams& nw_params);
 	HostapdStatus removeVendorAccessPointInternal(const std::string& iface_name);
 	HostapdStatus setHostapdParamsInternal(const std::string& cmd);
 	HostapdStatus registerCallbackInternal(
@@ -119,25 +131,25 @@ private:
 	    const android::sp<V1_0::IHostapdVendorIfaceCallback>& callback);
 	HostapdStatus registerCallbackInternal_1_1(
 	    const std::string& iface_name,
-	    const android::sp<IHostapdVendorIfaceCallback>& callback);
+	    const android::sp<V1_1::IHostapdVendorIfaceCallback>& callback);
 	HostapdStatus setDebugParamsInternal(
 	    IHostapdVendor::DebugLevel level, bool show_timestamp, bool show_keys);
 	void callWithEachHostapdIfaceCallback(
 	    const std::string &ifname,
 	    const std::function<android::hardware::Return<void>(
-		android::sp<IHostapdVendorIfaceCallback>)> &method);
+		android::sp<V1_1::IHostapdVendorIfaceCallback>)> &method);
 	void setIfacename(const std::string &ifname);
 	// Raw pointer to the global structure maintained by the core.
 	struct hapd_interfaces* interfaces_;
         std::map<
 	    const std::string,
-	    std::vector<android::sp<IHostapdVendorIfaceCallback>>>
+	    std::vector<android::sp<V1_1::IHostapdVendorIfaceCallback>>>
 	    vendor_hostapd_callbacks_map_;
 
 	DISALLOW_COPY_AND_ASSIGN(HostapdVendor);
 };
 }  // namespace implementation
-}  // namespace V1_1
+}  // namespace V1_2
 }  // namespace hostapd
 }  // namespace wifi
 }  // namespace hardware

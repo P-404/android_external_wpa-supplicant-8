@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -68,9 +68,10 @@ constexpr char kQsapSetFmt[] = "softap qccmd set%s %s=%s";
 using android::hardware::hidl_array;
 using android::base::StringPrintf;
 using android::hardware::wifi::hostapd::V1_0::IHostapd;
-using vendor::qti::hardware::wifi::hostapd::V1_1::IHostapdVendor;
+using namespace vendor::qti::hardware::wifi::hostapd;
+using vendor::qti::hardware::wifi::hostapd::V1_2::IHostapdVendor;
 
-using namespace vendor::qti::hardware::wifi::hostapd::V1_1::implementation::qsap_handler;
+using namespace vendor::qti::hardware::wifi::hostapd::V1_2::implementation::qsap_handler;
 
 // wrapper to call qsap command.
 int qsap_cmd(std::string cmd) {
@@ -124,7 +125,7 @@ int qsap_cmd(std::string cmd) {
 }
 
 std::string AddOrUpdateHostapdConfig(
-    const IHostapdVendor::VendorIfaceParams& v_iface_params,
+    const V1_1::IHostapdVendor::VendorIfaceParams& v_iface_params,
     const IHostapd::NetworkParams& nw_params)
 {
 	IHostapd::IfaceParams iface_params = v_iface_params.VendorV1_0.ifaceParams;
@@ -136,9 +137,9 @@ std::string AddOrUpdateHostapdConfig(
 		    MSG_ERROR, "Invalid SSID size: %zu", nw_params.ssid.size());
 		return "";
 	}
-	if ((v_iface_params.vendorEncryptionType != IHostapdVendor::VendorEncryptionType::NONE) &&
+	if ((v_iface_params.vendorEncryptionType != V1_1::IHostapdVendor::VendorEncryptionType::NONE) &&
 #ifdef CONFIG_OWE
-	    (v_iface_params.vendorEncryptionType != IHostapdVendor::VendorEncryptionType::OWE) &&
+	    (v_iface_params.vendorEncryptionType != V1_1::IHostapdVendor::VendorEncryptionType::OWE) &&
 #endif
 	    (nw_params.pskPassphrase.size() <
 		 static_cast<uint32_t>(
@@ -198,19 +199,19 @@ std::string AddOrUpdateHostapdConfig(
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ssid2", ssid_as_string.c_str()));
 
 	switch (v_iface_params.vendorEncryptionType) {
-	case IHostapdVendor::VendorEncryptionType::NONE:
+	case V1_1::IHostapdVendor::VendorEncryptionType::NONE:
 		// no security params
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "0"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211w", "0"));
 		break;
-	case IHostapdVendor::VendorEncryptionType::WPA:
+	case V1_1::IHostapdVendor::VendorEncryptionType::WPA:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "4"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "WPA-PSK"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.pskPassphrase.c_str()));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_pairwise", isWigig ? "GCMP" : "TKIP CCMP"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211w", "0"));
 		break;
-	case IHostapdVendor::VendorEncryptionType::WPA2:
+	case V1_1::IHostapdVendor::VendorEncryptionType::WPA2:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "WPA-PSK"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.pskPassphrase.c_str()));
@@ -218,7 +219,7 @@ std::string AddOrUpdateHostapdConfig(
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211w", "0"));
 		break;
 #ifdef CONFIG_SAE
-	case IHostapdVendor::VendorEncryptionType::SAE:
+	case V1_1::IHostapdVendor::VendorEncryptionType::SAE:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
 		// SAE transition mode works with single SAP, So set supported AKMs to both SAE and WPA-PSK
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "SAE WPA-PSK"));
@@ -230,7 +231,7 @@ std::string AddOrUpdateHostapdConfig(
 		break;
 #endif
 #ifdef CONFIG_OWE
-	case IHostapdVendor::VendorEncryptionType::OWE:
+	case V1_1::IHostapdVendor::VendorEncryptionType::OWE:
 		// In OWE transition mode also OWE SAP is independent from linked OPEN SAP.
 		// So OWE SAP security settings are same irrespective OWE transition mode enabled or not.
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
@@ -323,6 +324,206 @@ std::string AddOrUpdateHostapdConfig(
 	return file_path;
 }
 
+std::string AddOrUpdateHostapdConfigV1_2(
+    const IHostapdVendor::VendorIfaceParams& v_iface_params,
+    const IHostapdVendor::VendorNetworkParams& nw_params)
+{
+	IHostapd::IfaceParams iface_params = v_iface_params.VendorV1_1.VendorV1_0.ifaceParams;
+	IHostapd::ChannelParams channelParams = v_iface_params.VendorV1_1.vendorChannelParams.channelParams;
+	if (nw_params.V1_0.ssid.size() >
+	    static_cast<uint32_t>(
+		IHostapd::ParamSizeLimits::SSID_MAX_LEN_IN_BYTES)) {
+		wpa_printf(
+		    MSG_ERROR, "Invalid SSID size: %zu", nw_params.V1_0.ssid.size());
+		return "";
+	}
+	if ((v_iface_params.VendorV1_1.vendorEncryptionType != V1_1::IHostapdVendor::VendorEncryptionType::NONE) &&
+#ifdef CONFIG_OWE
+	    (v_iface_params.VendorV1_1.vendorEncryptionType != V1_1::IHostapdVendor::VendorEncryptionType::OWE) &&
+#endif
+	    (nw_params.V1_0.pskPassphrase.size() <
+		 static_cast<uint32_t>(
+		     IHostapd::ParamSizeLimits::
+			 WPA2_PSK_PASSPHRASE_MIN_LEN_IN_BYTES) ||
+	     nw_params.V1_0.pskPassphrase.size() >
+		 static_cast<uint32_t>(
+		     IHostapd::ParamSizeLimits::
+			 WPA2_PSK_PASSPHRASE_MAX_LEN_IN_BYTES))) {
+		wpa_printf(
+		    MSG_ERROR, "Invalid psk passphrase size: %zu",
+		    nw_params.V1_0.pskPassphrase.size());
+		return "";
+	}
+
+	// Decide configuration file to be used.
+	std::string dual_str;
+	std::string file_path;
+
+	unsigned int band = 0;
+	band |= v_iface_params.channelParams.bandMask;
+
+	if (v_iface_params.VendorV1_1.VendorV1_0.bridgeIfaceName.empty()) {
+		file_path = StringPrintf(kConfFileNameFmt, "");
+		dual_str = "";
+#ifdef CONFIG_OWE
+	} else if (!v_iface_params.VendorV1_1.oweTransIfaceName.empty()) {
+		// QSAP can't clear owe_transition_ifname and bridge fields
+		// when switching from OWE to SAE/WPA2-PSK,
+		// so create a new file which is shared by OWE-transition BSSes
+		file_path = StringPrintf(kConfFileNameFmt, "_owe");
+		dual_str = " owe";
+#endif
+	} else if ((band & IHostapdVendor::BandMask::BAND_2_GHZ) != 0) {
+		file_path = StringPrintf(kConfFileNameFmt, "_dual2g");
+		dual_str = " dual2g";
+	} else if ((band & IHostapdVendor::BandMask::BAND_5_GHZ) != 0) {
+		file_path = StringPrintf(kConfFileNameFmt, "_dual5g");
+		dual_str = " dual5g";
+	}
+	const char *dual_mode_str = dual_str.c_str();
+
+	// SSID string
+	std::stringstream ss;
+	ss << std::hex;
+	ss << std::setfill('0');
+	for (uint8_t b : nw_params.V1_0.ssid) {
+		ss << std::setw(2) << static_cast<unsigned int>(b);
+	}
+	const std::string ssid_as_string = ss.str();
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ssid2", ssid_as_string.c_str()));
+//here we need to access vendorencryptiontype from vendorenetworkparam not through vendorifaceparam
+	switch (nw_params.vendorEncryptionType) {
+	case IHostapdVendor::VendorEncryptionType::NONE:
+		// no security params
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "0"));
+		break;
+	case IHostapdVendor::VendorEncryptionType::WPA:
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "4"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "WPA-PSK"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.V1_0.pskPassphrase.c_str()));
+		break;
+	case IHostapdVendor::VendorEncryptionType::WPA2:
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "WPA-PSK"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.V1_0.pskPassphrase.c_str()));
+		break;
+#ifdef CONFIG_SAE
+	case IHostapdVendor::VendorEncryptionType::SAE:
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
+		// SAE transition mode works with single SAP, So set supported AKMs to both SAE and WPA-PSK
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "SAE WPA-PSK"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.V1_0.pskPassphrase.c_str()));
+		// setting PMF optional(ieee80211w = 1) allows STA to connect using WPA2-PSK AKM
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211w", "1"));
+		// sae_require_mfp = 1 mandates PMF when STA tries to connect using SAE AKM
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "sae_require_mfp", "1"));
+		break;
+#endif
+#ifdef CONFIG_OWE
+	case IHostapdVendor::VendorEncryptionType::OWE:
+		// In OWE transition mode also OWE SAP is independent from linked OPEN SAP.
+		// So OWE SAP security settings are same irrespective OWE transition mode enabled or not.
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "OWE"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211w", "2"));
+		break;
+#endif
+	default:
+		wpa_printf(MSG_ERROR, "Unknown encryption type");
+		return "";
+	}
+
+#ifdef CONFIG_OWE
+	if (!v_iface_params.VendorV1_1.oweTransIfaceName.empty()) {
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "owe_transition_ifname",
+			 v_iface_params.VendorV1_1.oweTransIfaceName.c_str()));
+	}
+#endif
+
+	std::string freqlist_as_string;
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "acs_exclude_dfs", "0"));
+	if (channelParams.enableAcs) {
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "channel", "0"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "op_class", "0"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "acs_exclude_6ghz_non_psc", "1"));
+		if (channelParams.acsShouldExcludeDfs) {
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "acs_exclude_dfs", "1"));
+		}
+		for (auto &range :
+			v_iface_params.channelParams.acsChannelFreqRangesMhz) {
+			if (range.start != range.end) {
+				freqlist_as_string +=
+					StringPrintf("%d-%d ", range.start, range.end);
+			} else {
+				freqlist_as_string += StringPrintf("%d ", range.start);
+			}
+		}
+		if (!freqlist_as_string.empty()) {
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "freqlist", freqlist_as_string.c_str()));
+		}
+	} else {
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "channel", std::to_string(channelParams.channel).c_str()));
+	}
+
+	// reset fields to default
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[SHORT-GI-20] [GF] [DSSS_CCK-40] [LSIG-TXOP-PROT]"));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "0"));
+
+	uint32_t BAND_ALL = (IHostapdVendor::BandMask::BAND_2_GHZ | IHostapdVendor::BandMask::BAND_5_GHZ | IHostapdVendor::BandMask::BAND_6_GHZ);
+
+	if ((band ^ BAND_ALL) == 0) {
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "any"));
+		if (channelParams.enableAcs) {
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[HT40+]"));
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "1"));
+		}
+	} else if ((band & IHostapdVendor::BandMask::BAND_2_GHZ) != 0) {
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "g"));
+		if (channelParams.enableAcs && freqlist_as_string.empty()) {
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "freqlist", "2400-2500"));
+		}
+	} else if ((band & IHostapdVendor::BandMask::BAND_5_GHZ) != 0) {
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "a"));
+		if (channelParams.enableAcs) {
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[HT40+]"));
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "1"));
+			if (freqlist_as_string.empty())
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "freqlist", "4900-5900"));
+		}
+	} else if ((band & IHostapdVendor::BandMask::BAND_6_GHZ) != 0) {
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "a"));
+		if (channelParams.enableAcs) {
+			if (freqlist_as_string.empty()) {
+				qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "freqlist", "5945-7125"));
+			}
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[HT40+]"));
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "1"));
+		}
+	} else{
+		wpa_printf(MSG_ERROR, "Invalid band");
+		return "";
+	}
+
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "interface", iface_params.ifaceName.c_str()));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "driver", "nl80211"));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ctrl_interface", "/data/vendor/wifi/hostapd/ctrl"));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211n", iface_params.hwModeParams.enable80211N ? "1" : "0"));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211ac", iface_params.hwModeParams.enable80211AC ? "1" : "0"));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ignore_broadcast_ssid", nw_params.V1_0.isHidden ? "1" : "0"));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wowlan_triggers", "any"));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "accept_mac_file", "/data/vendor/wifi/hostapd/hostapd.accept"));
+	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "deny_mac_file", "/data/vendor/wifi/hostapd/hostapd.deny"));
+
+	if (!v_iface_params.VendorV1_1.VendorV1_0.bridgeIfaceName.empty())
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "bridge", v_iface_params.VendorV1_1.VendorV1_0.bridgeIfaceName.c_str()));
+
+	if (!v_iface_params.VendorV1_1.VendorV1_0.countryCode.empty())
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "country_code", v_iface_params.VendorV1_1.VendorV1_0.countryCode.c_str()));
+
+	return file_path;
+}
+
+
 template <class CallbackType>
 int addIfaceCallbackHidlObjectToMap(
     const std::string &ifname, const android::sp<CallbackType> &callback,
@@ -407,7 +608,7 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace hostapd {
-namespace V1_1 {
+namespace V1_2 {
 namespace implementation {
 
 using namespace android::hardware;
@@ -432,11 +633,21 @@ Return<void> HostapdVendor::addVendorAccessPoint(
 }
 
 Return<void> HostapdVendor::addVendorAccessPoint_1_1(
-    const VendorIfaceParams& iface_params, const NetworkParams& nw_params,
+    const V1_1::IHostapdVendor::VendorIfaceParams& iface_params, const NetworkParams& nw_params,
     addVendorAccessPoint_cb _hidl_cb)
 {
 	return call(
 	    this, &HostapdVendor::addVendorAccessPointInternal_1_1, _hidl_cb, iface_params,
+	    nw_params);
+}
+
+Return<void> HostapdVendor::addVendorAccessPoint_1_2(
+    const VendorIfaceParams& iface_params, const VendorNetworkParams& nw_params,
+    addVendorAccessPoint_cb _hidl_cb)
+{
+        wpa_printf(MSG_INFO, "invoked addVendorAccessPoint_1_2");
+	return call(
+	    this, &HostapdVendor::addVendorAccessPointInternal_1_2, _hidl_cb, iface_params,
 	    nw_params);
 }
 
@@ -478,11 +689,24 @@ Return<void> HostapdVendor::registerVendorCallback(
 
 Return<void> HostapdVendor::registerVendorCallback_1_1(
     const hidl_string& iface_name,
-    const android::sp<IHostapdVendorIfaceCallback> &callback,
+    const android::sp<V1_1::IHostapdVendorIfaceCallback> &callback,
     registerVendorCallback_cb _hidl_cb)
 {
 	return call(
 	    this, &HostapdVendor::registerCallbackInternal_1_1, _hidl_cb, iface_name, callback);
+}
+
+Return<void> HostapdVendor::listInterfaces(listInterfaces_cb _hidl_cb)
+{
+		_hidl_cb({HostapdStatusCode::FAILURE_UNKNOWN, "Not supported"}, NULL);
+			return Void();
+}
+
+Return<void> HostapdVendor::hostapdCmd(const hidl_string& ifname, const hidl_string& cmd,
+					hostapdCmd_cb _hidl_cb)
+{
+		_hidl_cb({HostapdStatusCode::FAILURE_UNKNOWN, "Not supported"}, NULL);
+			return Void();
 }
 
 HostapdStatus HostapdVendor::addVendorAccessPointInternal(
@@ -494,7 +718,7 @@ HostapdStatus HostapdVendor::addVendorAccessPointInternal(
 
 
 HostapdStatus HostapdVendor::__addVendorAccessPointInternal_1_1(
-    const VendorIfaceParams& v_iface_params, const NetworkParams& nw_params)
+    const V1_1::IHostapdVendor::VendorIfaceParams& v_iface_params, const NetworkParams& nw_params)
 {
 	IfaceParams iface_params = v_iface_params.VendorV1_0.ifaceParams;
 	const auto conf_file_path =
@@ -535,7 +759,7 @@ HostapdStatus HostapdVendor::__addVendorAccessPointInternal_1_1(
 			    callWithEachHostapdIfaceCallback(
 				iface_hapd->conf->iface,
 				std::bind(
-				&IHostapdVendorIfaceCallback::onFailure, std::placeholders::_1,
+				&V1_1::IHostapdVendorIfaceCallback::onFailure, std::placeholders::_1,
 				iface_hapd->conf->iface));
 		    }
 	    };
@@ -553,13 +777,13 @@ HostapdStatus HostapdVendor::__addVendorAccessPointInternal_1_1(
 			callWithEachHostapdIfaceCallback(
 			    iface_hapd->conf->iface,
 			    std::bind(
-			    &IHostapdVendorIfaceCallback::onStaConnected, std::placeholders::_1,
+			    &V1_1::IHostapdVendorIfaceCallback::onStaConnected, std::placeholders::_1,
 			    mac_addr));
 		else
 			callWithEachHostapdIfaceCallback(
 			    iface_hapd->conf->iface,
 			    std::bind(
-			    &IHostapdVendorIfaceCallback::onStaDisconnected, std::placeholders::_1,
+			    &V1_1::IHostapdVendorIfaceCallback::onStaDisconnected, std::placeholders::_1,
 			    mac_addr));
 	    };
 	iface_hapd->sta_authorized_cb = onAsyncStaAuthorizedCb;
@@ -570,9 +794,9 @@ HostapdStatus HostapdVendor::__addVendorAccessPointInternal_1_1(
 
 
 HostapdStatus HostapdVendor::addVendorAccessPointInternal_1_1(
-    const VendorIfaceParams& v1_1_iface_params, const NetworkParams& nw_params)
+    const V1_1::IHostapdVendor::VendorIfaceParams& v1_1_iface_params, const NetworkParams& nw_params)
 {
-	VendorIfaceParams v_iface_params = v1_1_iface_params;
+	V1_1::IHostapdVendor::VendorIfaceParams v_iface_params = v1_1_iface_params;
 	IfaceParams iface_params = v_iface_params.VendorV1_0.ifaceParams;
 	if (hostapd_get_iface(interfaces_, iface_params.ifaceName.c_str())) {
 		wpa_printf(
@@ -582,6 +806,96 @@ HostapdStatus HostapdVendor::addVendorAccessPointInternal_1_1(
 	}
 
 	return __addVendorAccessPointInternal_1_1(v_iface_params, nw_params);
+}
+
+HostapdStatus HostapdVendor::__addVendorAccessPointInternal_1_2(
+    const VendorIfaceParams& v_iface_params, const VendorNetworkParams& nw_params)
+{
+	IfaceParams iface_params = v_iface_params.VendorV1_1.VendorV1_0.ifaceParams;
+	const auto conf_file_path =
+	    AddOrUpdateHostapdConfigV1_2(v_iface_params, nw_params);
+	if (conf_file_path.empty()) {
+		wpa_printf(MSG_ERROR, "Failed to add or update config file");
+		return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
+	}
+
+	std::string add_iface_param_str = StringPrintf(
+	    "%s config=%s", iface_params.ifaceName.c_str(),
+	    conf_file_path.c_str());
+	std::vector<char> add_iface_param_vec(
+	    add_iface_param_str.begin(), add_iface_param_str.end() + 1);
+	if (hostapd_add_iface(interfaces_, add_iface_param_vec.data()) < 0) {
+		wpa_printf(
+		    MSG_ERROR, "Adding interface %s failed",
+		    add_iface_param_str.c_str());
+		return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
+	}
+	struct hostapd_data* iface_hapd =
+	    hostapd_get_iface(interfaces_, iface_params.ifaceName.c_str());
+	WPA_ASSERT(iface_hapd != nullptr && iface_hapd->iface != nullptr);
+	if (hostapd_enable_iface(iface_hapd->iface) < 0) {
+		wpa_printf(
+		    MSG_ERROR, "Enabling interface %s failed",
+		    iface_params.ifaceName.c_str());
+		return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
+	}
+
+	// Register the setup complete callbacks
+	on_setup_complete_internal_callback =
+	    [this](struct hostapd_data* iface_hapd) {
+		    wpa_printf(
+			MSG_DEBUG, "AP interface setup completed - state %s",
+			hostapd_state_text(iface_hapd->iface->state));
+		    if (iface_hapd->iface->state == HAPD_IFACE_DISABLED) {
+			    callWithEachHostapdIfaceCallback(
+				iface_hapd->conf->iface,
+				std::bind(
+				&V1_1::IHostapdVendorIfaceCallback::onFailure, std::placeholders::_1,
+				iface_hapd->conf->iface));
+		    }
+	    };
+	iface_hapd->setup_complete_cb = onAsyncSetupCompleteCb;
+	iface_hapd->setup_complete_cb_ctx = iface_hapd;
+
+	// Listen for new Sta connect/disconnect indication.
+	on_sta_authorized_internal_callback =
+	    [this](struct hostapd_data* iface_hapd, const u8 *mac_addr,
+		   int authorized, const u8 *p2p_dev_addr) {
+		wpa_printf(MSG_DEBUG, "vendor hidl: [%s] notify sta " MACSTR " %s",
+			   iface_hapd->conf->iface, MAC2STR(mac_addr),
+			   (authorized) ? "Connected" : "Disconnected");
+		if (authorized)
+			callWithEachHostapdIfaceCallback(
+			    iface_hapd->conf->iface,
+			    std::bind(
+			    &V1_1::IHostapdVendorIfaceCallback::onStaConnected, std::placeholders::_1,
+			    mac_addr));
+		else
+			callWithEachHostapdIfaceCallback(
+			    iface_hapd->conf->iface,
+			    std::bind(
+			    &V1_1::IHostapdVendorIfaceCallback::onStaDisconnected, std::placeholders::_1,
+			    mac_addr));
+	    };
+	iface_hapd->sta_authorized_cb = onAsyncStaAuthorizedCb;
+	iface_hapd->sta_authorized_cb_ctx = iface_hapd;
+
+	return {HostapdStatusCode::SUCCESS, ""};
+}
+
+HostapdStatus HostapdVendor::addVendorAccessPointInternal_1_2(
+    const VendorIfaceParams& v1_2_iface_params, const VendorNetworkParams& nw_params)
+{
+	VendorIfaceParams v_iface_params = v1_2_iface_params;
+	IfaceParams iface_params = v_iface_params.VendorV1_1.VendorV1_0.ifaceParams;
+	if (hostapd_get_iface(interfaces_, iface_params.ifaceName.c_str())) {
+		wpa_printf(
+		    MSG_ERROR, "Interface %s already present",
+		    iface_params.ifaceName.c_str());
+		return {HostapdStatusCode::FAILURE_IFACE_EXISTS, ""};
+	}
+
+	return __addVendorAccessPointInternal_1_2(v_iface_params, nw_params);
 }
 
 HostapdStatus HostapdVendor::removeVendorAccessPointInternal(const std::string& iface_name)
@@ -637,7 +951,7 @@ HostapdStatus HostapdVendor::registerCallbackInternal(
 
 HostapdStatus HostapdVendor::registerCallbackInternal_1_1(
     const std::string& iface_name,
-    const android::sp<IHostapdVendorIfaceCallback> &callback)
+    const android::sp<V1_1::IHostapdVendorIfaceCallback> &callback)
 {
 	if(addVendorIfaceCallbackHidlObject(iface_name, callback)) {
 	   wpa_printf(MSG_ERROR, "FAILED to register Hostapd Vendor IfaceCallback");
@@ -658,10 +972,10 @@ HostapdStatus HostapdVendor::registerCallbackInternal_1_1(
  */
 int HostapdVendor::addVendorIfaceCallbackHidlObject(
     const std::string &ifname,
-    const android::sp<IHostapdVendorIfaceCallback> &callback)
+    const android::sp<V1_1::IHostapdVendorIfaceCallback> &callback)
 {
 	vendor_hostapd_callbacks_map_[ifname] =
-		    std::vector<android::sp<IHostapdVendorIfaceCallback>>();
+		    std::vector<android::sp<V1_1::IHostapdVendorIfaceCallback>>();
 	return addIfaceCallbackHidlObjectToMap(ifname, callback, vendor_hostapd_callbacks_map_);
 }
 
@@ -675,7 +989,7 @@ int HostapdVendor::addVendorIfaceCallbackHidlObject(
  */
 void HostapdVendor::callWithEachHostapdIfaceCallback(
     const std::string &ifname,
-    const std::function<Return<void>(android::sp<IHostapdVendorIfaceCallback>)> &method)
+    const std::function<Return<void>(android::sp<V1_1::IHostapdVendorIfaceCallback>)> &method)
 {
 	callWithEachIfaceCallback(ifname, method, vendor_hostapd_callbacks_map_);
 }
@@ -688,7 +1002,7 @@ void HostapdVendor::invalidate()
 }
 
 }  // namespace implementation
-}  // namespace V1_1
+}  // namespace V1_2
 }  // namespace hostapd
 }  // namespace wifi
 }  // namespace hardware
