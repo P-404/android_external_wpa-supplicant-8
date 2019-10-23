@@ -200,7 +200,7 @@ static void __wpa_qmi_client_indication_cb(void *eloop_ctx, void *timeout_ctx)
 		return;
 	}
 
-	if (!eap_proxy->initialized) {
+	if (eap_proxy == NULL || !eap_proxy->initialized) {
 		wpa_printf(MSG_ERROR, "eap_proxy: not initialized, discard client indiataion");
 		return;
 	}
@@ -272,6 +272,9 @@ static void wpa_qmi_client_indication_cb
 {
         struct eap_proxy_sm *eap_proxy = (struct eap_proxy_sm *)ind_cb_data;
         struct qmi_cb_data *cb_data;
+
+        if (eap_proxy == NULL)
+                return;
 
         pthread_mutex_lock(&eloop_lock);       // Lock
         wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
@@ -869,7 +872,7 @@ void wpa_qmi_register_notification(void *eloop_ctx, void *timeout_ctx)
         struct eap_proxy_sm *eap_proxy = eloop_ctx;
         wpa_printf(MSG_ERROR, "eap_proxy: %s", __func__);
 
-        if (!eap_proxy->initialized) {
+        if (eap_proxy == NULL || !eap_proxy->initialized) {
                 wpa_printf(MSG_ERROR, "eap_proxy: %s Skip processing SSR (eap_proxy deinitialized)", __func__);
                 return;
         }
@@ -884,6 +887,8 @@ void wpa_qmi_register_notification(void *eloop_ctx, void *timeout_ctx)
 void wpa_qmi_handle_ssr(qmi_client_type user_handle, qmi_client_error_type error, void *err_cb_data)
 {
         struct eap_proxy_sm *eap_proxy = err_cb_data;
+        if (eap_proxy == NULL)
+                return;
 
         pthread_mutex_lock(&eloop_lock);       // Lock
         wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
@@ -1136,7 +1141,7 @@ static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy)
         int index;
         wpa_uim_struct_type *wpa_uim = NULL;
 
-        if (!eap_proxy->initialized)
+        if (eap_proxy == NULL || !eap_proxy->initialized)
                 return;
         /* Waiting for eap_proxy_post_init to exit normally.
          * The eap_proxy_post_init may wait for QMI responese.
@@ -1225,6 +1230,11 @@ static void eap_proxy_clear_callbacks(struct eap_proxy_sm *eap_proxy)
 
 void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 {
+        if (eap_proxy == NULL) {
+            wpa_printf(MSG_ERROR, "eap_proxy: Not initialized");
+            return;
+        }
+
         eap_proxy_qmi_deinit(eap_proxy);
         // clear any pending callback.
         eap_proxy_clear_callbacks(eap_proxy);
@@ -1325,6 +1335,9 @@ static void handle_qmi_eap_ind(qmi_client_type user_handle,
         struct eap_proxy_sm *eap_proxy = (struct eap_proxy_sm *)ind_cb_data;
         struct qmi_cb_data *cb_data;
 
+        if (eap_proxy == NULL)
+                return;
+
         pthread_mutex_lock(&eloop_lock);       // Lock
         wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
 
@@ -1360,7 +1373,7 @@ static void handle_qmi_eap_reply(
         u32 length;
 
         wpa_printf(MSG_ERROR, "eap_proxy: %s started\n", __func__);
-        if (!eap_proxy->initialized) {
+        if (eap_proxy == NULL || !eap_proxy->initialized) {
                 wpa_printf(MSG_ERROR, "eap_proxy: eap_proxy is not initialized");
                 goto done;
         }
@@ -1930,12 +1943,9 @@ struct wpabuf * eap_proxy_get_eapRespData(struct eap_proxy_sm *eap_proxy)
         //int i;
 
         wpa_printf(MSG_ERROR, "eap_proxy: eap_proxy_get_eapRespData");
-        if ( (!eap_proxy->initialized) ||
-             (eap_proxy->qmi_resp_data.eap_send_pkt_resp.resp_data == NULL)
-           )
-        {
+        if ((eap_proxy == NULL) || (!eap_proxy->initialized) ||
+            (eap_proxy->qmi_resp_data.eap_send_pkt_resp.resp_data == NULL))
                 return NULL;
-        }
 
         len = eap_proxy->qmi_resp_data.eap_send_pkt_resp.length;
         wpa_printf(MSG_ERROR, "eap_proxy: eap_proxy_get_eapRespData len = %d", len);
