@@ -1173,7 +1173,7 @@ endif
 ifeq ($(HOSTAPD_USE_HIDL), y)
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.0
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.1
-LOCAL_SHARED_LIBRARIES += libbase libhidlbase libhidltransport libhwbinder libutils
+LOCAL_SHARED_LIBRARIES += libbase libhidlbase libutils
 LOCAL_STATIC_LIBRARIES += libhostapd_hidl
 ifdef HOSTAPD_USE_VENDOR_HIDL
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.hostapd@1.0 \
@@ -1229,8 +1229,6 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.hostapd@1.1 \
     libbase \
     libhidlbase \
-    libhidltransport \
-    libhwbinder \
     libutils \
     liblog
 LOCAL_EXPORT_C_INCLUDE_DIRS := \

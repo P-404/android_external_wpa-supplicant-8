@@ -112,6 +112,8 @@ extern "C"
 	void wpas_hidl_notify_dpp_timeout(struct wpa_supplicant *wpa_s);
 	void wpas_hidl_notify_dpp_auth_failure(struct wpa_supplicant *wpa_s);
 	void wpas_hidl_notify_dpp_fail(struct wpa_supplicant *wpa_s);
+	void wpas_hidl_notify_pmk_cache_added(
+	    struct wpa_supplicant *wpas, struct rsn_pmksa_cache_entry *pmksa_entry);
 
 //Vendor DPP Notifications
 	void wpas_hidl_notify_dpp_conf(
@@ -247,6 +249,9 @@ static void wpas_hidl_notify_dpp_invalid_uri(struct wpa_supplicant *wpa_s)
 static void wpas_hidl_notify_dpp_timeout(struct wpa_supplicant *wpa_s)
 {}
 static void wpas_hidl_notify_dpp_failure(struct wpa_supplicant *wpa_s)
+{}
+static void wpas_hidl_notify_pmk_cache_added(struct wpa_supplicant *wpas,
+					     struct rsn_pmksa_cache_entry *pmksa_entry)
 {}
 
 //DPP Vendor Notifications
