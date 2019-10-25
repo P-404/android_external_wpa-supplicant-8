@@ -66,9 +66,11 @@ std::string WriteHostapdConfig(
 }
 
 std::string CreateHostapdConfig(
-    const IHostapd::IfaceParams& iface_params,
+    const IHostapd::IfaceParams& v_iface_params,
     const IHostapd::NetworkParams& nw_params)
 {
+	IHostapd::IfaceParams iface_params = v_iface_params;
+
 	if (nw_params.ssid.size() >
 	    static_cast<uint32_t>(
 		IHostapd::ParamSizeLimits::SSID_MAX_LEN_IN_BYTES)) {
@@ -100,6 +102,10 @@ std::string CreateHostapdConfig(
 	}
 	const std::string ssid_as_string = ss.str();
 
+	const int wigigOpClass = 180;
+	bool isWigig = (iface_params.V1_0.channelParams.channel & (wigigOpClass << 16));
+	iface_params.V1_0.channelParams.channel &= ~(wigigOpClass << 16);
+
 	// Encryption config string
 	std::string encryption_config_as_string;
 	switch (nw_params.encryptionType) {
@@ -109,16 +115,16 @@ std::string CreateHostapdConfig(
 	case IHostapd::EncryptionType::WPA:
 		encryption_config_as_string = StringPrintf(
 		    "wpa=3\n"
-		    "wpa_pairwise=TKIP CCMP\n"
+		    "wpa_pairwise=%s\n"
 		    "wpa_passphrase=%s",
-		    nw_params.pskPassphrase.c_str());
+		    isWigig ? "TKIP CCMP" : "GCMP", nw_params.pskPassphrase.c_str());
 		break;
 	case IHostapd::EncryptionType::WPA2:
 		encryption_config_as_string = StringPrintf(
 		    "wpa=2\n"
-		    "rsn_pairwise=CCMP\n"
+		    "rsn_pairwise=%s\n"
 		    "wpa_passphrase=%s",
-		    nw_params.pskPassphrase.c_str());
+		    isWigig ? "CCMP" : "GCMP", nw_params.pskPassphrase.c_str());
 		break;
 	default:
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
@@ -164,7 +170,7 @@ std::string CreateHostapdConfig(
 		}
 		break;
 	case IHostapd::Band::BAND_ANY:
-		hw_mode_as_string = "hw_mode=any";
+		hw_mode_as_string = isWigig ? "hw_mode=ad" : "hw_mode=any";
 		if (iface_params.V1_0.channelParams.enableAcs) {
 			ht_cap_vht_oper_chwidth_as_string =
 			    "ht_capab=[HT40+]\n"

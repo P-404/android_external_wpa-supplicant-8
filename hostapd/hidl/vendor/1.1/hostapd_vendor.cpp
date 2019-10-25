@@ -185,6 +185,10 @@ std::string AddOrUpdateHostapdConfig(
 	const std::string ssid_as_string = ss.str();
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ssid2", ssid_as_string.c_str()));
 
+	const int wigigOpClass = 180;
+	bool isWigig = (channelParams.channel & (wigigOpClass << 16));
+	channelParams.channel &= ~(wigigOpClass << 16);
+
 	switch (v_iface_params.vendorEncryptionType) {
 	case IHostapdVendor::VendorEncryptionType::NONE:
 		// no security params
@@ -194,11 +198,13 @@ std::string AddOrUpdateHostapdConfig(
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "4"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "WPA-PSK"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.pskPassphrase.c_str()));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "rsn_pairwise", isWigig ? "GCMP" : "CCMP"));
 		break;
 	case IHostapdVendor::VendorEncryptionType::WPA2:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "WPA-PSK"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.pskPassphrase.c_str()));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "rsn_pairwise", isWigig ? "GCMP" : "CCMP"));
 		break;
 #ifdef CONFIG_SAE
 	case IHostapdVendor::VendorEncryptionType::SAE:
@@ -257,8 +263,10 @@ std::string AddOrUpdateHostapdConfig(
 	}
 
 	// reset fields to default
-	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[SHORT-GI-20] [GF] [DSSS_CCK-40] [LSIG-TXOP-PROT]"));
-	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "0"));
+	if (!isWigig) {
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[SHORT-GI-20] [GF] [DSSS_CCK-40] [LSIG-TXOP-PROT]"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "0"));
+	}
 
 	switch (channelParams.band) {
 	case IHostapd::Band::BAND_2_4_GHZ:
@@ -272,7 +280,7 @@ std::string AddOrUpdateHostapdConfig(
 		}
 		break;
 	case IHostapd::Band::BAND_ANY:
-		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "any"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", isWigig ? "ad" : "any"));
 		if (channelParams.enableAcs) {
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[HT40+]"));
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "1"));
