@@ -1423,7 +1423,8 @@ int ieee802_11_set_beacon(struct hostapd_data *hapd)
 
 	if (iface->current_mode &&
 	    hostapd_set_freq_params(&freq, iconf->hw_mode, iface->freq,
-				    iconf->channel, iconf->ieee80211n,
+				    iconf->channel, iconf->enable_edmg,
+				    iconf->edmg_channel, iconf->ieee80211n,
 				    iconf->ieee80211ac,
 				    iconf->secondary_channel,
 				    iconf->vht_oper_chwidth,

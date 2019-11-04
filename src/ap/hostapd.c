@@ -1537,6 +1537,9 @@ static int setup_interface2(struct hostapd_iface *iface)
 			wpa_printf(MSG_DEBUG, "Interface initialization will be completed in a callback (ACS)");
 			return 0;
 		}
+		ret = hostapd_check_edmg_capab(iface);
+		if (ret < 0)
+			goto fail;
 		ret = hostapd_check_ht_capab(iface);
 		if (ret < 0)
 			goto fail;
@@ -1861,6 +1864,8 @@ static int hostapd_setup_interface_complete_sync(struct hostapd_iface *iface,
 		if (!delay_apply_cfg &&
 		    hostapd_set_freq(hapd, hapd->iconf->hw_mode, iface->freq,
 				     hapd->iconf->channel,
+				     hapd->iconf->enable_edmg,
+				     hapd->iconf->edmg_channel,
 				     hapd->iconf->ieee80211n,
 				     hapd->iconf->ieee80211ac,
 				     hapd->iconf->secondary_channel,
@@ -3209,7 +3214,8 @@ static int hostapd_change_config_freq(struct hostapd_data *hapd,
 	if (old_params &&
 	    hostapd_set_freq_params(old_params, conf->hw_mode,
 				    hostapd_hw_get_freq(hapd, conf->channel),
-				    conf->channel, conf->ieee80211n,
+				    conf->channel, conf->enable_edmg,
+				    conf->edmg_channel, conf->ieee80211n,
 				    conf->ieee80211ac,
 				    conf->secondary_channel,
 				    conf->vht_oper_chwidth,
