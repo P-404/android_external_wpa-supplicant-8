@@ -1414,9 +1414,8 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 	if ((sel & WPA_KEY_MGMT_PSK) || (sel & WPA_KEY_MGMT_IEEE8021X)) {
 		adaptive_11r_ie = wpa_bss_get_vendor_ie(bss, ADAPTIVE_11R_IE_VENDOR_TYPE);
 
-		if (adaptive_11r_ie) {
-			/* TODO : Check for further IE Data ? Not an issue for now */
-			wpa_msg(wpa_s, MSG_ERROR, "Adapt 11r Enabled for BSS " MACSTR "",
+		if (adaptive_11r_ie && (adaptive_11r_ie[6] & 0x1)) {
+			wpa_msg(wpa_s, MSG_ERROR, "Adaptive 11r is Enabled for BSS " MACSTR "",
 				MAC2STR(bss->bssid));
 			sel = (sel & WPA_KEY_MGMT_PSK) ? WPA_KEY_MGMT_FT_PSK : WPA_KEY_MGMT_FT_IEEE8021X;
 			wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_ADAPT_FT_KEY_MGMT, 1);
