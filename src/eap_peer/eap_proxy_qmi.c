@@ -1354,7 +1354,13 @@ static void handle_qmi_eap_ind(qmi_client_type user_handle,
         cb_data->buflen = ind_buf_len;
         cb_data->userdata = ind_cb_data;
         dl_list_add(&eap_proxy->callback, &cb_data->list);
-        eloop_register_timeout(0, 0, __handle_qmi_eap_ind, cb_data, NULL);
+
+        // eloop is waiting for response. handle in calling thread
+        if (eap_proxy != NULL && eap_proxy->qmi_state == QMI_STATE_RESP_PENDING)
+             __handle_qmi_eap_ind(cb_data, NULL);
+        else
+            eloop_register_timeout(0, 0, __handle_qmi_eap_ind, cb_data, NULL);
+
         pthread_mutex_unlock(&eloop_lock);      // Unlock
 }
 
@@ -1527,7 +1533,7 @@ static enum eap_proxy_status eap_proxy_process(struct eap_proxy_sm  *eap_proxy,
                 eap_send_packet_resp = os_zalloc(sizeof(auth_send_eap_packet_resp_msg_v01));
                 if (eap_send_packet_resp == NULL) {
                         wpa_printf(MSG_ERROR, "Error allocating memory for eap_packet_resp_msg");
-                        return EAP_PROXY_FAILURE;
+                        goto fail;
                 }
         } else if (eapReqDataLen <= QMI_AUTH_EAP_REQ_PACKET_EXT_MAX_V01) {
                 os_memset(&eap_send_packet_ext_req, 0,
@@ -1538,7 +1544,7 @@ static enum eap_proxy_status eap_proxy_process(struct eap_proxy_sm  *eap_proxy,
                 eap_send_packet_ext_resp = os_zalloc(sizeof(auth_send_eap_packet_ext_resp_msg_v01));
                 if (eap_send_packet_ext_resp == NULL) {
                         wpa_printf(MSG_ERROR, "Error allocating memory for eap_send_packet_ext_resp");
-                        return EAP_PROXY_FAILURE;
+                        goto fail;
                 }
         }
 
@@ -1677,6 +1683,9 @@ fail:
             os_free(eap_send_packet_resp);
         if (eap_send_packet_ext_resp != NULL)
             os_free(eap_send_packet_ext_resp);
+
+        // Reset QMI state to IDLE to process next frame.
+        eap_proxy->qmi_state = QMI_STATE_IDLE;
 
         eap_proxy->proxy_state = EAP_PROXY_DISCARD;
         eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapNoResp, TRUE);
