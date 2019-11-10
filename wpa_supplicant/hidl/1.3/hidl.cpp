@@ -26,8 +26,9 @@ extern "C"
 using android::hardware::configureRpcThreadpool;
 using android::hardware::handleTransportPoll;
 using android::hardware::setupTransportPolling;
+using android::hardware::wifi::supplicant::V1_2::DppFailureCode;
+using android::hardware::wifi::supplicant::V1_2::DppProgressCode;
 using android::hardware::wifi::supplicant::V1_3::implementation::HidlManager;
-using namespace android::hardware::wifi::supplicant::V1_2;
 
 static void wpas_hidl_notify_dpp_failure(struct wpa_supplicant *wpa_s, DppFailureCode code);
 static void wpas_hidl_notify_dpp_progress(struct wpa_supplicant *wpa_s, DppProgressCode code);
@@ -806,6 +807,24 @@ static void wpas_hidl_notify_dpp_progress(struct wpa_supplicant *wpa_s, DppProgr
 		return;
 
 	hidl_manager->notifyDppProgress(wpa_s, code);
+}
+
+void wpas_hidl_notify_pmk_cache_added(
+    struct wpa_supplicant *wpa_s,
+    struct rsn_pmksa_cache_entry *pmksa_entry)
+{
+	if (!wpa_s || !pmksa_entry)
+		return;
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	wpa_printf(
+	    MSG_DEBUG,
+	    "Notifying PMK cache added event");
+
+	hidl_manager->notifyPmkCacheAdded(wpa_s, pmksa_entry);
 }
 //Vendor DPP Notifications
 void wpas_hidl_notify_dpp_conf(

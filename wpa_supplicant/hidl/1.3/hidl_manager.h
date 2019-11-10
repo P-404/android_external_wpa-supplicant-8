@@ -16,11 +16,12 @@
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantP2pIfaceCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantP2pNetworkCallback.h>
-#include <android/hardware/wifi/supplicant/1.1/ISupplicantStaIfaceCallback.h>
+#include <android/hardware/wifi/supplicant/1.0/ISupplicantStaIfaceCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaNetworkCallback.h>
 
 #include "p2p_iface.h"
 #include "p2p_network.h"
+#include "rsn_supp/pmksa_cache.h"
 #include "sta_iface.h"
 #include "sta_network.h"
 #include "supplicant.h"
@@ -46,12 +47,12 @@ namespace wifi {
 namespace supplicant {
 namespace V1_3 {
 namespace implementation {
-using namespace android::hardware::wifi::supplicant::V1_2;
+using V1_0::ISupplicant;
 using V1_0::ISupplicantP2pIface;
+using V1_0::ISupplicantStaIface;
 using V1_0::ISupplicantStaIfaceCallback;
-using V1_1::ISupplicant;
-using V1_1::ISupplicantStaIface;
-using V1_2::ISupplicantStaNetwork;
+using V1_0::P2pGroupCapabilityMask;
+using V1_0::WpsConfigMethods;
 #ifdef SUPPLICANT_VENDOR_HIDL
 using namespace vendor::qti::hardware::wifi::supplicantvendor::V2_0::Implementation;
 using namespace vendor::qti::hardware::wifi::supplicantvendor::V2_1::Implementation;
@@ -148,6 +149,8 @@ public:
 	void notifyDppConfigSent(struct wpa_supplicant *wpa_s);
 	void notifyDppFailure(struct wpa_supplicant *wpa_s, DppFailureCode code);
 	void notifyDppProgress(struct wpa_supplicant *wpa_s, DppProgressCode code);
+	void notifyPmkCacheAdded(struct wpa_supplicant *wpa_s,
+			struct rsn_pmksa_cache_entry *pmksa_entry);
 
 	// Methods called from hidl objects.
 	void notifyExtRadioWorkStart(struct wpa_supplicant *wpa_s, uint32_t id);
@@ -251,7 +254,12 @@ private:
 	    const std::string &ifname,
 	    const std::function<android::hardware::Return<void>(
 	    android::sp<V1_2::ISupplicantStaIfaceCallback>)> &method);
-        void callWithEachP2pNetworkCallback(
+	template <class CallbackTypeDerived>
+	void callWithEachStaIfaceCallbackDerived(
+	    const std::string &ifname,
+	    const std::function<
+		Return<void>(android::sp<CallbackTypeDerived>)> &method);
+	void callWithEachP2pNetworkCallback(
 	    const std::string &ifname, int network_id,
 	    const std::function<android::hardware::Return<void>(
 		android::sp<ISupplicantP2pNetworkCallback>)> &method);

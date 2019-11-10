@@ -36,9 +36,9 @@ namespace wifi {
 namespace supplicant {
 namespace V1_3 {
 namespace implementation {
-using namespace android::hardware::wifi::supplicant::V1_0;
-using namespace android::hardware::wifi::supplicant::V1_1;
-using namespace android::hardware::wifi::supplicant::V1_2;
+using V1_0::ISupplicantStaNetworkCallback;
+using V1_2::DppFailureCode;
+using V1_2::DppProgressCode;
 
 /**
  * Implementation of StaNetwork hidl object. Each unique hidl
@@ -230,6 +230,8 @@ public:
 	    OcspType ocspType, setOcsp_cb _hidl_cb) override;
 	Return<void> getOcsp(
 	    getOcsp_cb _hidl_cb) override;
+	Return<void> setPmkCache(const hidl_vec<uint8_t>& serializedEntry,
+			setPmkCache_cb _hidl_cb) override;
 
 private:
 	// Corresponding worker functions for the HIDL methods.
@@ -348,6 +350,7 @@ private:
 	std::pair<SupplicantStatus, uint32_t> getGroupMgmtCipherInternal();
 	SupplicantStatus setOcspInternal(OcspType ocspType);
 	std::pair<SupplicantStatus, OcspType> getOcspInternal();
+	SupplicantStatus setPmkCacheInternal(const std::vector<uint8_t>& serialziedEntry);
 
 	struct wpa_ssid* retrieveNetworkPtr();
 	struct wpa_supplicant* retrieveIfacePtr();

@@ -13,7 +13,7 @@
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantIface.h>
 #include <android/hardware/wifi/supplicant/1.0/types.h>
-#include <android/hardware/wifi/supplicant/1.2/ISupplicant.h>
+#include <android/hardware/wifi/supplicant/1.3/ISupplicant.h>
 #include <android-base/macros.h>
 #include <hidl/Status.h>
 
@@ -31,14 +31,15 @@ namespace wifi {
 namespace supplicant {
 namespace V1_3 {
 namespace implementation {
-using namespace android::hardware::wifi::supplicant::V1_0;
+using V1_0::ISupplicantCallback;
+using V1_0::ISupplicantIface;
 
 /**
  * Implementation of the supplicant hidl object. This hidl
  * object is used core for global control operations on
  * wpa_supplicant.
  */
-class Supplicant : public V1_2::ISupplicant
+class Supplicant : public V1_3::ISupplicant
 {
 public:
 	Supplicant(struct wpa_global* global);

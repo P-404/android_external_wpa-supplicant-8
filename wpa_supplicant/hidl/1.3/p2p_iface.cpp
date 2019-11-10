@@ -225,6 +225,12 @@ int joinScanReq(
 	size_t ielen;
 	unsigned int bands;
 
+	if (!wpa_s->global->p2p) {
+		wpa_printf(MSG_ERROR,
+		    "P2P: P2P interface is gone, cancel join scan");
+		return -ENXIO;
+	}
+
 	os_memset(&params, 0, sizeof(params));
 	if (ssid.size() > 0) {
 		params.ssids[0].ssid = ssid.data();
@@ -386,6 +392,7 @@ namespace supplicant {
 namespace V1_3 {
 namespace implementation {
 using hidl_return_util::validateAndCall;
+using V1_0::SupplicantStatusCode;
 
 P2pIface::P2pIface(struct wpa_global* wpa_global, const char ifname[])
     : wpa_global_(wpa_global), ifname_(ifname), is_valid_(true)

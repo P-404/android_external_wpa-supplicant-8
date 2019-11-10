@@ -22,12 +22,16 @@ extern "C"
 #include "wps_supplicant.h"
 #include "dpp_supplicant.h"
 #include "dpp.h"
+#include "rsn_supp/wpa.h"
+#include "rsn_supp/pmksa_cache.h"
 }
 
 namespace {
 using android::hardware::wifi::supplicant::V1_0::SupplicantStatus;
 using android::hardware::wifi::supplicant::V1_0::SupplicantStatusCode;
-using android::hardware::wifi::supplicant::V1_2::ISupplicantStaIface;
+using android::hardware::wifi::supplicant::V1_3::ISupplicantStaIface;
+using android::hardware::wifi::supplicant::V1_3::ConnectionCapabilities;
+using android::hardware::wifi::supplicant::V1_3::WifiTechnology;
 using android::hardware::wifi::supplicant::V1_3::implementation::HidlManager;
 
 constexpr uint32_t kMaxAnqpElems = 100;
@@ -161,9 +165,6 @@ namespace supplicant {
 namespace V1_3 {
 namespace implementation {
 using hidl_return_util::validateAndCall;
-
-using namespace android::hardware::wifi::supplicant::V1_0;
-using namespace android::hardware::wifi::supplicant::V1_1;
 using V1_0::ISupplicantStaIfaceCallback;
 
 StaIface::StaIface(struct wpa_global *wpa_global, const char ifname[])
@@ -247,6 +248,16 @@ Return<void> StaIface::registerCallback_1_2(
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
 	    &StaIface::registerCallbackInternal, _hidl_cb, callback_1_1);
+}
+
+Return<void> StaIface::registerCallback_1_3(
+    const sp<V1_3::ISupplicantStaIfaceCallback> &callback,
+    registerCallback_cb _hidl_cb)
+{
+	sp<V1_3::ISupplicantStaIfaceCallback> callback_1_3 = callback;
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
+	    &StaIface::registerCallbackInternal, _hidl_cb, callback_1_3);
 }
 
 Return<void> StaIface::reassociate(reassociate_cb _hidl_cb)
@@ -601,6 +612,14 @@ StaIface::addNetworkInternal()
 		return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, network};
 	}
 	return {{SupplicantStatusCode::SUCCESS, ""}, network};
+}
+
+Return<void> StaIface::getConnectionCapabilities(
+    getConnectionCapabilities_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_UNKNOWN,
+	    &StaIface::getConnectionCapabilitiesInternal, _hidl_cb);
 }
 
 SupplicantStatus StaIface::removeNetworkInternal(SupplicantNetworkId id)
@@ -1299,6 +1318,28 @@ SupplicantStatus StaIface::stopDppInitiatorInternal()
 #else
 	return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 #endif
+}
+
+std::pair<SupplicantStatus, ConnectionCapabilities>
+StaIface::getConnectionCapabilitiesInternal()
+{
+    struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+    struct ConnectionCapabilities capa;
+
+    if (wpa_s->connection_set) {
+        if (wpa_s->connection_he) {
+            capa.technology = WifiTechnology::HE;
+        } else if (wpa_s->connection_vht) {
+            capa.technology = WifiTechnology::VHT;
+        } else if (wpa_s->connection_ht) {
+           capa.technology = WifiTechnology::HT;
+        } else {
+           capa.technology = WifiTechnology::LEGACY;
+        }
+    } else {
+        capa.technology = WifiTechnology::UNKNOWN;
+    }
+    return {{SupplicantStatusCode::SUCCESS, ""}, capa};
 }
 
 /**
