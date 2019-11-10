@@ -102,9 +102,9 @@ std::string CreateHostapdConfig(
 	}
 	const std::string ssid_as_string = ss.str();
 
-	const int wigigOpClass = 180;
-	bool isWigig = (iface_params.V1_0.channelParams.channel & (wigigOpClass << 16));
-	iface_params.V1_0.channelParams.channel &= ~(wigigOpClass << 16);
+	const int wigigOpClass = (180 << 16);
+	bool isWigig = ((iface_params.V1_0.channelParams.channel & 0xFF0000) == wigigOpClass);
+	iface_params.V1_0.channelParams.channel &= 0xFFFF;
 
 	// Encryption config string
 	std::string encryption_config_as_string;
