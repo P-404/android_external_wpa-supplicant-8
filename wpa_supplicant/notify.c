@@ -81,13 +81,13 @@ int wpas_notify_iface_added(struct wpa_supplicant *wpa_s)
 
 void wpas_notify_iface_removed(struct wpa_supplicant *wpa_s)
 {
-	if (wpa_s->p2p_mgmt)
-		return;
-
 #ifdef CONFIG_HIDL
 	/* HIDL interface wants to keep track of the P2P mgmt iface. */
 	wpas_hidl_unregister_interface(wpa_s);
 #endif
+
+	if (wpa_s->p2p_mgmt)
+		return;
 
 	/* unregister interface in new DBus ctrl iface */
 	wpas_dbus_unregister_interface(wpa_s);
