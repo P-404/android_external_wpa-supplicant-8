@@ -273,20 +273,37 @@ Supplicant::addInterfaceInternal(const IfaceInfo& iface_info)
 
 	struct wpa_interface iface_params = {};
 	iface_params.driver = kIfaceDriverName;
+	std::string p2pConfFile, p2pOverlayFile;
 	if (iface_info.type == IfaceType::P2P) {
+
+		// if hidl started with a non-default service name,
+		// use service-specific conf file names in order to support
+		// multiple instances of P2P HAL
+		if (wpa_global_->params.hidl_service_name) {
+			p2pConfFile = base::Dirname(kP2pIfaceConfPath) +
+				"/p2p_supplicant_" +
+				wpa_global_->params.hidl_service_name +
+				".conf";
+			p2pOverlayFile = base::Dirname(kP2pIfaceConfOverlayPath) +
+				"/p2p_supplicant_overlay_" +
+				wpa_global_->params.hidl_service_name;
+		} else {
+			p2pConfFile = kP2pIfaceConfPath;
+			p2pOverlayFile = kP2pIfaceConfOverlayPath;
+		}
 		if (ensureConfigFileExists(
-			kP2pIfaceConfPath, kOldP2pIfaceConfPath) != 0) {
+			p2pConfFile, kOldP2pIfaceConfPath) != 0) {
 			wpa_printf(
 			    MSG_ERROR, "Conf file does not exists: %s",
-			    kP2pIfaceConfPath);
+			    p2pConfFile.c_str());
 			return {{SupplicantStatusCode::FAILURE_UNKNOWN,
 				 "Conf file does not exist"},
 				{}};
 		}
-		iface_params.confname = kP2pIfaceConfPath;
-		int ret = access(kP2pIfaceConfOverlayPath, R_OK);
+		iface_params.confname = p2pConfFile.c_str();
+		int ret = access(p2pOverlayFile.c_str(), R_OK);
 		if (ret == 0) {
-			iface_params.confanother = kP2pIfaceConfOverlayPath;
+			iface_params.confanother = p2pOverlayFile.c_str();
 		}
 	} else {
 		if (ensureConfigFileExists(
