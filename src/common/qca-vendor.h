@@ -72,7 +72,7 @@ enum qca_radiotap_vendor_ids {
  *
  * @QCA_NL80211_VENDOR_SUBCMD_DO_ACS: ACS command/event which is used to
  *	invoke the ACS function in device and pass selected channels to
- *	hostapd.
+ *	hostapd. Uses enum qca_wlan_vendor_attr_acs_offload attributes.
  *
  * @QCA_NL80211_VENDOR_SUBCMD_GET_FEATURES: Command to get the features
  *	supported by the driver. enum qca_wlan_vendor_features defines
@@ -169,6 +169,11 @@ enum qca_radiotap_vendor_ids {
  *	link properties of the respective interface. As an event, is used
  *	to notify the connected station's status. The attributes for this
  *	command are defined in enum qca_wlan_vendor_attr_link_properties.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_ACS_POLICY: This command is used to configure
+ *	DFS policy and channel hint for ACS operation. This command uses the
+ *	attributes defined in enum qca_wlan_vendor_attr_acs_config and
+ *	enum qca_acs_dfs_mode.
  *
  * @QCA_NL80211_VENDOR_SUBCMD_P2P_LISTEN_OFFLOAD_START: Command used to
  *	start the P2P Listen offload function in device and pass the listen
@@ -584,10 +589,26 @@ enum qca_radiotap_vendor_ids {
  *	by the firmware to user space for persistent storage. The attributes
  *	defined in enum qca_vendor_attr_interop_issues_ap are used to deliver
  *	the parameters.
- * @QCA_NL80211_VENDOR_SUBCMD_OEM_DATA: This command is used to send OEM data
- *	binary blobs from application/service to firmware. The attributes
- *	defined in enum qca_wlan_vendor_attr_oem_data_params are used to deliver
- *	the parameters.
+ * @QCA_NL80211_VENDOR_SUBCMD_OEM_DATA: This command/event is used to
+ *	send/receive OEM data binary blobs to/from application/service to/from
+ *	firmware. The attributes defined in enum
+ *	qca_wlan_vendor_attr_oem_data_params are used to deliver the
+ *	parameters.
+ * @QCA_NL80211_VENDOR_SUBCMD_AVOID_FREQUENCY_EXT: This command/event is used
+ *	to send/receive avoid frequency data using
+ *	enum qca_wlan_vendor_attr_avoid_frequency_ext.
+ *	This new command is alternative to existing command
+ *	QCA_NL80211_VENDOR_SUBCMD_AVOID_FREQUENCY since existing command/event
+ *	is using stream of bytes instead of structured data using vendor
+ *	attributes.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_ADD_STA_NODE: This vendor subcommand is used to
+ *	add the STA node details in driver/firmware. Attributes for this event
+ *	are specified in enum qca_wlan_vendor_attr_add_sta_node_params.
+ * @QCA_NL80211_VENDOR_SUBCMD_BTC_CHAIN_MODE: This command is used to set BT
+ *	coex chain mode from application/service.
+ *	The attributes defined in enum qca_vendor_attr_btc_chain_mode are used
+ *	to deliver the parameters.
  */
 enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_UNSPEC = 0,
@@ -687,7 +708,8 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_SET_TXPOWER_SCALE = 109,
 	/* 110..114 - reserved for QCA */
 	QCA_NL80211_VENDOR_SUBCMD_SET_TXPOWER_DECR_DB = 115,
-	/* 116..117 - reserved for QCA */
+	QCA_NL80211_VENDOR_SUBCMD_ACS_POLICY = 116,
+	/* 117 - reserved for QCA */
 	QCA_NL80211_VENDOR_SUBCMD_SET_SAP_CONFIG = 118,
 	QCA_NL80211_VENDOR_SUBCMD_TSF = 119,
 	QCA_NL80211_VENDOR_SUBCMD_WISA = 120,
@@ -759,6 +781,9 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_BEACON_REPORTING = 180,
 	QCA_NL80211_VENDOR_SUBCMD_INTEROP_ISSUES_AP = 181,
 	QCA_NL80211_VENDOR_SUBCMD_OEM_DATA = 182,
+	QCA_NL80211_VENDOR_SUBCMD_AVOID_FREQUENCY_EXT = 183,
+	QCA_NL80211_VENDOR_SUBCMD_ADD_STA_NODE = 184,
+	QCA_NL80211_VENDOR_SUBCMD_BTC_CHAIN_MODE = 185,
 };
 
 enum qca_wlan_vendor_attr {
@@ -1095,31 +1120,162 @@ enum qca_wlan_vendor_attr_p2p_listen_offload {
 	QCA_WLAN_VENDOR_ATTR_P2P_LISTEN_OFFLOAD_AFTER_LAST - 1
 };
 
+/**
+ * enum qca_wlan_vendor_attr_acs_offload - Defines attributes to be used with
+ * vendor command/event QCA_NL80211_VENDOR_SUBCMD_DO_ACS.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL: Required (u8).
+ * Used with event to notify the primary channel number selected in ACS
+ * operation.
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL is deprecated; use
+ * QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_FREQUENCY instead.
+ * To maintain backward compatibility, QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL
+ * is still used if either of the driver or user space application doesn't
+ * support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL: Required (u8).
+ * Used with event to notify the secondary channel number selected in ACS
+ * operation.
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL is deprecated; use
+ * QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_FREQUENCY instead.
+ * To maintain backward compatibility,
+ * QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL is still used if either of
+ * the driver or user space application doesn't support 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE: Required (u8).
+ * (a) Used with command to configure hw_mode from
+ * enum qca_wlan_vendor_acs_hw_mode for ACS operation.
+ * (b) Also used with event to notify the hw_mode of selected primary channel
+ * in ACS operation.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_HT_ENABLED: Flag attribute.
+ * Used with command to configure ACS operation for HT mode.
+ * Disable (flag attribute not present) - HT disabled and
+ * Enable (flag attribute present) - HT enabled.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_HT40_ENABLED: Flag attribute.
+ * Used with command to configure ACS operation for HT40 mode.
+ * Disable (flag attribute not present) - HT40 disabled and
+ * Enable (flag attribute present) - HT40 enabled.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_VHT_ENABLED: Flag attribute.
+ * Used with command to configure ACS operation for VHT mode.
+ * Disable (flag attribute not present) - VHT disabled and
+ * Enable (flag attribute present) - VHT enabled.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH: Optional (u16) with command and
+ * mandatory with event.
+ * If specified in command path, ACS operation is configured with the given
+ * channel width (in MHz).
+ * In event path, specifies the channel width of the primary channel selected.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST: Required and type is NLA_UNSPEC.
+ * Used with command to configure channel list using an array of
+ * channel numbers (u8).
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * the driver mandates use of QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST whereas
+ * QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST is optional.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL: Required (u8).
+ * Used with event to notify the VHT segment 0 center channel number selected in
+ * ACS operation.
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL is deprecated; use
+ * QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_FREQUENCY instead.
+ * To maintain backward compatibility,
+ * QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL is still used if either of
+ * the driver or user space application doesn't support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL: Required (u8).
+ * Used with event to notify the VHT segment 1 center channel number selected in
+ * ACS operation.
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL is deprecated; use
+ * QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_FREQUENCY instead.
+ * To maintain backward compatibility,
+ * QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL is still used if either of
+ * the driver or user space application doesn't support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST: Required and type is NLA_UNSPEC.
+ * Used with command to configure the channel list using an array of channel
+ * center frequencies in MHz (u32).
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * the driver first parses the frequency list and if it fails to get a frequency
+ * list, parses the channel list specified using
+ * QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST (considers only 2 GHz and 5 GHz channels in
+ * QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST).
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_FREQUENCY: Required (u32).
+ * Used with event to notify the primary channel center frequency (MHz) selected
+ * in ACS operation.
+ * Note: If the driver supports the 6 GHz band, the event sent from the driver
+ * includes this attribute along with QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_FREQUENCY: Required (u32).
+ * Used with event to notify the secondary channel center frequency (MHz)
+ * selected in ACS operation.
+ * Note: If the driver supports the 6 GHz band, the event sent from the driver
+ * includes this attribute along with
+ * QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_FREQUENCY: Required (u32).
+ * Used with event to notify the VHT segment 0 center channel frequency (MHz)
+ * selected in ACS operation.
+ * Note: If the driver supports the 6 GHz band, the event sent from the driver
+ * includes this attribute along with
+ * QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_FREQUENCY: Required (u32).
+ * Used with event to notify the VHT segment 1 center channel frequency (MHz)
+ * selected in ACS operation.
+ * Note: If the driver supports the 6 GHz band, the event sent from the driver
+ * includes this attribute along with
+ * QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL.
+ */
 enum qca_wlan_vendor_attr_acs_offload {
 	QCA_WLAN_VENDOR_ATTR_ACS_CHANNEL_INVALID = 0,
-	QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL,
-	QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL,
-	QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE,
-	QCA_WLAN_VENDOR_ATTR_ACS_HT_ENABLED,
-	QCA_WLAN_VENDOR_ATTR_ACS_HT40_ENABLED,
-	QCA_WLAN_VENDOR_ATTR_ACS_VHT_ENABLED,
-	QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH,
-	QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST,
-	QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL,
-	QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL,
-	QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST,
+	QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL = 1,
+	QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL = 2,
+	QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE = 3,
+	QCA_WLAN_VENDOR_ATTR_ACS_HT_ENABLED = 4,
+	QCA_WLAN_VENDOR_ATTR_ACS_HT40_ENABLED = 5,
+	QCA_WLAN_VENDOR_ATTR_ACS_VHT_ENABLED = 6,
+	QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH = 7,
+	QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST = 8,
+	QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL = 9,
+	QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL = 10,
+	QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST = 11,
+	QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_FREQUENCY = 12,
+	QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_FREQUENCY = 13,
+	QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_FREQUENCY = 14,
+	QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_FREQUENCY = 15,
+
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_ACS_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_ACS_MAX =
 	QCA_WLAN_VENDOR_ATTR_ACS_AFTER_LAST - 1
 };
 
+/**
+ * enum qca_wlan_vendor_acs_hw_mode - Defines HW mode to be used with the
+ * vendor command/event QCA_NL80211_VENDOR_SUBCMD_DO_ACS.
+ *
+ * @QCA_ACS_MODE_IEEE80211B: 802.11b mode
+ * @QCA_ACS_MODE_IEEE80211G: 802.11g mode
+ * @QCA_ACS_MODE_IEEE80211A: 802.11a mode
+ * @QCA_ACS_MODE_IEEE80211AD: 802.11ad mode
+ * @QCA_ACS_MODE_IEEE80211ANY: all modes
+ * @QCA_ACS_MODE_IEEE80211AX: 802.11ax mode
+ */
 enum qca_wlan_vendor_acs_hw_mode {
 	QCA_ACS_MODE_IEEE80211B,
 	QCA_ACS_MODE_IEEE80211G,
 	QCA_ACS_MODE_IEEE80211A,
 	QCA_ACS_MODE_IEEE80211AD,
 	QCA_ACS_MODE_IEEE80211ANY,
+	QCA_ACS_MODE_IEEE80211AX,
 };
 
 /**
@@ -1151,6 +1307,8 @@ enum qca_wlan_vendor_acs_hw_mode {
  * @QCA_WLAN_VENDOR_FEATURE_SELF_MANAGED_REGULATORY: Device supports self
  *	managed regulatory.
  * @QCA_WLAN_VENDOR_FEATURE_TWT: Device supports TWT (Target Wake Time).
+ * @QCA_WLAN_VENDOR_FEATURE_11AX: Device supports 802.11ax (HE)
+ * @QCA_WLAN_VENDOR_FEATURE_6GHZ_SUPPORT: Device supports 6 GHz band operation
  * @NUM_QCA_WLAN_VENDOR_FEATURES: Number of assigned feature bits
  */
 enum qca_wlan_vendor_features {
@@ -1163,6 +1321,8 @@ enum qca_wlan_vendor_features {
 	QCA_WLAN_VENDOR_FEATURE_OCE_STA_CFON            = 6,
 	QCA_WLAN_VENDOR_FEATURE_SELF_MANAGED_REGULATORY = 7,
 	QCA_WLAN_VENDOR_FEATURE_TWT 			= 8,
+	QCA_WLAN_VENDOR_FEATURE_11AX			= 9,
+	QCA_WLAN_VENDOR_FEATURE_6GHZ_SUPPORT		= 10,
 	NUM_QCA_WLAN_VENDOR_FEATURES /* keep last */
 };
 
@@ -1887,10 +2047,23 @@ enum qca_wlan_vendor_attr_config {
 
 /**
  * enum qca_wlan_vendor_attr_sap_config - Parameters for AP configuration
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_CHANNEL: Optional (u8)
+ * Channel number on which Access Point should restart.
+ * Note: If both the driver and user space application supports the 6 GHz band,
+ * this attribute is deprecated and QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_FREQUENCY
+ * should be used.
+ * To maintain backward compatibility, QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_CHANNEL
+ * is still used if either of the driver or user space application doesn't
+ * support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_FREQUENCY: Optional (u32)
+ * Channel center frequency (MHz) on which the access point should restart.
  */
 enum qca_wlan_vendor_attr_sap_config {
 	QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_INVALID = 0,
-	/* 1 - reserved for QCA */
+	QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_CHANNEL = 1,
+
 	/* List of frequencies on which AP is expected to operate.
 	 * This is irrespective of ACS configuration. This list is a priority
 	 * based one and is looked for before the AP is created to ensure the
@@ -1898,6 +2071,7 @@ enum qca_wlan_vendor_attr_sap_config {
 	 * the system.
 	 */
 	QCA_WLAN_VENDOR_ATTR_SAP_MANDATORY_FREQUENCY_LIST = 2,
+	QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_FREQUENCY = 3,
 
 	QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_MAX =
@@ -1974,6 +2148,54 @@ enum qca_wlan_set_qdepth_thresh_attr {
 	QCA_WLAN_VENDOR_ATTR_QDEPTH_THRESH_LAST,
 	QCA_WLAN_VENDOR_ATTR_QDEPTH_THRESH_MAX =
 		QCA_WLAN_VENDOR_ATTR_QDEPTH_THRESH_LAST - 1,
+};
+
+/**
+ * enum qca_acs_dfs_mode - Defines different types of DFS channel
+ * configurations for ACS operation.
+ *
+ * @QCA_ACS_DFS_MODE_NONE: Refer to invalid DFS mode
+ * @QCA_ACS_DFS_MODE_ENABLE: Consider DFS channels in ACS operation
+ * @QCA_ACS_DFS_MODE_DISABLE: Do not consider DFS channels in ACS operation
+ * @QCA_ACS_DFS_MODE_DEPRIORITIZE: Deprioritize DFS channels in ACS operation
+ */
+enum qca_acs_dfs_mode {
+	QCA_ACS_DFS_MODE_NONE = 0,
+	QCA_ACS_DFS_MODE_ENABLE = 1,
+	QCA_ACS_DFS_MODE_DISABLE = 2,
+	QCA_ACS_DFS_MODE_DEPRIORITIZE = 3,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_acs_config - Defines Configuration attributes
+ * used by the vendor command QCA_NL80211_VENDOR_SUBCMD_ACS_POLICY.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_DFS_MODE: Required (u8)
+ * DFS mode for ACS operation from enum qca_acs_dfs_mode.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_CHANNEL_HINT: Required (u8)
+ * channel number hint for ACS operation, if valid channel is specified then
+ * ACS operation gives priority to this channel.
+ * Note: If both the driver and user space application supports the 6 GHz band,
+ * this attribute is deprecated and QCA_WLAN_VENDOR_ATTR_ACS_FREQUENCY_HINT
+ * should be used.
+ * To maintain backward compatibility, QCA_WLAN_VENDOR_ATTR_ACS_CHANNEL_HINT
+ * is still used if either of the driver or user space application doesn't
+ * support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_ACS_FREQUENCY_HINT: Required (u32).
+ * Channel center frequency (MHz) hint for ACS operation, if a valid center
+ * frequency is specified, ACS operation gives priority to this channel.
+ */
+enum qca_wlan_vendor_attr_acs_config {
+	QCA_WLAN_VENDOR_ATTR_ACS_MODE_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_ACS_DFS_MODE = 1,
+	QCA_WLAN_VENDOR_ATTR_ACS_CHANNEL_HINT = 2,
+	QCA_WLAN_VENDOR_ATTR_ACS_FREQUENCY_HINT = 3,
+
+	QCA_WLAN_VENDOR_ATTR_ACS_DFS_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_ACS_DFS_MAX =
+		QCA_WLAN_VENDOR_ATTR_ACS_DFS_AFTER_LAST - 1,
 };
 
 /**
@@ -3378,7 +3600,7 @@ enum qca_scan_freq_list_type {
 /**
  * enum qca_vendor_attr_scan_freq_list_scheme: Frequency list scheme
  *
- * @QCA_ATTR_ROAM_CONTROL_SCAN_FREQ_LIST: An array of unsigned 32-bit values.
+ * @QCA_ATTR_ROAM_CONTROL_SCAN_FREQ_LIST: Nested attribute of u32 values
  *	List of frequencies in MHz to be considered for a roam scan.
  *
  * @QCA_ATTR_ROAM_CONTROL_SCAN_FREQ_LIST_TYPE: Unsigned 32-bit value.
@@ -4270,6 +4492,44 @@ enum qca_wlan_vendor_acs_select_reason {
 	QCA_WLAN_VENDOR_ACS_SELECT_REASON_DFS,
 	/* Represents the reason that LTE co-exist in the current band. */
 	QCA_WLAN_VENDOR_ACS_SELECT_REASON_LTE_COEX,
+	/* Represents the reason that generic, uncategorized interference has
+	 * been found in the current channel.
+	 */
+	QCA_WLAN_VENDOR_ACS_SELECT_REASON_GENERIC_INTERFERENCE,
+	/* Represents the reason that excessive 802.11 interference has been
+	 * found in the current channel.
+	 */
+	QCA_WLAN_VENDOR_ACS_SELECT_REASON_80211_INTERFERENCE,
+	/* Represents the reason that generic Continuous Wave (CW) interference
+	 * has been found in the current channel.
+	 */
+	QCA_WLAN_VENDOR_ACS_SELECT_REASON_CW_INTERFERENCE,
+	/* Represents the reason that Microwave Oven (MWO) interference has been
+	 * found in the current channel.
+	 */
+	QCA_WLAN_VENDOR_ACS_SELECT_REASON_MWO_INTERFERENCE,
+	/* Represents the reason that generic Frequency-Hopping Spread Spectrum
+	 * (FHSS) interference has been found in the current channel. This may
+	 * include 802.11 waveforms.
+	 */
+	QCA_WLAN_VENDOR_ACS_SELECT_REASON_FHSS_INTERFERENCE,
+	/* Represents the reason that non-802.11 generic Frequency-Hopping
+	 * Spread Spectrum (FHSS) interference has been found in the current
+	 * channel.
+	 */
+	QCA_WLAN_VENDOR_ACS_SELECT_REASON_NON_80211_FHSS_INTERFERENCE,
+	/* Represents the reason that generic Wideband (WB) interference has
+	 * been found in the current channel. This may include 802.11 waveforms.
+	 */
+	QCA_WLAN_VENDOR_ACS_SELECT_REASON_WB_INTERFERENCE,
+	/* Represents the reason that non-802.11 generic Wideband (WB)
+	 * interference has been found in the current channel.
+	 */
+	QCA_WLAN_VENDOR_ACS_SELECT_REASON_NON_80211_WB_INTERFERENCE,
+	/* Represents the reason that Jammer interference has been found in the
+	 * current channel.
+	 */
+	QCA_WLAN_VENDOR_ACS_SELECT_REASON_JAMMER_INTERFERENCE,
 };
 
 /**
@@ -4437,6 +4697,46 @@ enum qca_wlan_vendor_external_acs_event_chan_info_attr {
 	 */
 	QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_FLAGS_2 = 11,
 
+	/*
+	 * VHT segment 0 in MHz (u32) and the attribute is mandatory.
+	 * Note: Event QCA_NL80211_VENDOR_SUBCMD_EXTERNAL_ACS includes
+	 * QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_FREQ_VHT_SEG_0
+	 * along with
+	 * QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_VHT_SEG_0.
+	 *
+	 * If both the driver and user-space application supports the 6 GHz
+	 * band, QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_VHT_SEG_0
+	 * is deprecated and
+	 * QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_FREQ_VHT_SEG_0
+	 * should be used.
+	 *
+	 * To maintain backward compatibility,
+	 * QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_FREQ_VHT_SEG_0
+	 * is still used if either of the driver or user space application
+	 * doesn't support the 6 GHz band.
+	 */
+	QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_FREQ_VHT_SEG_0 = 12,
+
+	/*
+	 * VHT segment 1 in MHz (u32) and the attribute is mandatory.
+	 * Note: Event QCA_NL80211_VENDOR_SUBCMD_EXTERNAL_ACS includes
+	 * QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_FREQ_VHT_SEG_1
+	 * along with
+	 * QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_VHT_SEG_1.
+	 *
+	 * If both the driver and user-space application supports the 6 GHz
+	 * band, QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_VHT_SEG_1
+	 * is deprecated and
+	 * QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_FREQ_VHT_SEG_1
+	 * should be considered.
+	 *
+	 * To maintain backward compatibility,
+	 * QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_FREQ_VHT_SEG_1
+	 * is still used if either of the driver or user space application
+	 * doesn't support the 6 GHz band.
+	 */
+	QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_FREQ_VHT_SEG_1 = 13,
+
 	/* keep last */
 	QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_LAST,
 	QCA_WLAN_VENDOR_EXTERNAL_ACS_EVENT_CHAN_INFO_ATTR_MAX =
@@ -4537,9 +4837,100 @@ enum qca_wlan_vendor_attr_external_acs_event {
 };
 
 /**
- * qca_wlan_vendor_attr_external_acs_channels: Attributes to vendor subcmd
+ * enum qca_wlan_vendor_attr_external_acs_channels: Attributes to vendor subcmd
  * QCA_NL80211_VENDOR_SUBCMD_EXTERNAL_ACS. This carries a list of channels
  * in priority order as decided after ACS operation in userspace.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_REASON: Required (u8).
+ * One of reason code from enum qca_wlan_vendor_acs_select_reason.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_LIST: Required
+ * Array of nested values for each channel with following attributes:
+ *     QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_PRIMARY,
+ *     QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_SECONDARY,
+ *     QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_CENTER_SEG0,
+ *     QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_CENTER_SEG1,
+ *     QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_WIDTH
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_LIST is deprecated and use
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_LIST.
+ * To maintain backward compatibility,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_LIST
+ * is still used if either of the driver or user space application doesn't
+ * support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_PRIMARY: Required (u8).
+ * Primary channel number
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_PRIMARY is deprecated and use
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_PRIMARY.
+ * To maintain backward compatibility,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_PRIMARY
+ * is still used if either of the driver or user space application doesn't
+ * support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_SECONDARY: Required (u8).
+ * Secondary channel number, required only for 160 and 80+80 MHz bandwidths.
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_SECONDARY is deprecated and use
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_SECONDARY.
+ * To maintain backward compatibility,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_SECONDARY
+ * is still used if either of the driver or user space application
+ * doesn't support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_CENTER_SEG0: Required (u8).
+ * VHT seg0 channel number
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_CENTER_SEG0 is deprecated and use
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_CENTER_SEG0.
+ * To maintain backward compatibility,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_CENTER_SEG0
+ * is still used if either of the driver or user space application
+ * doesn't support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_CENTER_SEG1: Required (u8).
+ * VHT seg1 channel number
+ * Note: If both the driver and user-space application supports the 6 GHz band,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_CENTER_SEG1 is deprecated and use
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_CENTER_SEG1.
+ * To maintain backward compatibility,
+ * QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_CENTER_SEG1
+ * is still used if either of the driver or user space application
+ * doesn't support the 6 GHz band.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_WIDTH: Required (u8).
+ * Takes one of enum nl80211_chan_width values.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_LIST: Required
+ * Array of nested values for each channel with following attributes:
+ *	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_PRIMARY in MHz (u32),
+ *	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_SECONDARY in MHz (u32),
+ *	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_CENTER_SEG0 in MHz (u32),
+ *	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_CENTER_SEG1 in MHz (u32),
+ *	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_WIDTH
+ * Note: If user-space application has no support of the 6 GHz band, this
+ * attribute is optional.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_PRIMARY: Required (u32)
+ * Primary channel frequency in MHz
+ * Note: If user-space application has no support of the 6 GHz band, this
+ * attribute is optional.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_SECONDARY: Required (u32)
+ * Secondary channel frequency in MHz used for HT 40 MHz channels.
+ * Note: If user-space application has no support of the 6 GHz band, this
+ * attribute is optional.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_CENTER_SEG0: Required (u32)
+ * VHT seg0 channel frequency in MHz
+ * Note: If user-space application has no support of the 6GHz band, this
+ * attribute is optional.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_CENTER_SEG1: Required (u32)
+ * VHT seg1 channel frequency in MHz
+ * Note: If user-space application has no support of the 6 GHz band, this
+ * attribute is optional.
  */
 enum qca_wlan_vendor_attr_external_acs_channels {
 	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_INVALID = 0,
@@ -4569,6 +4960,12 @@ enum qca_wlan_vendor_attr_external_acs_channels {
 	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_CENTER_SEG1 = 7,
 	/* Channel width (u8). Takes one of enum nl80211_chan_width values. */
 	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_WIDTH = 8,
+
+	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_LIST = 9,
+	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_PRIMARY = 10,
+	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_SECONDARY = 11,
+	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_CENTER_SEG0 = 12,
+	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_FREQUENCY_CENTER_SEG1 = 13,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_EXTERNAL_ACS_CHANNEL_LAST,
@@ -5087,8 +5484,18 @@ enum qca_wlan_vendor_attr_spectral_cap {
 	 * u8 attribute.
 	 */
 	QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CAP_DEFAULT_AGC_MAX_GAIN = 10,
-	/* Flag attribute to indicate agile spectral scan capability */
+	/* Flag attribute to indicate agile spectral scan capability
+	 * for 20/40/80 MHz modes.
+	 */
 	QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CAP_AGILE_SPECTRAL = 11,
+	/* Flag attribute to indicate agile spectral scan capability
+	 * for 160 MHz mode.
+	 */
+	QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CAP_AGILE_SPECTRAL_160 = 12,
+	/* Flag attribute to indicate agile spectral scan capability
+	 * for 80+80 MHz mode.
+	 */
+	QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CAP_AGILE_SPECTRAL_80_80 = 13,
 
 	QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CAP_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CAP_MAX =
@@ -7513,21 +7920,130 @@ enum qca_vendor_attr_interop_issues_ap {
 		QCA_WLAN_VENDOR_ATTR_INTEROP_ISSUES_AP_AFTER_LAST - 1
 };
 
-/*
- * enum qca_wlan_vendor_attr_oem_data_params - Used by the vendor command
+/**
+ * enum qca_vendor_oem_device_type - Represents the target device in firmware.
+ * It is used by QCA_WLAN_VENDOR_ATTR_OEM_DEVICE_INFO.
+ *
+ * @QCA_VENDOR_OEM_DEVICE_VIRTUAL: The command is intended for
+ * a virtual device.
+ *
+ * @QCA_VENDOR_OEM_DEVICE_PHYSICAL: The command is intended for
+ * a physical device.
+ */
+enum qca_vendor_oem_device_type {
+	QCA_VENDOR_OEM_DEVICE_VIRTUAL = 0,
+	QCA_VENDOR_OEM_DEVICE_PHYSICAL = 1,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_oem_data_params - Used by the vendor command/event
  * QCA_NL80211_VENDOR_SUBCMD_OEM_DATA.
  *
  * @QCA_WLAN_VENDOR_ATTR_OEM_DATA_CMD_DATA: The binary blob for the vendor
- * command QCA_NL80211_VENDOR_SUBCMD_OEM_DATA are carried through this attribute.
+ * command/event QCA_NL80211_VENDOR_SUBCMD_OEM_DATA are carried through this
+ * attribute.
  * NLA_BINARY attribute, the max size is 1024 bytes.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_OEM_DEVICE_INFO: The binary blob will be routed
+ * based on this field. This optional attribute is included to specify whether
+ * the device type is a virtual device or a physical device for the
+ * command/event. This attribute can be omitted for a virtual device (default)
+ * command/event.
+ * This u8 attribute is used to carry information for the device type using
+ * values defined by enum qca_vendor_oem_device_type.
  */
 enum qca_wlan_vendor_attr_oem_data_params {
 	QCA_WLAN_VENDOR_ATTR_OEM_DATA_INVALID = 0,
 	QCA_WLAN_VENDOR_ATTR_OEM_DATA_CMD_DATA = 1,
+	QCA_WLAN_VENDOR_ATTR_OEM_DEVICE_INFO = 2,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_OEM_DATA_PARAMS_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_OEM_DATA_PARAMS_MAX =
 		QCA_WLAN_VENDOR_ATTR_OEM_DATA_PARAMS_AFTER_LAST - 1
 };
+
+/**
+ * enum qca_wlan_vendor_attr_avoid_frequency_ext - Defines attributes to be
+ * used with vendor command/event QCA_NL80211_VENDOR_SUBCMD_AVOID_FREQUENCY_EXT.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_RANGE: Required
+ * Nested attribute containing multiple ranges with following attributes:
+ *	QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_START and
+ *	QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_END.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_START: Required (u32)
+ * Starting center frequency in MHz.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_END: Required (u32)
+ * Ending center frequency in MHz.
+ */
+enum qca_wlan_vendor_attr_avoid_frequency_ext {
+	QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_RANGE = 1,
+	QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_START = 2,
+	QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_END = 3,
+
+	QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_MAX =
+		QCA_WLAN_VENDOR_ATTR_AVOID_FREQUENCY_AFTER_LAST - 1
+};
+
+/*
+ * enum qca_wlan_vendor_attr_add_sta_node_params - Used by the vendor command
+ * QCA_NL80211_VENDOR_SUBCMD_ADD_STA_NODE.
+ */
+enum qca_wlan_vendor_attr_add_sta_node_params {
+	QCA_WLAN_VENDOR_ATTR_ADD_STA_NODE_INVALID = 0,
+	/* 6 byte MAC address of STA */
+	QCA_WLAN_VENDOR_ATTR_ADD_STA_NODE_MAC_ADDR = 1,
+	/* Authentication algorithm used by the station of size u16;
+	 * defined in enum nl80211_auth_type.
+	 */
+	QCA_WLAN_VENDOR_ATTR_ADD_STA_NODE_AUTH_ALGO = 2,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_ADD_STA_NODE_PARAM_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_ADD_STA_NODE_PARAM_MAX =
+		QCA_WLAN_VENDOR_ATTR_ADD_STA_NODE_PARAM_AFTER_LAST - 1
+};
+
+/**
+ * enum qca_btc_chain_mode - Specifies BT coex chain mode.
+ * This enum defines the valid set of values of BT coex chain mode.
+ * These values are used by attribute %QCA_VENDOR_ATTR_BTC_CHAIN_MODE of
+ * %QCA_NL80211_VENDOR_SUBCMD_BTC_CHAIN_MODE.
+ *
+ * @QCA_BTC_CHAIN_SHARED: chains of BT and WLAN 2.4G are shared.
+ * @QCA_BTC_CHAIN_SEPARATED: chains of BT and WLAN 2.4G are separated.
+ */
+enum qca_btc_chain_mode {
+	QCA_BTC_CHAIN_SHARED = 0,
+	QCA_BTC_CHAIN_SEPARATED = 1,
+};
+
+/**
+ * enum qca_vendor_attr_btc_chain_mode - Specifies attributes for BT coex
+ * chain mode.
+ * Attributes for data used by QCA_NL80211_VENDOR_SUBCMD_BTC_CHAIN_MODE.
+ *
+ * @QCA_VENDOR_ATTR_COEX_BTC_CHAIN_MODE: u32 attribute.
+ * Indicates the BT coex chain mode, are 32-bit values from
+ * enum qca_btc_chain_mode. This attribute is mandatory.
+ *
+ * @QCA_VENDOR_ATTR_COEX_BTC_CHAIN_MODE_RESTART: flag attribute.
+ * If set, vdev should be restarted when BT coex chain mode is updated.
+ * This attribute is optional.
+ */
+enum qca_vendor_attr_btc_chain_mode {
+	QCA_VENDOR_ATTR_BTC_CHAIN_MODE_INVALID = 0,
+	QCA_VENDOR_ATTR_BTC_CHAIN_MODE = 1,
+	QCA_VENDOR_ATTR_BTC_CHAIN_MODE_RESTART = 2,
+
+	/* Keep last */
+	QCA_VENDOR_ATTR_BTC_CHAIN_MODE_LAST,
+	QCA_VENDOR_ATTR_BTC_CHAIN_MODE_MAX =
+	QCA_VENDOR_ATTR_BTC_CHAIN_MODE_LAST - 1,
+};
+
 #endif /* QCA_VENDOR_H */
