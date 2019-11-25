@@ -46,6 +46,7 @@ extern "C" {
 #include "interworking.h"
 #include "hs20_supplicant.h"
 #include "wps_supplicant.h"
+#include "common/dpp.h"
 #include "dpp_supplicant.h"
 #ifdef CONFIG_DPP
 #include "common/dpp.h"
