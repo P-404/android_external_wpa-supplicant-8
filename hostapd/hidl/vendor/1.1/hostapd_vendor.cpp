@@ -198,7 +198,7 @@ std::string AddOrUpdateHostapdConfig(
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "4"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_key_mgmt", "WPA-PSK"));
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_passphrase", nw_params.pskPassphrase.c_str()));
-		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "rsn_pairwise", isWigig ? "GCMP" : "CCMP"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wpa_pairwise", isWigig ? "GCMP" : "TKIP CCMP"));
 		break;
 	case IHostapdVendor::VendorEncryptionType::WPA2:
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "security_mode", "3"));
