@@ -117,14 +117,14 @@ std::string CreateHostapdConfig(
 		    "wpa=3\n"
 		    "wpa_pairwise=%s\n"
 		    "wpa_passphrase=%s",
-		    isWigig ? "TKIP CCMP" : "GCMP", nw_params.pskPassphrase.c_str());
+		    isWigig ? "GCMP" : "TKIP CCMP", nw_params.pskPassphrase.c_str());
 		break;
 	case IHostapd::EncryptionType::WPA2:
 		encryption_config_as_string = StringPrintf(
 		    "wpa=2\n"
 		    "rsn_pairwise=%s\n"
 		    "wpa_passphrase=%s",
-		    isWigig ? "CCMP" : "GCMP", nw_params.pskPassphrase.c_str());
+		    isWigig ? "GCMP" : "CCMP", nw_params.pskPassphrase.c_str());
 		break;
 	default:
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
