@@ -499,6 +499,7 @@ std::string AddOrUpdateHostapdConfigV1_2(
 			}
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[HT40+]"));
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "1"));
+			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "op_class", "134"));
 		}
 	} else{
 		wpa_printf(MSG_ERROR, "Invalid band");
