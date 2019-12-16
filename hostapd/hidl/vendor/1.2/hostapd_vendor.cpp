@@ -484,9 +484,10 @@ std::string AddOrUpdateHostapdConfigV1_2(
 		}
 	} else if ((band & IHostapdVendor::BandMask::BAND_5_GHZ) != 0) {
 		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "hw_mode", "a"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "1"));
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "he_oper_chwidth", "1"));
 		if (channelParams.enableAcs) {
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ht_capab", "[HT40+]"));
-			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "vht_oper_chwidth", "1"));
 			if (freqlist_as_string.empty())
 			qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "freqlist", "4900-5900"));
 		}
