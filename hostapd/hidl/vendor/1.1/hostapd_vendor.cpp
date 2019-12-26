@@ -155,9 +155,18 @@ std::string AddOrUpdateHostapdConfig(
 	std::string dual_str;
 	std::string file_path;
 
+	const int wigigOpClass = (180 << 16);
+	bool isWigig = ((channelParams.channel & 0xFF0000) == wigigOpClass);
+	channelParams.channel &= 0xFFFF;
+
 	if (v_iface_params.VendorV1_0.bridgeIfaceName.empty()) {
-		file_path = StringPrintf(kConfFileNameFmt, "");
-		dual_str = "";
+		if (isWigig) {
+			file_path = StringPrintf(kConfFileNameFmt, "_60g");
+			dual_str = " 60g";
+		} else {
+			file_path = StringPrintf(kConfFileNameFmt, "");
+			dual_str = "";
+		}
 #ifdef CONFIG_OWE
 	} else if (!v_iface_params.oweTransIfaceName.empty()) {
 		// QSAP can't clear owe_transition_ifname and bridge fields
@@ -184,10 +193,6 @@ std::string AddOrUpdateHostapdConfig(
 	}
 	const std::string ssid_as_string = ss.str();
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ssid2", ssid_as_string.c_str()));
-
-	const int wigigOpClass = 180;
-	bool isWigig = (channelParams.channel & (wigigOpClass << 16));
-	channelParams.channel &= ~(wigigOpClass << 16);
 
 	switch (v_iface_params.vendorEncryptionType) {
 	case IHostapdVendor::VendorEncryptionType::NONE:
@@ -296,6 +301,8 @@ std::string AddOrUpdateHostapdConfig(
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ctrl_interface", "/data/vendor/wifi/hostapd/ctrl"));
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211n", iface_params.hwModeParams.enable80211N ? "1" : "0"));
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211ac", iface_params.hwModeParams.enable80211AC ? "1" : "0"));
+	if (isWigig)
+		qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ieee80211ax", "0"));
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "ignore_broadcast_ssid", nw_params.isHidden ? "1" : "0"));
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "wowlan_triggers", "any"));
 	qsap_cmd(StringPrintf(kQsapSetFmt, dual_mode_str, "accept_mac_file", "/data/vendor/wifi/hostapd/hostapd.accept"));
