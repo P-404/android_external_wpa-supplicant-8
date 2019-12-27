@@ -36,6 +36,28 @@ Return<void> call(
 }  // namespace hidl_return_util
 }  // namespace implementation
 }  // namespace V1_2
+
+// The IHostapdVendor HAL depends on a version of call() that uses the
+// IHostapd V1.0 HostapdStatus type.
+namespace V1_0 {
+namespace implementation {
+namespace hidl_return_util {
+/**
+ * These utility functions are used to invoke a method on the provided
+ * HIDL interface object.
+ */
+// Use for HIDL methods which return only an instance of HostapdStatus.
+template <typename ObjT, typename WorkFuncT, typename... Args>
+Return<void> call(
+    ObjT* obj, WorkFuncT&& work,
+    const std::function<void(const HostapdStatus&)>& hidl_cb, Args&&... args)
+{
+	hidl_cb((obj->*work)(std::forward<Args>(args)...));
+	return Void();
+}
+}  // namespace hidl_return_util
+}  // namespace implementation
+}  // namespace V1_0
 }  // namespace hostapd
 }  // namespace wifi
 }  // namespace hardware
