@@ -22,6 +22,7 @@ extern "C"
  */
 int hostapd_hidl_init(struct hapd_interfaces *interfaces);
 void hostapd_hidl_deinit(struct hapd_interfaces *interfaces);
+
 #ifdef __cplusplus
 }
 #endif  // _cplusplus
