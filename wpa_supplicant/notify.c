@@ -214,6 +214,10 @@ void wpas_notify_bss_tm_status(struct wpa_supplicant *wpa_s)
 		return;
 
 	wpas_dbus_signal_prop_changed(wpa_s, WPAS_DBUS_PROP_BSS_TM_STATUS);
+
+#ifdef CONFIG_WNM
+	wpas_hidl_notify_bss_tm_status(wpa_s);
+#endif
 }
 
 
@@ -1238,6 +1242,36 @@ void wpas_notify_dpp_failure(struct wpa_supplicant *wpa_s)
 
 	wpas_hidl_notify_dpp_fail(wpa_s);
 #endif /* CONFIG_DPP */
+}
+
+void wpas_notify_dpp_config_sent_wait_response(struct wpa_supplicant *wpa_s)
+{
+#ifdef CONFIG_DPP2
+	wpas_hidl_notify_dpp_config_sent_wait_response(wpa_s);
+#endif /* CONFIG_DPP2 */
+}
+
+void wpas_notify_dpp_config_accepted(struct wpa_supplicant *wpa_s)
+{
+#ifdef CONFIG_DPP2
+	wpas_hidl_notify_dpp_config_accepted(wpa_s);
+#endif /* CONFIG_DPP2 */
+}
+
+void wpas_notify_dpp_conn_status(struct wpa_supplicant *wpa_s,
+		enum dpp_status_error status, const char *ssid,
+		const char *channel_list, unsigned short band_list[], int size)
+{
+#ifdef CONFIG_DPP2
+	wpas_hidl_notify_dpp_conn_status(wpa_s, status, ssid, channel_list, band_list, size);
+#endif /* CONFIG_DPP2 */
+}
+
+void wpas_notify_dpp_config_rejected(struct wpa_supplicant *wpa_s)
+{
+#ifdef CONFIG_DPP2
+	wpas_hidl_notify_dpp_config_rejected(wpa_s);
+#endif /* CONFIG_DPP2 */
 }
 
 void wpas_notify_pmk_cache_added(struct wpa_supplicant *wpa_s,

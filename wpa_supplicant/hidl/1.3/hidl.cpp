@@ -21,17 +21,20 @@ extern "C"
 #include "utils/common.h"
 #include "utils/eloop.h"
 #include "utils/includes.h"
+#include "dpp.h"
 }
 
 using android::hardware::configureRpcThreadpool;
 using android::hardware::handleTransportPoll;
 using android::hardware::setupTransportPolling;
-using android::hardware::wifi::supplicant::V1_2::DppFailureCode;
-using android::hardware::wifi::supplicant::V1_2::DppProgressCode;
+using android::hardware::wifi::supplicant::V1_3::DppFailureCode;
+using android::hardware::wifi::supplicant::V1_3::DppProgressCode;
+using android::hardware::wifi::supplicant::V1_3::DppSuccessCode;
 using android::hardware::wifi::supplicant::V1_3::implementation::HidlManager;
 
 static void wpas_hidl_notify_dpp_failure(struct wpa_supplicant *wpa_s, DppFailureCode code);
 static void wpas_hidl_notify_dpp_progress(struct wpa_supplicant *wpa_s, DppProgressCode code);
+static void wpas_hidl_notify_dpp_success(struct wpa_supplicant *wpa_s, DppSuccessCode code);
 
 void wpas_hidl_sock_handler(
     int sock, void * /* eloop_ctx */, void * /* sock_ctx */)
@@ -690,26 +693,12 @@ void wpas_hidl_notify_dpp_config_received(struct wpa_supplicant *wpa_s,
 
 void wpas_hidl_notify_dpp_config_sent(struct wpa_supplicant *wpa_s)
 {
-	if (!wpa_s)
-		return;
-
-	wpa_printf(
-	    MSG_DEBUG,
-	    "Notifying DPP configuration sent");
-
-	HidlManager *hidl_manager = HidlManager::getInstance();
-	if (!hidl_manager)
-		return;
-
-	hidl_manager->notifyDppConfigSent(wpa_s);
+	wpas_hidl_notify_dpp_success(wpa_s, DppSuccessCode::CONFIGURATION_SENT);
 }
 
 /* DPP Progress notifications */
 void wpas_hidl_notify_dpp_auth_success(struct wpa_supplicant *wpa_s)
 {
-	if (!wpa_s)
-		return;
-
 	wpas_hidl_notify_dpp_progress(wpa_s, DppProgressCode::AUTHENTICATION_SUCCESS);
 #ifdef SUPPLICANT_VENDOR_HIDL
 	wpa_printf(MSG_DEBUG, "Notifying DPP Auth Success to hidl control.");
@@ -723,57 +712,43 @@ void wpas_hidl_notify_dpp_auth_success(struct wpa_supplicant *wpa_s)
 
 void wpas_hidl_notify_dpp_resp_pending(struct wpa_supplicant *wpa_s)
 {
-	if (!wpa_s)
-		return;
-
 	wpas_hidl_notify_dpp_progress(wpa_s, DppProgressCode::RESPONSE_PENDING);
 }
 
 /* DPP Failure notifications */
 void wpas_hidl_notify_dpp_not_compatible(struct wpa_supplicant *wpa_s)
 {
-	if (!wpa_s)
-		return;
-
 	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::NOT_COMPATIBLE);
 }
 
 void wpas_hidl_notify_dpp_missing_auth(struct wpa_supplicant *wpa_s)
 {
-	if (!wpa_s)
-		return;
+	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::AUTHENTICATION);
 }
 
 void wpas_hidl_notify_dpp_configuration_failure(struct wpa_supplicant *wpa_s)
 {
-	if (!wpa_s)
-		return;
-
 	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::CONFIGURATION);
 }
 
 void wpas_hidl_notify_dpp_timeout(struct wpa_supplicant *wpa_s)
 {
-	if (!wpa_s)
-		return;
-
 	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::TIMEOUT);
 }
 
 void wpas_hidl_notify_dpp_auth_failure(struct wpa_supplicant *wpa_s)
 {
-	if (!wpa_s)
-		return;
-
 	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::AUTHENTICATION);
 }
 
 void wpas_hidl_notify_dpp_fail(struct wpa_supplicant *wpa_s)
 {
-	if (!wpa_s)
-		return;
-
 	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::FAILURE);
+}
+
+void wpas_hidl_notify_dpp_config_sent_wait_response(struct wpa_supplicant *wpa_s)
+{
+	wpas_hidl_notify_dpp_progress(wpa_s, DppProgressCode::CONFIGURATION_SENT_WAITING_RESPONSE);
 }
 
 /* DPP notification helper functions */
@@ -809,6 +784,97 @@ static void wpas_hidl_notify_dpp_progress(struct wpa_supplicant *wpa_s, DppProgr
 	hidl_manager->notifyDppProgress(wpa_s, code);
 }
 
+void wpas_hidl_notify_dpp_config_accepted(struct wpa_supplicant *wpa_s)
+{
+	wpas_hidl_notify_dpp_progress(wpa_s, DppProgressCode::CONFIGURATION_ACCEPTED);
+}
+
+static void wpas_hidl_notify_dpp_config_applied(struct wpa_supplicant *wpa_s)
+{
+	wpas_hidl_notify_dpp_success(wpa_s, DppSuccessCode::CONFIGURATION_APPLIED);
+}
+
+static void wpas_hidl_notify_dpp_success(struct wpa_supplicant *wpa_s, DppSuccessCode code)
+{
+	if (!wpa_s)
+		return;
+
+	wpa_printf(
+	    MSG_DEBUG,
+	    "Notifying DPP progress event %d", code);
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	hidl_manager->notifyDppSuccess(wpa_s, code);
+}
+
+void wpas_hidl_notify_dpp_config_rejected(struct wpa_supplicant *wpa_s)
+{
+	wpas_hidl_notify_dpp_failure(wpa_s, DppFailureCode::CONFIGURATION_REJECTED);
+}
+
+static void wpas_hidl_notify_dpp_no_ap_failure(struct wpa_supplicant *wpa_s,
+		const char *ssid, const char *channel_list, unsigned short band_list[],
+		int size)
+{
+	if (!wpa_s)
+		return;
+
+	wpa_printf(MSG_DEBUG,
+			"Notifying DPP NO AP event for SSID %s\nTried channels: %s",
+			ssid ? ssid : "N/A", channel_list ? channel_list : "N/A");
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	hidl_manager->notifyDppFailure(wpa_s, DppFailureCode::CANNOT_FIND_NETWORK,
+			ssid, channel_list, band_list, size);
+}
+
+void wpas_hidl_notify_dpp_enrollee_auth_failure(struct wpa_supplicant *wpa_s,
+		const char *ssid, unsigned short band_list[], int size)
+{
+	if (!wpa_s)
+		return;
+
+	wpa_printf(MSG_DEBUG,
+			"Notifying DPP Enrollee authentication failure, SSID %s",
+			ssid ? ssid : "N/A");
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	hidl_manager->notifyDppFailure(wpa_s, DppFailureCode::ENROLLEE_AUTHENTICATION,
+			ssid, NULL, band_list, size);
+}
+
+
+void wpas_hidl_notify_dpp_conn_status(struct wpa_supplicant *wpa_s, enum dpp_status_error status,
+		const char *ssid, const char *channel_list, unsigned short band_list[], int size)
+{
+	switch (status)
+	{
+	case DPP_STATUS_OK:
+		wpas_hidl_notify_dpp_config_applied(wpa_s);
+		break;
+
+	case DPP_STATUS_NO_AP:
+		wpas_hidl_notify_dpp_no_ap_failure(wpa_s, ssid, channel_list, band_list, size);
+		break;
+
+	case DPP_STATUS_AUTH_FAILURE:
+		wpas_hidl_notify_dpp_enrollee_auth_failure(wpa_s, ssid, band_list, size);
+		break;
+
+	default:
+		break;
+	}
+}
+
 void wpas_hidl_notify_pmk_cache_added(
     struct wpa_supplicant *wpa_s,
     struct rsn_pmksa_cache_entry *pmksa_entry)
@@ -825,6 +891,20 @@ void wpas_hidl_notify_pmk_cache_added(
 	    "Notifying PMK cache added event");
 
 	hidl_manager->notifyPmkCacheAdded(wpa_s, pmksa_entry);
+}
+
+void wpas_hidl_notify_bss_tm_status(struct wpa_supplicant *wpa_s)
+{
+	if (!wpa_s)
+		return;
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	wpa_printf(MSG_DEBUG, "Notifying BSS transition status");
+
+	hidl_manager->notifyBssTmStatus(wpa_s);
 }
 //Vendor DPP Notifications
 void wpas_hidl_notify_dpp_conf(
