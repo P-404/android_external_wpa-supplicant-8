@@ -147,10 +147,18 @@ public:
 	void notifyDppConfigReceived(struct wpa_supplicant *wpa_s,
 			struct wpa_ssid *config);
 	void notifyDppConfigSent(struct wpa_supplicant *wpa_s);
-	void notifyDppFailure(struct wpa_supplicant *wpa_s, DppFailureCode code);
-	void notifyDppProgress(struct wpa_supplicant *wpa_s, DppProgressCode code);
+	void notifyDppSuccess(struct wpa_supplicant *wpa_s, DppSuccessCode code);
+	void notifyDppFailure(struct wpa_supplicant *wpa_s,
+			android::hardware::wifi::supplicant::V1_3::DppFailureCode code);
+	void notifyDppFailure(struct wpa_supplicant *wpa_s,
+			android::hardware::wifi::supplicant::V1_3::DppFailureCode code,
+			const char *ssid, const char *channel_list, unsigned short band_list[],
+			int size);
+	void notifyDppProgress(struct wpa_supplicant *wpa_s,
+			android::hardware::wifi::supplicant::V1_3::DppProgressCode code);
 	void notifyPmkCacheAdded(struct wpa_supplicant *wpa_s,
 			struct rsn_pmksa_cache_entry *pmksa_entry);
+	void notifyBssTmStatus(struct wpa_supplicant *wpa_s);
 
 	// Methods called from hidl objects.
 	void notifyExtRadioWorkStart(struct wpa_supplicant *wpa_s, uint32_t id);
@@ -256,6 +264,10 @@ private:
 	    const std::string &ifname,
 	    const std::function<android::hardware::Return<void>(
 	    android::sp<V1_2::ISupplicantStaIfaceCallback>)> &method);
+	void callWithEachStaIfaceCallback_1_3(
+	    const std::string &ifname,
+	    const std::function<android::hardware::Return<void>(
+	    android::sp<V1_3::ISupplicantStaIfaceCallback>)> &method);
 	template <class CallbackTypeDerived>
 	void callWithEachStaIfaceCallbackDerived(
 	    const std::string &ifname,
@@ -472,6 +484,14 @@ static_assert(
 	WPA_KEY_MGMT_IEEE8021X_SHA256,
     "KeyMgmt value mismatch");
 static_assert(
+    static_cast<uint32_t>(V1_3::ISupplicantStaNetwork::KeyMgmtMask::WAPI_PSK) ==
+	WPA_KEY_MGMT_WAPI_PSK,
+    "KeyMgmt value mismatch");
+static_assert(
+    static_cast<uint32_t>(V1_3::ISupplicantStaNetwork::KeyMgmtMask::WAPI_CERT) ==
+	WPA_KEY_MGMT_WAPI_CERT,
+    "KeyMgmt value mismatch");
+static_assert(
     static_cast<uint32_t>(ISupplicantStaNetwork::ProtoMask::WPA) ==
 	WPA_PROTO_WPA,
     "Proto value mismatch");
@@ -482,6 +502,10 @@ static_assert(
 static_assert(
     static_cast<uint32_t>(ISupplicantStaNetwork::ProtoMask::OSEN) ==
 	WPA_PROTO_OSEN,
+    "Proto value mismatch");
+static_assert(
+    static_cast<uint32_t>(V1_3::ISupplicantStaNetwork::ProtoMask::WAPI) ==
+	WPA_PROTO_WAPI,
     "Proto value mismatch");
 static_assert(
     static_cast<uint32_t>(ISupplicantStaNetwork::AuthAlgMask::OPEN) ==
@@ -516,6 +540,10 @@ static_assert(
 	WPA_CIPHER_GCMP_256,
     "GroupCipher value mismatch");
 static_assert(
+    static_cast<uint32_t>(V1_3::ISupplicantStaNetwork::GroupCipherMask::SMS4) ==
+	WPA_CIPHER_SMS4,
+    "GroupCipher value mismatch");
+static_assert(
     static_cast<uint32_t>(
 	ISupplicantStaNetwork::GroupCipherMask::GTK_NOT_USED) ==
 	WPA_CIPHER_GTK_NOT_USED,
@@ -536,6 +564,11 @@ static_assert(
     static_cast<uint32_t>(
 	ISupplicantStaNetwork::PairwiseCipherMask::GCMP_256) ==
 	WPA_CIPHER_GCMP_256,
+    "PairwiseCipher value mismatch");
+static_assert(
+    static_cast<uint32_t>(
+	V1_3::ISupplicantStaNetwork::PairwiseCipherMask::SMS4) ==
+	WPA_CIPHER_SMS4,
     "PairwiseCipher value mismatch");
 static_assert(
     static_cast<uint32_t>(ISupplicantStaIfaceCallback::State::DISCONNECTED) ==
