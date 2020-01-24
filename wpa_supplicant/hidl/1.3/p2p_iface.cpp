@@ -209,6 +209,12 @@ void scanResJoinWrapper(
     struct wpa_supplicant *wpa_s,
     struct wpa_scan_results *scan_res)
 {
+	if (wpa_s->p2p_scan_work) {
+		struct wpa_radio_work *work = wpa_s->p2p_scan_work;
+		wpa_s->p2p_scan_work = NULL;
+		radio_work_done(work);
+	}
+
 	if (pending_scan_res_join_callback) {
 		pending_scan_res_join_callback();
 	}
@@ -310,6 +316,9 @@ int joinScanReq(
 	ret = wpa_drv_scan(wpa_s, &params);
 	if (!ret) {
 		os_get_reltime(&wpa_s->scan_trigger_time);
+		if (wpa_s->scan_res_handler) {
+			wpa_printf(MSG_DEBUG, "Replace current running scan result handler");
+		}
 		wpa_s->scan_res_handler = scanResJoinWrapper;
 		wpa_s->own_scan_requested = 1;
 		wpa_s->clear_driver_scan_cache = 0;
@@ -331,6 +340,7 @@ int joinGroup(
     const std::string& passphrase)
 {
 	int ret = 0;
+	int he = wpa_s->conf->p2p_go_he;
 	int vht = wpa_s->conf->p2p_go_vht;
 	int ht40 = wpa_s->conf->p2p_go_ht40 || vht;
 	int edmg = wpa_s->conf->p2p_go_edmg;
@@ -350,7 +360,7 @@ int joinGroup(
 
 	if (wpas_p2p_group_add_persistent(
 		wpa_s, wpa_network, 0, 0, 0, 0, ht40, vht,
-		CHANWIDTH_USE_HT, 0, edmg, NULL, 0, 1)) {
+		CHANWIDTH_USE_HT, he, edmg, NULL, 0, 0)) {
 		ret = -1;
 	}
 
@@ -382,6 +392,13 @@ void notifyGroupJoinFailure(
 
 void scanResJoinIgnore(struct wpa_supplicant *wpa_s, struct wpa_scan_results *scan_res) {
 	wpa_printf(MSG_DEBUG, "P2P: Ignore group join scan results.");
+
+	if (wpa_s->p2p_scan_work) {
+		struct wpa_radio_work *work = wpa_s->p2p_scan_work;
+		wpa_s->p2p_scan_work = NULL;
+		radio_work_done(work);
+	}
+
 }
 
 }  // namespace
@@ -1062,6 +1079,7 @@ std::pair<SupplicantStatus, std::string> P2pIface::connectInternal(
 		wps_method = WPS_PIN_KEYPAD;
 		break;
 	}
+	int he = wpa_s->conf->p2p_go_he;
 	int vht = wpa_s->conf->p2p_go_vht;
 	int ht40 = wpa_s->conf->p2p_go_ht40 || vht;
 	int edmg = wpa_s->conf->p2p_go_edmg;
@@ -1070,7 +1088,7 @@ std::pair<SupplicantStatus, std::string> P2pIface::connectInternal(
 	int new_pin = wpas_p2p_connect(
 	    wpa_s, peer_address.data(), pin, wps_method, persistent, false,
 	    join_existing_group, false, go_intent_signed, 0, 0, -1, false, ht40,
-	    vht, CHANWIDTH_USE_HT, 0, edmg, nullptr, 0);
+	    vht, CHANWIDTH_USE_HT, he, edmg, nullptr, 0);
 	if (new_pin < 0) {
 		return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, {}};
 	}
@@ -1126,6 +1144,7 @@ SupplicantStatus P2pIface::addGroupInternal(
     bool persistent, SupplicantNetworkId persistent_network_id)
 {
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
+	int he = wpa_s->conf->p2p_go_he;
 	int vht = wpa_s->conf->p2p_go_vht;
 	int ht40 = wpa_s->conf->p2p_go_ht40 || vht;
 	int edmg = wpa_s->conf->p2p_go_edmg;
@@ -1134,7 +1153,7 @@ SupplicantStatus P2pIface::addGroupInternal(
 	if (ssid == NULL) {
 		if (wpas_p2p_group_add(
 			wpa_s, persistent, 0, 0, ht40, vht,
-			CHANWIDTH_USE_HT, 0, edmg)) {
+			CHANWIDTH_USE_HT, he, edmg)) {
 			return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 		} else {
 			return {SupplicantStatusCode::SUCCESS, ""};
@@ -1142,7 +1161,7 @@ SupplicantStatus P2pIface::addGroupInternal(
 	} else if (ssid->disabled == 2) {
 		if (wpas_p2p_group_add_persistent(
 			wpa_s, ssid, 0, 0, 0, 0, ht40, vht,
-			CHANWIDTH_USE_HT, 0, edmg, NULL, 0, 0)) {
+			CHANWIDTH_USE_HT, he, edmg, NULL, 0, 0)) {
 			return {SupplicantStatusCode::FAILURE_NETWORK_UNKNOWN,
 				""};
 		} else {
@@ -1197,6 +1216,7 @@ SupplicantStatus P2pIface::reinvokeInternal(
     const std::array<uint8_t, 6>& peer_address)
 {
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
+	int he = wpa_s->conf->p2p_go_he;
 	int vht = wpa_s->conf->p2p_go_vht;
 	int ht40 = wpa_s->conf->p2p_go_ht40 || vht;
 	int edmg = wpa_s->conf->p2p_go_edmg;
@@ -1207,7 +1227,7 @@ SupplicantStatus P2pIface::reinvokeInternal(
 	}
 	if (wpas_p2p_invite(
 		wpa_s, peer_address.data(), ssid, NULL, 0, 0, ht40, vht,
-		CHANWIDTH_USE_HT, 0, 0, edmg)) {
+		CHANWIDTH_USE_HT, 0, he, edmg)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
@@ -1636,6 +1656,7 @@ SupplicantStatus P2pIface::addGroup_1_2Internal(
     bool joinExistingGroup)
 {
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
+	int he = wpa_s->conf->p2p_go_he;
 	int vht = wpa_s->conf->p2p_go_vht;
 	int ht40 = wpa_s->conf->p2p_go_ht40 || vht;
 	int edmg = wpa_s->conf->p2p_go_edmg;
@@ -1664,7 +1685,7 @@ SupplicantStatus P2pIface::addGroup_1_2Internal(
 
 		if (wpas_p2p_group_add(
 		    wpa_s, persistent, freq, 0, ht40, vht,
-		    CHANWIDTH_USE_HT, 0, edmg)) {
+		    CHANWIDTH_USE_HT, he, edmg)) {
 			return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 		}
 		return {SupplicantStatusCode::SUCCESS, ""};

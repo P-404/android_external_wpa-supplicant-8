@@ -799,30 +799,37 @@ int HidlManager::notifyStateChange(struct wpa_supplicant *wpa_s)
 	} else {
 		bssid = wpa_s->bssid;
 	}
-        bool fils_hlp_sent =
-                (wpa_auth_alg_fils(wpa_s->auth_alg) &&
-                 !dl_list_empty(&wpa_s->fils_hlp_req) &&
-                 (wpa_s->wpa_state == WPA_COMPLETED)) ? true : false;
+	bool fils_hlp_sent =
+		(wpa_auth_alg_fils(wpa_s->auth_alg) &&
+		 !dl_list_empty(&wpa_s->fils_hlp_req) &&
+		 (wpa_s->wpa_state == WPA_COMPLETED)) ? true : false;
 
 #ifdef SUPPLICANT_VENDOR_HIDL
-        if (checkForVendorStaIfaceCallback(wpa_s->ifname) == true) {
-	// Invoke the |onVendorStateChanged| method on all registered callbacks.
-	    callWithEachVendorStaIfaceCallback(
-		wpa_s->ifname, std::bind(
-			       &ISupplicantVendorStaIfaceCallback::onVendorStateChanged,
-			       std::placeholders::_1,
-			       static_cast<ISupplicantStaIfaceCallback::State>(
-				  wpa_s->wpa_state),
-			       bssid, hidl_network_id, hidl_ssid, fils_hlp_sent));
+	if (checkForVendorStaIfaceCallback(wpa_s->ifname) == true) {
+		// Invoke the |onVendorStateChanged| method on all registered callbacks.
+		const std::function<
+			Return<void>(android::sp<ISupplicantVendorStaIfaceCallback>)>
+			func = std::bind(
+				&ISupplicantVendorStaIfaceCallback::onVendorStateChanged,
+				std::placeholders::_1,
+				static_cast<ISupplicantStaIfaceCallback::State>(
+					wpa_s->wpa_state),
+					bssid, hidl_network_id, hidl_ssid,
+					fils_hlp_sent);
+		callWithEachVendorStaIfaceCallback(wpa_s->ifname, func);
 	} else {
 #endif
-	    callWithEachStaIfaceCallback(
-	        wpa_s->ifname, std::bind(
-			       &ISupplicantStaIfaceCallback::onStateChanged,
-			       std::placeholders::_1,
-			       static_cast<ISupplicantStaIfaceCallback::State>(
-			           wpa_s->wpa_state),
-			       bssid, hidl_network_id, hidl_ssid));
+		// Invoke the |onStateChanged_1_3| method on all registered callbacks.
+		const std::function<
+			Return<void>(android::sp<V1_3::ISupplicantStaIfaceCallback>)>
+			func = std::bind(
+				&V1_3::ISupplicantStaIfaceCallback::onStateChanged_1_3,
+				std::placeholders::_1,
+				static_cast<ISupplicantStaIfaceCallback::State>(
+					wpa_s->wpa_state),
+					bssid, hidl_network_id, hidl_ssid,
+					fils_hlp_sent);
+		callWithEachStaIfaceCallbackDerived(wpa_s->ifname, func);
 #ifdef SUPPLICANT_VENDOR_HIDL
 	}
 #endif
@@ -1606,27 +1613,14 @@ void HidlManager::notifyExtRadioWorkTimeout(
 
 void HidlManager::notifyEapError(struct wpa_supplicant *wpa_s, int error_code)
 {
-	typedef V1_1::ISupplicantStaIfaceCallback::EapErrorCode EapErrorCode;
-
 	if (!wpa_s)
 		return;
 
-	switch (static_cast<EapErrorCode>(error_code)) {
-	case EapErrorCode::SIM_GENERAL_FAILURE_AFTER_AUTH:
-	case EapErrorCode::SIM_TEMPORARILY_DENIED:
-	case EapErrorCode::SIM_NOT_SUBSCRIBED:
-	case EapErrorCode::SIM_GENERAL_FAILURE_BEFORE_AUTH:
-	case EapErrorCode::SIM_VENDOR_SPECIFIC_EXPIRED_CERT:
-		break;
-	default:
-		return;
-	}
-
-	callWithEachStaIfaceCallback_1_1(
+	callWithEachStaIfaceCallback_1_3(
 	    wpa_s->ifname,
 	    std::bind(
-		&V1_1::ISupplicantStaIfaceCallback::onEapFailure_1_1,
-		std::placeholders::_1, static_cast<EapErrorCode>(error_code)));
+		&V1_3::ISupplicantStaIfaceCallback::onEapFailure_1_3,
+		std::placeholders::_1, error_code));
 }
 
 /**

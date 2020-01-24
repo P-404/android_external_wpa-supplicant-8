@@ -65,31 +65,162 @@ std::string WriteHostapdConfig(
 	return "";
 }
 
+/*
+ * Get the op_class for a channel/band
+ * The logic here is based on Table E-4 in the 802.11 Specification
+ */
+int getOpClassForChannel(int channel, int band, bool support11n, bool support11ac) {
+	// 2GHz Band
+	if ((band & IHostapd::BandMask::BAND_2_GHZ) != 0) {
+		if (channel == 14) {
+			return 82;
+		}
+		if (channel >= 1 && channel <= 13) {
+			if (!support11n) {
+				//20MHz channel
+				return 81;
+			}
+			if (channel <= 9) {
+				// HT40 with secondary channel above primary
+				return 83;
+			}
+			// HT40 with secondary channel below primary
+			return 84;
+		}
+		// Error
+		return 0;
+	}
+
+	// 5GHz Band
+	if ((band & IHostapd::BandMask::BAND_5_GHZ) != 0) {
+		if (support11ac) {
+			switch (channel) {
+				case 42:
+				case 58:
+				case 106:
+				case 122:
+				case 138:
+				case 155:
+					// 80MHz channel
+					return 128;
+				case 50:
+				case 114:
+					// 160MHz channel
+					return 129;
+			}
+		}
+
+		if (!support11n) {
+			if (channel >= 36 && channel <= 48) {
+				return 115;
+			}
+			if (channel >= 52 && channel <= 64) {
+				return 118;
+			}
+			if (channel >= 100 && channel <= 144) {
+				return 121;
+			}
+			if (channel >= 149 && channel <= 161) {
+				return 124;
+			}
+			if (channel >= 165 && channel <= 169) {
+				return 125;
+			}
+		} else {
+			switch (channel) {
+				case 36:
+				case 44:
+					// HT40 with secondary channel above primary
+					return 116;
+				case 40:
+				case 48:
+					// HT40 with secondary channel below primary
+					return 117;
+				case 52:
+				case 60:
+					// HT40 with secondary channel above primary
+					return  119;
+				case 56:
+				case 64:
+					// HT40 with secondary channel below primary
+					return 120;
+				case 100:
+				case 108:
+				case 116:
+				case 124:
+				case 132:
+				case 140:
+					// HT40 with secondary channel above primary
+					return 122;
+				case 104:
+				case 112:
+				case 120:
+				case 128:
+				case 136:
+				case 144:
+					// HT40 with secondary channel below primary
+					return 123;
+				case 149:
+				case 157:
+					// HT40 with secondary channel above primary
+					return 126;
+				case 153:
+				case 161:
+					// HT40 with secondary channel below primary
+					return 127;
+			}
+		}
+		// Error
+		return 0;
+	}
+
+	// 6GHz Band
+	if ((band & IHostapd::BandMask::BAND_6_GHZ) != 0) {
+		// Channels 1, 5. 9, 13, ...
+		if ((channel & 0x03) == 0x01) {
+			// 20MHz channel
+			return 131;
+		}
+		// Channels 3, 11, 19, 27, ...
+		if ((channel & 0x07) == 0x03) {
+			// 40MHz channel
+			return 132;
+		}
+		// Channels 7, 23, 39, 55, ...
+		if ((channel & 0x0F) == 0x07) {
+			// 80MHz channel
+			return 133;
+		}
+		// Channels 15, 47, 69, ...
+		if ((channel & 0x1F) == 0x0F) {
+			// 160MHz channel
+			return 134;
+		}
+		// Error
+		return 0;
+	}
+
+	return 0;
+}
+
+bool validatePassphrase(int passphrase_len, int min_len, int max_len)
+{
+	if (min_len != -1 && passphrase_len < min_len) return false;
+	if (max_len != -1 && passphrase_len > max_len) return false;
+	return true;
+}
+
 std::string CreateHostapdConfig(
     const IHostapd::IfaceParams& v_iface_params,
     const IHostapd::NetworkParams& nw_params)
 {
 	IHostapd::IfaceParams iface_params = v_iface_params;
 
-	if (nw_params.ssid.size() >
+	if (nw_params.V1_0.ssid.size() >
 	    static_cast<uint32_t>(
 		IHostapd::ParamSizeLimits::SSID_MAX_LEN_IN_BYTES)) {
 		wpa_printf(
-		    MSG_ERROR, "Invalid SSID size: %zu", nw_params.ssid.size());
-		return "";
-	}
-	if ((nw_params.encryptionType != IHostapd::EncryptionType::NONE) &&
-	    (nw_params.pskPassphrase.size() <
-		 static_cast<uint32_t>(
-		     IHostapd::ParamSizeLimits::
-			 WPA2_PSK_PASSPHRASE_MIN_LEN_IN_BYTES) ||
-	     nw_params.pskPassphrase.size() >
-		 static_cast<uint32_t>(
-		     IHostapd::ParamSizeLimits::
-			 WPA2_PSK_PASSPHRASE_MAX_LEN_IN_BYTES))) {
-		wpa_printf(
-		    MSG_ERROR, "Invalid psk passphrase size: %zu",
-		    nw_params.pskPassphrase.size());
+		    MSG_ERROR, "Invalid SSID size: %zu", nw_params.V1_0.ssid.size());
 		return "";
 	}
 
@@ -97,7 +228,7 @@ std::string CreateHostapdConfig(
 	std::stringstream ss;
 	ss << std::hex;
 	ss << std::setfill('0');
-	for (uint8_t b : nw_params.ssid) {
+	for (uint8_t b : nw_params.V1_0.ssid) {
 		ss << std::setw(2) << static_cast<unsigned int>(b);
 	}
 	const std::string ssid_as_string = ss.str();
@@ -113,60 +244,120 @@ std::string CreateHostapdConfig(
 		// no security params
 		break;
 	case IHostapd::EncryptionType::WPA:
+		if (!validatePassphrase(
+		    nw_params.passphrase.size(),
+		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
+				WPA2_PSK_PASSPHRASE_MIN_LEN_IN_BYTES),
+		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
+				WPA2_PSK_PASSPHRASE_MAX_LEN_IN_BYTES))) {
+			return "";
+		}
 		encryption_config_as_string = StringPrintf(
 		    "wpa=3\n"
 		    "wpa_pairwise=%s\n"
 		    "wpa_passphrase=%s",
-		    isWigig ? "GCMP" : "TKIP CCMP", nw_params.pskPassphrase.c_str());
+		    isWigig ? "GCMP" : "TKIP CCMP", nw_params.passphrase.c_str());
 		break;
 	case IHostapd::EncryptionType::WPA2:
+		if (!validatePassphrase(
+		    nw_params.passphrase.size(),
+		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
+				WPA2_PSK_PASSPHRASE_MIN_LEN_IN_BYTES),
+		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
+				WPA2_PSK_PASSPHRASE_MAX_LEN_IN_BYTES))) {
+			return "";
+		}
 		encryption_config_as_string = StringPrintf(
 		    "wpa=2\n"
 		    "rsn_pairwise=%s\n"
 		    "wpa_passphrase=%s",
-		    isWigig ? "GCMP" : "CCMP", nw_params.pskPassphrase.c_str());
+		    isWigig ? "GCMP" : "CCMP", nw_params.passphrase.c_str());
+		break;
+	case IHostapd::EncryptionType::WPA3_SAE_TRANSITION:
+		if (!validatePassphrase(
+		    nw_params.passphrase.size(),
+		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
+				WPA2_PSK_PASSPHRASE_MIN_LEN_IN_BYTES),
+		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
+				WPA2_PSK_PASSPHRASE_MAX_LEN_IN_BYTES))) {
+			return "";
+		}
+		encryption_config_as_string = StringPrintf(
+		    "wpa=2\n"
+		    "rsn_pairwise=%s\n"
+		    "wpa_key_mgmt=WPA-PSK SAE\n"
+		    "ieee80211w=1\n"
+		    "sae_require_mfp=1\n"
+		    "wpa_passphrase=%s\n"
+		    "sae_password=%s",
+		    isWigig ? "GCMP" : "CCMP",
+		    nw_params.passphrase.c_str(),
+		    nw_params.passphrase.c_str());
+		break;
+	case IHostapd::EncryptionType::WPA3_SAE:
+		if (!validatePassphrase(nw_params.passphrase.size(), 1, -1)) {
+			return "";
+		}
+		encryption_config_as_string = StringPrintf(
+		    "wpa=2\n"
+		    "rsn_pairwise=%s\n"
+		    "wpa_key_mgmt=SAE\n"
+		    "ieee80211w=2\n"
+		    "sae_require_mfp=2\n"
+		    "sae_password=%s",
+		    isWigig ? "GCMP" : "CCMP",
+		    nw_params.passphrase.c_str());
 		break;
 	default:
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
 		return "";
 	}
 
+	unsigned int band = 0;
+	band |= iface_params.channelParams.bandMask;
+
 	std::string channel_config_as_string;
+	bool isFirst = true;
 	if (iface_params.V1_1.V1_0.channelParams.enableAcs) {
-		std::string chanlist_as_string;
+		std::string freqList_as_string;
 		for (const auto &range :
-		     iface_params.V1_1.channelParams.acsChannelRanges) {
+		    iface_params.channelParams.acsChannelFreqRangesMhz) {
+			if (!isFirst) {
+				freqList_as_string += ",";
+			}
+			isFirst = false;
+
 			if (range.start != range.end) {
-				chanlist_as_string +=
-				    StringPrintf("%d-%d ", range.start, range.end);
+				freqList_as_string +=
+				    StringPrintf("%d-%d", range.start, range.end);
 			} else {
-				chanlist_as_string += StringPrintf("%d ", range.start);
+				freqList_as_string += StringPrintf("%d", range.start);
 			}
 		}
 		channel_config_as_string = StringPrintf(
 		    "channel=0\n"
 		    "acs_exclude_dfs=%d\n"
-		    "chanlist=%s",
+		    "freqlist=%s",
 		    iface_params.V1_1.V1_0.channelParams.acsShouldExcludeDfs,
-		    chanlist_as_string.c_str());
+		    freqList_as_string.c_str());
 	} else {
+		int op_class = getOpClassForChannel(
+		    iface_params.V1_1.V1_0.channelParams.channel,
+		    band,
+		    iface_params.V1_1.V1_0.hwModeParams.enable80211N,
+		    iface_params.V1_1.V1_0.hwModeParams.enable80211AC);
 		channel_config_as_string = StringPrintf(
-		    "channel=%d", iface_params.V1_1.V1_0.channelParams.channel);
+		    "channel=%d\n"
+		    "op_class=%d",
+		    iface_params.V1_1.V1_0.channelParams.channel, op_class);
 	}
 
-	// Hw Mode String
-	// TODO: b/146186687 Still missing the handling when 6GHz band is included
 	std::string hw_mode_as_string;
 	std::string ht_cap_vht_oper_chwidth_as_string;
-	unsigned int band = 0;
-	if (iface_params.V1_1.V1_0.channelParams.enableAcs) {
-		band |= iface_params.channelParams.bandMask;
-	} else {
-		band |= iface_params.V1_1.V1_0.channelParams.band;
-	}
 
 	if ((band & IHostapd::BandMask::BAND_2_GHZ) != 0) {
-		if ((band & IHostapd::BandMask::BAND_5_GHZ) != 0) {
+		if (((band & IHostapd::BandMask::BAND_5_GHZ) != 0)
+		    || ((band & IHostapd::BandMask::BAND_6_GHZ) != 0)) {
 			hw_mode_as_string = "hw_mode=any";
 			if (iface_params.V1_1.V1_0.channelParams.enableAcs) {
 				ht_cap_vht_oper_chwidth_as_string =
@@ -177,7 +368,8 @@ std::string CreateHostapdConfig(
 			hw_mode_as_string = "hw_mode=g";
 		}
 	} else {
-		if ((band & IHostapd::BandMask::BAND_5_GHZ) != 0) {
+		if (((band & IHostapd::BandMask::BAND_5_GHZ) != 0)
+		    || ((band & IHostapd::BandMask::BAND_6_GHZ) != 0)) {
 			hw_mode_as_string = "hw_mode=a";
 			if (iface_params.V1_1.V1_0.channelParams.enableAcs) {
 				ht_cap_vht_oper_chwidth_as_string =
@@ -188,6 +380,22 @@ std::string CreateHostapdConfig(
 			wpa_printf(MSG_ERROR, "Invalid band");
 			return "";
 		}
+	}
+
+	std::string he_params_as_string;
+	if (iface_params.hwModeParams.enable80211AX) {
+		he_params_as_string = StringPrintf(
+		    "ieee80211ax=1\n"
+		    "he_su_beamformer=%d\n"
+		    "he_su_beamformee=%d\n"
+		    "he_mu_beamformer=%d\n"
+		    "he_twt_required=%d\n",
+		    iface_params.hwModeParams.enableHeSingleUserBeamformer ? 1 : 0,
+		    iface_params.hwModeParams.enableHeSingleUserBeamformee ? 1 : 0,
+		    iface_params.hwModeParams.enableHeMultiUserBeamformer ? 1 : 0,
+		    iface_params.hwModeParams.enableHeTargetWakeTime ? 1 : 0);
+	} else {
+		he_params_as_string = "ieee80211ax=0";
 	}
 
 	return StringPrintf(
@@ -201,7 +409,7 @@ std::string CreateHostapdConfig(
 	    "%s\n"
 	    "ieee80211n=%d\n"
 	    "ieee80211ac=%d\n"
-	    "ieee80211ax=%d\n"
+	    "%s\n"
 	    "%s\n"
 	    "%s\n"
 	    "ignore_broadcast_ssid=%d\n"
@@ -211,9 +419,9 @@ std::string CreateHostapdConfig(
 	    channel_config_as_string.c_str(),
 	    iface_params.V1_1.V1_0.hwModeParams.enable80211N ? 1 : 0,
 	    iface_params.V1_1.V1_0.hwModeParams.enable80211AC ? 1 : 0,
-	    iface_params.hwModeParams.enable80211AX ? 1 : 0,
+	    he_params_as_string.c_str(),
 	    hw_mode_as_string.c_str(), ht_cap_vht_oper_chwidth_as_string.c_str(),
-	    nw_params.isHidden ? 1 : 0, encryption_config_as_string.c_str());
+	    nw_params.V1_0.isHidden ? 1 : 0, encryption_config_as_string.c_str());
 }
 
 // hostapd core functions accept "C" style function pointers, so use global
@@ -250,7 +458,7 @@ Hostapd::Hostapd(struct hapd_interfaces* interfaces) : interfaces_(interfaces)
 
 Return<void> Hostapd::addAccessPoint(
     const V1_0::IHostapd::IfaceParams& iface_params,
-    const NetworkParams& nw_params, addAccessPoint_cb _hidl_cb)
+    const V1_0::IHostapd::NetworkParams& nw_params, addAccessPoint_cb _hidl_cb)
 {
 	return call(
 	    this, &Hostapd::addAccessPointInternal, _hidl_cb, iface_params,
@@ -259,7 +467,7 @@ Return<void> Hostapd::addAccessPoint(
 
 Return<void> Hostapd::addAccessPoint_1_1(
     const V1_1::IHostapd::IfaceParams& iface_params,
-    const NetworkParams& nw_params, addAccessPoint_cb _hidl_cb)
+    const V1_0::IHostapd::NetworkParams& nw_params, addAccessPoint_cb _hidl_cb)
 {
 	return call(
 	    this, &Hostapd::addAccessPointInternal_1_1, _hidl_cb, iface_params,
@@ -314,14 +522,14 @@ Return<void> Hostapd::setDebugParams(
 
 V1_0::HostapdStatus Hostapd::addAccessPointInternal(
     const V1_0::IHostapd::IfaceParams& iface_params,
-    const NetworkParams& nw_params)
+    const V1_0::IHostapd::NetworkParams& nw_params)
 {
 	return {V1_0::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 }
 
 V1_0::HostapdStatus Hostapd::addAccessPointInternal_1_1(
     const V1_1::IHostapd::IfaceParams& iface_params,
-    const NetworkParams& nw_params)
+    const V1_1::IHostapd::NetworkParams& nw_params)
 {
 	return {V1_0::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 }

@@ -39,7 +39,9 @@ constexpr uint32_t kAllowedKeyMgmtMask =
      static_cast<uint32_t>(ISupplicantStaNetworkV1_2::KeyMgmtMask::WPA_PSK_SHA256) |
      static_cast<uint32_t>(ISupplicantStaNetworkV1_2::KeyMgmtMask::WPA_EAP_SHA256) |
      static_cast<uint32_t>(ISupplicantStaNetworkV1_3::KeyMgmtMask::WAPI_PSK) |
-     static_cast<uint32_t>(ISupplicantStaNetworkV1_3::KeyMgmtMask::WAPI_CERT));
+     static_cast<uint32_t>(ISupplicantStaNetworkV1_3::KeyMgmtMask::WAPI_CERT) |
+     static_cast<uint32_t>(ISupplicantStaNetworkV1_3::KeyMgmtMask::FILS_SHA256) |
+     static_cast<uint32_t>(ISupplicantStaNetworkV1_3::KeyMgmtMask::FILS_SHA384));
 constexpr uint32_t kAllowedProtoMask =
     (static_cast<uint32_t>(ISupplicantStaNetwork::ProtoMask::WPA) |
      static_cast<uint32_t>(ISupplicantStaNetwork::ProtoMask::RSN) |
@@ -48,7 +50,8 @@ constexpr uint32_t kAllowedProtoMask =
 constexpr uint32_t kAllowedAuthAlgMask =
     (static_cast<uint32_t>(ISupplicantStaNetwork::AuthAlgMask::OPEN) |
      static_cast<uint32_t>(ISupplicantStaNetwork::AuthAlgMask::SHARED) |
-     static_cast<uint32_t>(ISupplicantStaNetwork::AuthAlgMask::LEAP));
+     static_cast<uint32_t>(ISupplicantStaNetwork::AuthAlgMask::LEAP) |
+	 static_cast<uint32_t>(ISupplicantStaNetworkV1_3::AuthAlgMask::SAE));
 constexpr uint32_t kAllowedGroupCipherMask =
     (static_cast<uint32_t>(ISupplicantStaNetwork::GroupCipherMask::WEP40) |
      static_cast<uint32_t>(ISupplicantStaNetwork::GroupCipherMask::WEP104) |
@@ -899,6 +902,29 @@ Return<void> StaNetwork::getPairwiseCipher_1_3(
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
 	    &StaNetwork::getPairwiseCipher_1_3Internal, _hidl_cb);
+}
+
+Return<void> StaNetwork::getAuthAlg_1_3(getAuthAlg_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &StaNetwork::getAuthAlgInternal, _hidl_cb);
+}
+
+Return<void> StaNetwork::setAuthAlg_1_3(
+    uint32_t auth_alg_mask,
+    std::function<void(const SupplicantStatus &status)> _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &StaNetwork::setAuthAlgInternal, _hidl_cb, auth_alg_mask);
+}
+
+Return<void> StaNetwork::setEapErp(bool enable, setEapErp_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &StaNetwork::setEapErpInternal, _hidl_cb, enable);
 }
 
 std::pair<SupplicantStatus, uint32_t> StaNetwork::getIdInternal()
@@ -2390,6 +2416,22 @@ void StaNetwork::resetFastTransitionKeyMgmt(uint32_t &key_mgmt_mask)
 		key_mgmt_mask &= ~WPA_KEY_MGMT_FT_IEEE8021X;
 	}
 }
+
+/**
+ * Helper function to enable erp keys generation while connecting to FILS
+ * enabled APs.
+ */
+SupplicantStatus StaNetwork::setEapErpInternal(bool enable)
+{
+#ifdef CONFIG_FILS
+	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
+	wpa_ssid->eap.erp = enable ? 1 : 0;
+	return {SupplicantStatusCode::SUCCESS, ""};
+#else /* CONFIG_FILS */
+	return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+#endif /* CONFIG_FILS */
+}
+
 }  // namespace implementation
 }  // namespace V1_3
 }  // namespace supplicant

@@ -663,6 +663,42 @@ static int wpa_supplicant_ctrl_iface_set(struct wpa_supplicant *wpa_s,
 		wpa_s->ignore_assoc_disallow = !!atoi(value);
 		wpa_drv_ignore_assoc_disallow(wpa_s,
 					      wpa_s->ignore_assoc_disallow);
+	} else if (os_strcasecmp(cmd, "ignore_sae_h2e_only") == 0) {
+		wpa_s->ignore_sae_h2e_only = !!atoi(value);
+	} else if (os_strcasecmp(cmd, "extra_sae_rejected_groups") == 0) {
+		char *pos;
+
+		os_free(wpa_s->extra_sae_rejected_groups);
+		wpa_s->extra_sae_rejected_groups = NULL;
+		pos = value;
+		while (pos && pos[0]) {
+			int group;
+
+			group = atoi(pos);
+			wpa_printf(MSG_DEBUG,
+				   "TESTING: Extra rejection of SAE group %d",
+				   group);
+			if (group)
+				int_array_add_unique(
+					&wpa_s->extra_sae_rejected_groups,
+					group);
+			pos = os_strchr(pos, ' ');
+			if (!pos)
+				break;
+			pos++;
+		}
+	} else if (os_strcasecmp(cmd, "rsnxe_override_assoc") == 0) {
+		wpabuf_free(wpa_s->rsnxe_override_assoc);
+		if (os_strcmp(value, "NULL") == 0)
+			wpa_s->rsnxe_override_assoc = NULL;
+		else
+			wpa_s->rsnxe_override_assoc = wpabuf_parse_bin(value);
+	} else if (os_strcasecmp(cmd, "rsnxe_override_eapol") == 0) {
+		wpabuf_free(wpa_s->rsnxe_override_eapol);
+		if (os_strcmp(value, "NULL") == 0)
+			wpa_s->rsnxe_override_eapol = NULL;
+		else
+			wpa_s->rsnxe_override_eapol = wpabuf_parse_bin(value);
 	} else if (os_strcasecmp(cmd, "reject_btm_req_reason") == 0) {
 		wpa_s->reject_btm_req_reason = atoi(value);
 	} else if (os_strcasecmp(cmd, "get_pref_freq_list_override") == 0) {
@@ -8054,12 +8090,19 @@ static void wpa_supplicant_ctrl_iface_flush(struct wpa_supplicant *wpa_s)
 	wpa_s->ignore_auth_resp = 0;
 	wpa_s->ignore_assoc_disallow = 0;
 	wpa_s->testing_resend_assoc = 0;
+	wpa_s->ignore_sae_h2e_only = 0;
 	wpa_s->reject_btm_req_reason = 0;
 	wpa_sm_set_test_assoc_ie(wpa_s->wpa, NULL);
 	os_free(wpa_s->get_pref_freq_list_override);
 	wpa_s->get_pref_freq_list_override = NULL;
 	wpabuf_free(wpa_s->sae_commit_override);
 	wpa_s->sae_commit_override = NULL;
+	os_free(wpa_s->extra_sae_rejected_groups);
+	wpa_s->extra_sae_rejected_groups = NULL;
+	wpabuf_free(wpa_s->rsnxe_override_assoc);
+	wpa_s->rsnxe_override_assoc = NULL;
+	wpabuf_free(wpa_s->rsnxe_override_eapol);
+	wpa_s->rsnxe_override_eapol = NULL;
 #ifdef CONFIG_DPP
 	os_free(wpa_s->dpp_config_obj_override);
 	wpa_s->dpp_config_obj_override = NULL;
@@ -9474,16 +9517,16 @@ static void wpas_ctrl_neighbor_rep_cb(void *ctx, struct wpabuf *neighbor_rep)
 
 		if (pos[0] != WLAN_EID_NEIGHBOR_REPORT ||
 		    nr_len < NR_IE_MIN_LEN) {
-			wpa_printf(MSG_DEBUG,
-				   "CTRL: Invalid Neighbor Report element: id=%u len=%u",
-				   data[0], nr_len);
+			wpa_dbg(wpa_s, MSG_DEBUG,
+				"CTRL: Invalid Neighbor Report element: id=%u len=%u",
+				data[0], nr_len);
 			goto out;
 		}
 
 		if (2U + nr_len > len) {
-			wpa_printf(MSG_DEBUG,
-				   "CTRL: Invalid Neighbor Report element: id=%u len=%zu nr_len=%u",
-				   data[0], len, nr_len);
+			wpa_dbg(wpa_s, MSG_DEBUG,
+				"CTRL: Invalid Neighbor Report element: id=%u len=%zu nr_len=%u",
+				data[0], len, nr_len);
 			goto out;
 		}
 		pos += 2;
@@ -9553,8 +9596,8 @@ static int wpas_ctrl_iface_send_neighbor_rep(struct wpa_supplicant *wpa_s,
 	ssid_s = os_strstr(cmd, "ssid=");
 	if (ssid_s) {
 		if (ssid_parse(ssid_s + 5, &ssid)) {
-			wpa_printf(MSG_ERROR,
-				   "CTRL: Send Neighbor Report: bad SSID");
+			wpa_msg(wpa_s, MSG_INFO,
+				"CTRL: Send Neighbor Report: bad SSID");
 			return -1;
 		}
 
@@ -10680,6 +10723,17 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 		int res;
 
 		res = wpas_dpp_qr_code(wpa_s, buf + 12);
+		if (res < 0) {
+			reply_len = -1;
+		} else {
+			reply_len = os_snprintf(reply, reply_size, "%d", res);
+			if (os_snprintf_error(reply_size, reply_len))
+				reply_len = -1;
+		}
+	} else if (os_strncmp(buf, "DPP_NFC_URI ", 12) == 0) {
+		int res;
+
+		res = wpas_dpp_nfc_uri(wpa_s, buf + 12);
 		if (res < 0) {
 			reply_len = -1;
 		} else {
