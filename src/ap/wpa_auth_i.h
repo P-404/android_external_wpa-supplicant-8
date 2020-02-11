@@ -102,6 +102,8 @@ struct wpa_state_machine {
 
 	u8 *wpa_ie;
 	size_t wpa_ie_len;
+	u8 *rsnxe;
+	size_t rsnxe_len;
 
 	enum {
 		WPA_VERSION_NO_WPA = 0 /* WPA not used */,
@@ -119,6 +121,8 @@ struct wpa_state_machine {
 	u8 xxkey[PMK_LEN_MAX]; /* PSK or the second 256 bits of MSK, or the
 				* first 384 bits of MSK */
 	size_t xxkey_len;
+	u8 pmk_r1[PMK_LEN_MAX];
+	unsigned int pmk_r1_len;
 	u8 pmk_r1_name[WPA_PMK_NAME_LEN]; /* PMKR1Name derived from FT Auth
 					   * Request */
 	u8 r0kh_id[FT_R0KH_ID_MAX_LEN]; /* R0KH-ID from FT Auth Request */
@@ -188,10 +192,8 @@ struct wpa_group {
 	Boolean changed;
 	Boolean first_sta_seen;
 	Boolean reject_4way_hs_for_entropy;
-#ifdef CONFIG_IEEE80211W
 	u8 IGTK[2][WPA_IGTK_MAX_LEN];
 	int GN_igtk, GM_igtk;
-#endif /* CONFIG_IEEE80211W */
 	/* Number of references except those in struct wpa_group->next */
 	unsigned int references;
 	unsigned int num_setup_iface;
@@ -267,6 +269,7 @@ struct ft_remote_seq {
 
 int wpa_write_rsn_ie(struct wpa_auth_config *conf, u8 *buf, size_t len,
 		     const u8 *pmkid);
+int wpa_write_rsnxe(struct wpa_auth_config *conf, u8 *buf, size_t len);
 void wpa_auth_logger(struct wpa_authenticator *wpa_auth, const u8 *addr,
 		     logger_level level, const char *txt);
 void wpa_auth_vlogger(struct wpa_authenticator *wpa_auth, const u8 *addr,
@@ -290,8 +293,7 @@ int wpa_write_ftie(struct wpa_auth_config *conf, int use_sha384,
 		   const u8 *anonce, const u8 *snonce,
 		   u8 *buf, size_t len, const u8 *subelem,
 		   size_t subelem_len);
-int wpa_auth_derive_ptk_ft(struct wpa_state_machine *sm, const u8 *pmk,
-			   struct wpa_ptk *ptk);
+int wpa_auth_derive_ptk_ft(struct wpa_state_machine *sm, struct wpa_ptk *ptk);
 struct wpa_ft_pmk_cache * wpa_ft_pmk_cache_init(void);
 void wpa_ft_pmk_cache_deinit(struct wpa_ft_pmk_cache *cache);
 void wpa_ft_install_ptk(struct wpa_state_machine *sm);

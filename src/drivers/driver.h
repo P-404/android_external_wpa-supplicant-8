@@ -102,6 +102,20 @@ enum reg_type {
 };
 
 /**
+ * struct hostapd_wmm_rule - WMM regulatory rule
+ * @min_cwmin: Lower bound of CW_min value
+ * @min_cwmax: Lower bound of CW_max value
+ * @min_aifs: Lower bound of AIFS value
+ * @max_txop: Upper bound of TXOP, value in units of 32 usec
+ */
+struct hostapd_wmm_rule {
+	int min_cwmin;
+	int min_cwmax;
+	int min_aifs;
+	int max_txop;
+};
+
+/**
  * struct hostapd_channel_data - Channel information
  */
 struct hostapd_channel_data {
@@ -156,21 +170,22 @@ struct hostapd_channel_data {
 	 * dfs_cac_ms - DFS CAC time in milliseconds
 	 */
 	unsigned int dfs_cac_ms;
+
+	/**
+	 * wmm_rules_valid - Indicates wmm_rules state
+	 */
+	int wmm_rules_valid;
+
+	/**
+	 * wmm_rules - WMM regulatory rules
+	 */
+	struct hostapd_wmm_rule wmm_rules[WMM_AC_NUM];
 };
 
-#define HE_MAX_NUM_SS 		8
 #define HE_MAX_MAC_CAPAB_SIZE	6
 #define HE_MAX_PHY_CAPAB_SIZE	11
 #define HE_MAX_MCS_CAPAB_SIZE	12
-
-/**
- * struct he_ppe_threshold - IEEE 802.11ax HE PPE Threshold
- */
-struct he_ppe_threshold {
-	u32 numss_m1;
-	u32 ru_count;
-	u32 ppet16_ppet8_ru3_ru0[HE_MAX_NUM_SS];
-};
+#define HE_MAX_PPET_CAPAB_SIZE	25
 
 /**
  * struct he_capabilities - IEEE 802.11ax HE capabilities
@@ -180,11 +195,22 @@ struct he_capabilities {
 	u8 phy_cap[HE_MAX_PHY_CAPAB_SIZE];
 	u8 mac_cap[HE_MAX_MAC_CAPAB_SIZE];
 	u8 mcs[HE_MAX_MCS_CAPAB_SIZE];
-	struct he_ppe_threshold ppet;
+	u8 ppet[HE_MAX_PPET_CAPAB_SIZE];
 };
 
 #define HOSTAPD_MODE_FLAG_HT_INFO_KNOWN BIT(0)
 #define HOSTAPD_MODE_FLAG_VHT_INFO_KNOWN BIT(1)
+
+
+enum ieee80211_op_mode {
+	IEEE80211_MODE_INFRA = 0,
+	IEEE80211_MODE_IBSS = 1,
+	IEEE80211_MODE_AP = 2,
+	IEEE80211_MODE_MESH = 5,
+
+	/* only add new entries before IEEE80211_MODE_NUM */
+	IEEE80211_MODE_NUM
+};
 
 /**
  * struct ieee80211_edmg_config - EDMG configuration
@@ -263,7 +289,7 @@ struct hostapd_hw_modes {
 	/**
 	 * he_capab - HE (IEEE 802.11ax) capabilities
 	 */
-	struct he_capabilities he_capab;
+	struct he_capabilities he_capab[IEEE80211_MODE_NUM];
 
 	/**
 	 * This structure describes the most essential parameters needed
@@ -272,11 +298,6 @@ struct hostapd_hw_modes {
 	struct ieee80211_edmg_config edmg;
 };
 
-
-#define IEEE80211_MODE_INFRA	0
-#define IEEE80211_MODE_IBSS	1
-#define IEEE80211_MODE_AP	2
-#define IEEE80211_MODE_MESH	5
 
 #define IEEE80211_CAP_ESS	0x0001
 #define IEEE80211_CAP_IBSS	0x0002
@@ -496,7 +517,7 @@ struct wpa_driver_scan_params {
 	 * mac_addr - MAC address used with randomization. The address cannot be
 	 * a multicast one, i.e., bit 0 of byte 0 should not be set.
 	 */
-	const u8 *mac_addr;
+	u8 *mac_addr;
 
 	/**
 	 * mac_addr_mask - MAC address mask used with randomization.
@@ -723,6 +744,11 @@ struct hostapd_freq_params {
 	 * vht_enabled - Whether VHT is enabled
 	 */
 	int vht_enabled;
+
+	/**
+	 * he_enabled - Whether HE is enabled
+	 */
+	int he_enabled;
 
 	/**
 	 * center_freq1 - Segment 0 center frequency in MHz
@@ -1078,6 +1104,14 @@ struct wpa_driver_associate_params {
 	int req_key_mgmt_offload;
 
 	/**
+	 * req_handshake_offload - Request EAPOL handshake offload
+	 *
+	 * Request EAPOL handshake offload for this connection if the device
+	 * supports it.
+	 */
+	int req_handshake_offload;
+
+	/**
 	 * Flag for indicating whether this association includes support for
 	 * RRM (Radio Resource Measurements)
 	 */
@@ -1152,6 +1186,11 @@ enum hide_ssid {
 	NO_SSID_HIDING,
 	HIDDEN_SSID_ZERO_LEN,
 	HIDDEN_SSID_ZERO_CONTENTS
+};
+
+enum ch_switch_state {
+	CH_SW_STARTED,
+	CH_SW_FINISHED
 };
 
 struct wowlan_triggers {
@@ -1433,6 +1472,21 @@ struct wpa_driver_ap_params {
 	 * type 11 as defined in IEEE Std 802.11-2016, 9.4.2.22.13
 	 */
 	const struct wpabuf *civic;
+
+	/**
+	 * he_spr - Whether Spatial Reuse is enabled
+	 */
+	 int he_spr;
+
+	/**
+	 * he_spr_srg_obss_pd_min_offset - Minimum TX power offset
+	 */
+	 int he_spr_srg_obss_pd_min_offset;
+
+	/**
+	 * he_spr_srg_obss_pd_max_offset - Maximum TX power offset
+	 */
+	 int he_spr_srg_obss_pd_max_offset;
 };
 
 struct wpa_driver_mesh_bss_params {
@@ -1468,6 +1522,121 @@ struct wpa_driver_mesh_join_params {
 #define WPA_DRIVER_MESH_FLAG_SAE_AUTH	0x00000004
 #define WPA_DRIVER_MESH_FLAG_AMPE	0x00000008
 	unsigned int flags;
+};
+
+struct wpa_driver_set_key_params {
+	/**
+	 * ifname - Interface name (for multi-SSID/VLAN support) */
+	const char *ifname;
+
+	/**
+	 * alg - Encryption algorithm
+	 *
+	 * (%WPA_ALG_NONE, %WPA_ALG_WEP, %WPA_ALG_TKIP, %WPA_ALG_CCMP,
+	 * %WPA_ALG_IGTK, %WPA_ALG_PMK, %WPA_ALG_GCMP, %WPA_ALG_GCMP_256,
+	 * %WPA_ALG_CCMP_256, %WPA_ALG_BIP_GMAC_128, %WPA_ALG_BIP_GMAC_256,
+	 * %WPA_ALG_BIP_CMAC_256);
+	 * %WPA_ALG_NONE clears the key. */
+	enum wpa_alg alg;
+
+	/**
+	 * addr - Address of the peer STA
+	 *
+	 * (BSSID of the current AP when setting pairwise key in station mode),
+	 * ff:ff:ff:ff:ff:ff for broadcast keys, %NULL for default keys that
+	 * are used both for broadcast and unicast; when clearing keys, %NULL
+	 * is used to indicate that both the broadcast-only and default key of
+	 * the specified key index is to be cleared */
+	const u8 *addr;
+
+	/**
+	 * key_idx - Key index
+	 *
+	 * (0..3), usually 0 for unicast keys; 0..4095 for IGTK */
+	int key_idx;
+
+	/**
+	 * set_tx - Configure this key as the default Tx key
+	 *
+	 * Only used when driver does not support separate unicast/individual
+	 * key */
+	int set_tx;
+
+	/**
+	 * seq - Sequence number/packet number
+	 *
+	 * seq_len octets, the next packet number to be used for in replay
+	 * protection; configured for Rx keys (in most cases, this is only used
+	 * with broadcast keys and set to zero for unicast keys); %NULL if not
+	 * set */
+	const u8 *seq;
+
+	/**
+	 * seq_len - Length of the seq, depends on the algorithm
+	 *
+	 * TKIP: 6 octets, CCMP/GCMP: 6 octets, IGTK: 6 octets */
+	size_t seq_len;
+
+	/**
+	 * key - Key buffer
+	 *
+	 * TKIP: 16-byte temporal key, 8-byte Tx Mic key, 8-byte Rx Mic Key */
+	const u8 *key;
+
+	/**
+	 * key_len - Length of the key buffer in octets
+	 *
+	 * WEP: 5 or 13, TKIP: 32, CCMP/GCMP: 16, IGTK: 16 */
+	size_t key_len;
+
+	/**
+	 * vlan_id - VLAN index (0..4095) for VLAN offload cases */
+	int vlan_id;
+
+	/**
+	 * key_flag - Additional key flags
+	 *
+	 * %KEY_FLAG_MODIFY
+	 *  Set when an already installed key must be updated.
+	 *  So far the only use-case is changing RX/TX status of
+	 *  installed keys. Must not be set when deleting a key.
+	 * %KEY_FLAG_DEFAULT
+	 *  Set when the key is also a default key. Must not be set when
+	 *  deleting a key.
+	 * %KEY_FLAG_RX
+	 *  The key is valid for RX. Must not be set when deleting a key.
+	 * %KEY_FLAG_TX
+	 *  The key is valid for TX. Must not be set when deleting a key.
+	 * %KEY_FLAG_GROUP
+	 *  The key is a broadcast or group key.
+	 * %KEY_FLAG_PAIRWISE
+	 *  The key is a pairwise key.
+	 * %KEY_FLAG_PMK
+	 *  The key is a Pairwise Master Key (PMK).
+	 *
+	 * Valid and pre-defined combinations are:
+	 * %KEY_FLAG_GROUP_RX_TX
+	 *  WEP key not to be installed as default key.
+	 * %KEY_FLAG_GROUP_RX_TX_DEFAULT
+	 *  Default WEP or WPA-NONE key.
+	 * %KEY_FLAG_GROUP_RX
+	 *  GTK key valid for RX only.
+	 * %KEY_FLAG_GROUP_TX_DEFAULT
+	 *  GTK key valid for TX only, immediately taking over TX.
+	 * %KEY_FLAG_PAIRWISE_RX_TX
+	 *  Pairwise key immediately becoming the active pairwise key.
+	 * %KEY_FLAG_PAIRWISE_RX
+	 *  Pairwise key not yet valid for TX. (Only usable when Extended
+	 *  Key ID is supported by the driver.)
+	 * %KEY_FLAG_PAIRWISE_RX_TX_MODIFY
+	 *  Enable TX for a pairwise key installed with
+	 *  KEY_FLAG_PAIRWISE_RX.
+	 *
+	 * Not a valid standalone key type but pre-defined to be combined
+	 * with other key_flags:
+	 * %KEY_FLAG_RX_TX
+	 *  RX/TX key. */
+	enum key_flag key_flag;
 };
 
 /**
@@ -1650,6 +1819,14 @@ struct wpa_driver_capa {
 #define WPA_DRIVER_FLAGS_FTM_RESPONDER		0x0100000000000000ULL
 /** Driver support 4-way handshake offload for WPA-Personal */
 #define WPA_DRIVER_FLAGS_4WAY_HANDSHAKE_PSK	0x0200000000000000ULL
+/** Driver supports a separate control port for EAPOL frames */
+#define WPA_DRIVER_FLAGS_CONTROL_PORT		0x0400000000000000ULL
+/** Driver supports VLAN offload */
+#define WPA_DRIVER_FLAGS_VLAN_OFFLOAD		0x0800000000000000ULL
+/** Driver supports UPDATE_FT_IES command */
+#define WPA_DRIVER_FLAGS_UPDATE_FT_IES          0x1000000000000000ULL
+/** Driver supports TWT (Target Wake Time) */
+#define WPA_DRIVER_FLAGS_SUPPORT_TWT		0x2000000000000000ULL
 	u64 flags;
 
 #define FULL_AP_CLIENT_STATE_SUPP(drv_flags) \
@@ -1784,6 +1961,7 @@ struct hostapd_data;
 struct hostap_sta_driver_data {
 	unsigned long rx_packets, tx_packets;
 	unsigned long long rx_bytes, tx_bytes;
+	unsigned long long rx_airtime, tx_airtime;
 	int bytes_64bit; /* whether 64-bit byte counters are supported */
 	unsigned long current_tx_rate;
 	unsigned long current_rx_rate;
@@ -1793,6 +1971,8 @@ struct hostap_sta_driver_data {
 	unsigned long tx_retry_failed;
 	unsigned long tx_retry_count;
 	s8 last_ack_rssi;
+	unsigned long backlog_packets;
+	unsigned long backlog_bytes;
 	s8 signal;
 	u8 rx_vhtmcs;
 	u8 tx_vhtmcs;
@@ -1813,6 +1993,8 @@ struct hostapd_sta_add_params {
 	const struct ieee80211_vht_capabilities *vht_capabilities;
 	int vht_opmode_enabled;
 	u8 vht_opmode;
+	const struct ieee80211_he_capabilities *he_capab;
+	size_t he_capab_len;
 	u32 flags; /* bitmask of WPA_STA_* flags */
 	u32 flags_mask; /* unset bits in flags */
 #ifdef CONFIG_MESH
@@ -2133,9 +2315,7 @@ struct drv_acs_params {
 	/* Configured ACS channel width */
 	u16 ch_width;
 
-	/* ACS channel list info */
-	unsigned int ch_list_len;
-	const u8 *ch_list;
+	/* ACS frequency list info */
 	const int *freq_list;
 };
 
@@ -2248,35 +2428,8 @@ struct wpa_driver_ops {
 
 	/**
 	 * set_key - Configure encryption key
-	 * @ifname: Interface name (for multi-SSID/VLAN support)
 	 * @priv: private driver interface data
-	 * @alg: encryption algorithm (%WPA_ALG_NONE, %WPA_ALG_WEP,
-	 *	%WPA_ALG_TKIP, %WPA_ALG_CCMP, %WPA_ALG_IGTK, %WPA_ALG_PMK,
-	 *	%WPA_ALG_GCMP, %WPA_ALG_GCMP_256, %WPA_ALG_CCMP_256,
-	 *	%WPA_ALG_BIP_GMAC_128, %WPA_ALG_BIP_GMAC_256,
-	 *	%WPA_ALG_BIP_CMAC_256);
-	 *	%WPA_ALG_NONE clears the key.
-	 * @addr: Address of the peer STA (BSSID of the current AP when setting
-	 *	pairwise key in station mode), ff:ff:ff:ff:ff:ff for
-	 *	broadcast keys, %NULL for default keys that are used both for
-	 *	broadcast and unicast; when clearing keys, %NULL is used to
-	 *	indicate that both the broadcast-only and default key of the
-	 *	specified key index is to be cleared
-	 * @key_idx: key index (0..3), usually 0 for unicast keys; 0..4095 for
-	 *	IGTK
-	 * @set_tx: configure this key as the default Tx key (only used when
-	 *	driver does not support separate unicast/individual key
-	 * @seq: sequence number/packet number, seq_len octets, the next
-	 *	packet number to be used for in replay protection; configured
-	 *	for Rx keys (in most cases, this is only used with broadcast
-	 *	keys and set to zero for unicast keys); %NULL if not set
-	 * @seq_len: length of the seq, depends on the algorithm:
-	 *	TKIP: 6 octets, CCMP/GCMP: 6 octets, IGTK: 6 octets
-	 * @key: key buffer; TKIP: 16-byte temporal key, 8-byte Tx Mic key,
-	 *	8-byte Rx Mic Key
-	 * @key_len: length of the key buffer in octets (WEP: 5 or 13,
-	 *	TKIP: 32, CCMP/GCMP: 16, IGTK: 16)
-	 *
+	 * @params: Key parameters
 	 * Returns: 0 on success, -1 on failure
 	 *
 	 * Configure the given key for the kernel driver. If the driver
@@ -2297,10 +2450,7 @@ struct wpa_driver_ops {
 	 * in driver_*.c set_key() implementation, see driver_ndis.c for an
 	 * example on how this can be done.
 	 */
-	int (*set_key)(const char *ifname, void *priv, enum wpa_alg alg,
-		       const u8 *addr, int key_idx, int set_tx,
-		       const u8 *seq, size_t seq_len,
-		       const u8 *key, size_t key_len);
+	int (*set_key)(void *priv, struct wpa_driver_set_key_params *params);
 
 	/**
 	 * init - Initialize driver interface
@@ -2369,7 +2519,7 @@ struct wpa_driver_ops {
 	 *
 	 * Returns: 0 on success, -1 on failure
 	 */
-	int (*deauthenticate)(void *priv, const u8 *addr, int reason_code);
+	int (*deauthenticate)(void *priv, const u8 *addr, u16 reason_code);
 
 	/**
 	 * associate - Request driver to associate
@@ -2552,11 +2702,13 @@ struct wpa_driver_ops {
 	 * driver decide
 	 * @csa_offs: Array of CSA offsets or %NULL
 	 * @csa_offs_len: Number of elements in csa_offs
+	 * @no_encrypt: Do not encrypt frame even if appropriate key exists
+	 *	(used only for testing purposes)
 	 * Returns: 0 on success, -1 on failure
 	 */
 	int (*send_mlme)(void *priv, const u8 *data, size_t data_len,
 			 int noack, unsigned int freq, const u16 *csa_offs,
-			 size_t csa_offs_len);
+			 size_t csa_offs_len, int no_encrypt);
 
 	/**
 	 * update_ft_ies - Update FT (IEEE 802.11r) IEs
@@ -2811,6 +2963,33 @@ struct wpa_driver_ops {
 			     const u8 *addr);
 
 	/**
+	 * tx_control_port - Send a frame over the 802.1X controlled port
+	 * @priv: Private driver interface data
+	 * @dest: Destination MAC address
+	 * @proto: Ethertype in host byte order
+	 * @buf: Frame payload starting from IEEE 802.1X header
+	 * @len: Frame payload length
+	 * @no_encrypt: Do not encrypt frame
+	 *
+	 * Returns 0 on success, else an error
+	 *
+	 * This is like a normal Ethernet send except that the driver is aware
+	 * (by other means than the Ethertype) that this frame is special,
+	 * and more importantly it gains an ordering between the transmission of
+	 * the frame and other driver management operations such as key
+	 * installations. This can be used to work around known limitations in
+	 * IEEE 802.11 protocols such as race conditions between rekeying 4-way
+	 * handshake message 4/4 and a PTK being overwritten.
+	 *
+	 * This function is only used for a given interface if the driver
+	 * instance reports WPA_DRIVER_FLAGS_CONTROL_PORT capability. Otherwise,
+	 * API users will fall back to sending the frame via a normal socket.
+	 */
+	int (*tx_control_port)(void *priv, const u8 *dest,
+			       u16 proto, const u8 *buf, size_t len,
+			       int no_encrypt);
+
+	/**
 	 * hapd_send_eapol - Send an EAPOL packet (AP only)
 	 * @priv: private driver interface data
 	 * @addr: Destination MAC address
@@ -2838,7 +3017,7 @@ struct wpa_driver_ops {
 	 * a Deauthentication frame to be sent to it.
 	 */
 	int (*sta_deauth)(void *priv, const u8 *own_addr, const u8 *addr,
-			  int reason);
+			  u16 reason);
 
 	/**
 	 * sta_disassoc - Disassociate a station (AP only)
@@ -2852,7 +3031,7 @@ struct wpa_driver_ops {
 	 * a Disassociation frame to be sent to it.
 	 */
 	int (*sta_disassoc)(void *priv, const u8 *own_addr, const u8 *addr,
-			    int reason);
+			    u16 reason);
 
 	/**
 	 * sta_remove - Remove a station entry (AP only)
@@ -2970,6 +3149,16 @@ struct wpa_driver_ops {
 			     unsigned int flags_and);
 
 	/**
+	 * sta_set_airtime_weight - Set station airtime weight (AP only)
+	 * @priv: Private driver interface data
+	 * @addr: Station address
+	 * @weight: New weight for station airtime assignment
+	 * Returns: 0 on success, -1 on failure
+	 */
+	int (*sta_set_airtime_weight)(void *priv, const u8 *addr,
+				      unsigned int weight);
+
+	/**
 	 * set_tx_queue_params - Set TX queue parameters
 	 * @priv: Private driver interface data
 	 * @queue: Queue number (0 = VO, 1 = VI, 2 = BE, 3 = BK)
@@ -3044,19 +3233,6 @@ struct wpa_driver_ops {
 	 * this handler will be called after initial setup has been completed.
 	 */
 	int (*commit)(void *priv);
-
-	/**
-	 * send_ether - Send an ethernet packet (AP only)
-	 * @priv: private driver interface data
-	 * @dst: Destination MAC address
-	 * @src: Source MAC address
-	 * @proto: Ethertype
-	 * @data: EAPOL packet starting with IEEE 802.1X header
-	 * @data_len: Length of the EAPOL packet in octets
-	 * Returns: 0 on success, -1 on failure
-	 */
-	int (*send_ether)(void *priv, const u8 *dst, const u8 *src, u16 proto,
-			  const u8 *data, size_t data_len);
 
 	/**
 	 * set_radius_acl_auth - Notification of RADIUS ACL change
@@ -3281,20 +3457,6 @@ struct wpa_driver_ops {
 	int (*signal_monitor)(void *priv, int threshold, int hysteresis);
 
 	/**
-	 * send_frame - Send IEEE 802.11 frame (testing use only)
-	 * @priv: Private driver interface data
-	 * @data: IEEE 802.11 frame with IEEE 802.11 header
-	 * @data_len: Size of the frame
-	 * @encrypt: Whether to encrypt the frame (if keys are set)
-	 * Returns: 0 on success, -1 on failure
-	 *
-	 * This function is only used for debugging purposes and is not
-	 * required to be implemented for normal operations.
-	 */
-	int (*send_frame)(void *priv, const u8 *data, size_t data_len,
-			  int encrypt);
-
-	/**
 	 * get_noa - Get current Notice of Absence attribute payload
 	 * @priv: Private driver interface data
 	 * @buf: Buffer for returning NoA
@@ -3444,6 +3606,12 @@ struct wpa_driver_ops {
 	 */
 	int (*br_set_net_param)(void *priv, enum drv_br_net_param param,
 				unsigned int val);
+
+	/**
+	 * get_wowlan - Get wake-on-wireless status
+	 * @priv: Private driver interface data
+	 */
+	int (*get_wowlan)(void *priv);
 
 	/**
 	 * set_wowlan - Set wake-on-wireless triggers
@@ -4005,6 +4173,18 @@ struct wpa_driver_ops {
 	 * Returns 0 on success, -1 on failure
 	 */
 	int (*leave_mesh)(void *priv);
+
+	/**
+	 * probe_mesh_link - Inject a frame over direct mesh link to a given
+	 *	peer skipping the next_hop lookup from mpath table.
+	 * @priv: Private driver interface data
+	 * @addr: Peer MAC address
+	 * @eth: Ethernet frame to be sent
+	 * @len: Ethernet frame lengtn in bytes
+	 * Returns 0 on success, -1 on failure
+	 */
+	int (*probe_mesh_link)(void *priv, const u8 *addr, const u8 *eth,
+			       size_t len);
 
 	/**
 	 * do_acs - Automatically select channel
@@ -4587,6 +4767,15 @@ enum wpa_event_type {
 	 * */
 	EVENT_CH_SWITCH,
 
+	/**
+	 * EVENT_CH_SWITCH_STARTED - AP or GO started to switch channels
+	 *
+	 * This is a pre-switch event indicating the shortly following switch
+	 * of operating channels.
+	 *
+	 * Described in wpa_event_data.ch_switch
+	 */
+	EVENT_CH_SWITCH_STARTED,
 	/**
 	 * EVENT_WNM - Request WNM operation
 	 *
@@ -5525,18 +5714,26 @@ union wpa_event_data {
 
 	/**
 	 * struct acs_selected_channels - Data for EVENT_ACS_CHANNEL_SELECTED
-	 * @pri_channel: Selected primary channel
-	 * @sec_channel: Selected secondary channel
+	 * @pri_freq: Selected primary frequency
+	 * @sec_freq: Selected secondary frequency
 	 * @vht_seg0_center_ch: VHT mode Segment0 center channel
+	 *	The value is the index of the channel center frequency for
+	 *	20 MHz, 40 MHz, and 80 MHz channels. The value is the center
+	 *	frequency index of the primary 80 MHz segment for 160 MHz and
+	 *	80+80 MHz channels.
 	 * @vht_seg1_center_ch: VHT mode Segment1 center channel
+	 *	The value is zero for 20 MHz, 40 MHz, and 80 MHz channels. The
+	 *	value is the index of the channel center frequency for 160 MHz
+	 *	channels and the center frequency index of the secondary 80 MHz
+	 *	segment for 80+80 MHz channels.
 	 * @ch_width: Selected Channel width by driver. Driver may choose to
 	 *	change hostapd configured ACS channel width due driver internal
 	 *	channel restrictions.
 	 * hw_mode: Selected band (used with hw_mode=any)
 	 */
 	struct acs_selected_channels {
-		u8 pri_channel;
-		u8 sec_channel;
+		unsigned int pri_freq;
+		unsigned int sec_freq;
 		u8 vht_seg0_center_ch;
 		u8 vht_seg1_center_ch;
 		u16 ch_width;

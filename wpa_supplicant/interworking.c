@@ -1554,7 +1554,7 @@ static int interworking_set_eap_params(struct wpa_ssid *ssid,
 				  cred->domain_suffix_match) < 0)
 		return -1;
 
-	ssid->eap.ocsp = cred->ocsp;
+	ssid->eap.cert.ocsp = cred->ocsp;
 
 	return 0;
 }
@@ -2262,7 +2262,7 @@ int interworking_home_sp_cred(struct wpa_supplicant *wpa_s,
 			realm++;
 		wpa_msg(wpa_s, MSG_DEBUG,
 			"Interworking: Search for match with SIM/USIM domain %s",
-			realm);
+			realm ? realm : "[NULL]");
 		if (realm &&
 		    domain_name_list_contains(domain_names, realm, 1))
 			return 1;
@@ -2676,7 +2676,8 @@ static void interworking_next_anqp_fetch(struct wpa_supplicant *wpa_s)
 			found++;
 			bss->flags |= WPA_BSS_ANQP_FETCH_TRIED;
 			wpa_msg(wpa_s, MSG_INFO, "Starting ANQP fetch for "
-				MACSTR, MAC2STR(bss->bssid));
+				MACSTR " (HESSID " MACSTR ")",
+				MAC2STR(bss->bssid), MAC2STR(bss->hessid));
 			interworking_anqp_send_req(wpa_s, bss);
 			break;
 		}

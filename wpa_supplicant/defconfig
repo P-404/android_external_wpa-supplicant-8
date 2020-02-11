@@ -77,7 +77,7 @@ CONFIG_DRIVER_WIRED=y
 #CONFIG_DRIVER_MACSEC_QCA=y
 
 # Driver interface for Linux MACsec drivers
-#CONFIG_DRIVER_MACSEC_LINUX=y
+CONFIG_DRIVER_MACSEC_LINUX=y
 
 # Driver interface for the Broadcom RoboSwitch family
 #CONFIG_DRIVER_ROBOSWITCH=y
@@ -111,6 +111,16 @@ CONFIG_EAP_TTLS=y
 # EAP-FAST
 CONFIG_EAP_FAST=y
 
+# EAP-TEAP
+# Note: The current EAP-TEAP implementation is experimental and should not be
+# enabled for production use. The IETF RFC 7170 that defines EAP-TEAP has number
+# of conflicting statements and missing details and the implementation has
+# vendor specific workarounds for those and as such, may not interoperate with
+# any other implementation. This should not be used for anything else than
+# experimentation and interoperability testing until those issues has been
+# resolved.
+#CONFIG_EAP_TEAP=y
+
 # EAP-GTC
 CONFIG_EAP_GTC=y
 
@@ -119,6 +129,9 @@ CONFIG_EAP_OTP=y
 
 # EAP-SIM (enable CONFIG_PCSC, if EAP-SIM is used)
 #CONFIG_EAP_SIM=y
+
+# Enable SIM simulator (Milenage) for EAP-SIM
+#CONFIG_SIM_SIMULATOR=y
 
 # EAP-PSK (experimental; this is _not_ needed for WPA-PSK)
 #CONFIG_EAP_PSK=y
@@ -170,7 +183,7 @@ CONFIG_EAP_IKEV2=y
 #CONFIG_EAP_EKE=y
 
 # MACsec
-#CONFIG_MACSEC=y
+CONFIG_MACSEC=y
 
 # PKCS#12 (PFX) support (used to read private key and certificate file from
 # a file that usually has extension .p12 or .pfx)
@@ -297,10 +310,6 @@ CONFIG_BACKEND=file
 # bridge interfaces (commit 'bridge: respect RFC2863 operational state')').
 #CONFIG_NO_LINUX_PACKET_SOCKET_WAR=y
 
-# IEEE 802.11w (management frame protection), also known as PMF
-# Driver support is also needed for IEEE 802.11w.
-CONFIG_IEEE80211W=y
-
 # Support Operating Channel Validation
 #CONFIG_OCV=y
 
@@ -353,7 +362,7 @@ CONFIG_IEEE80211W=y
 #PLATFORMSDKLIB="/opt/Program Files/Microsoft Platform SDK/Lib"
 
 # Add support for new DBus control interface
-# (fi.w1.hostap.wpa_supplicant1)
+# (fi.w1.wpa_supplicant1)
 CONFIG_CTRL_IFACE_DBUS_NEW=y
 
 # Add introspection support for new DBus control interface
@@ -597,6 +606,4 @@ CONFIG_BGSCAN_SIMPLE=y
 #CONFIG_OWE=y
 
 # Device Provisioning Protocol (DPP)
-# This requires CONFIG_IEEE80211W=y to be enabled, too. (see
-# wpa_supplicant/README-DPP for details)
 CONFIG_DPP=y

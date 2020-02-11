@@ -40,6 +40,7 @@ struct ieee802_11_elems {
 	const u8 *ext_supp_rates;
 	const u8 *wpa_ie;
 	const u8 *rsn_ie;
+	const u8 *rsnxe;
 	const u8 *wmm; /* WMM Information or Parameter Element */
 	const u8 *wmm_tspec;
 	const u8 *wps_ie;
@@ -94,6 +95,8 @@ struct ieee802_11_elems {
 	const u8 *oci;
 	const u8 *multi_ap;
 	const u8 *he_capabilities;
+	const u8 *he_operation;
+	const u8 *short_ssid_list;
 
 	u8 ssid_len;
 	u8 supp_rates_len;
@@ -101,6 +104,7 @@ struct ieee802_11_elems {
 	u8 ext_supp_rates_len;
 	u8 wpa_ie_len;
 	u8 rsn_ie_len;
+	u8 rsnxe_len;
 	u8 wmm_len; /* 7 = WMM Information; 24 = WMM Parameter */
 	u8 wmm_tspec_len;
 	u8 wps_ie_len;
@@ -143,6 +147,8 @@ struct ieee802_11_elems {
 	u8 oci_len;
 	u8 multi_ap_len;
 	u8 he_capabilities_len;
+	u8 he_operation_len;
+	u8 short_ssid_list_len;
 
 	struct mb_ies_info mb_ies;
 };
@@ -185,6 +191,8 @@ int mb_ies_info_by_ies(struct mb_ies_info *info, const u8 *ies_buf,
 struct wpabuf * mb_ies_by_info(struct mb_ies_info *info);
 
 const char * fc2str(u16 fc);
+const char * reason2str(u16 reason);
+const char * status2str(u16 status);
 
 struct oper_class_map {
 	enum hostapd_hw_mode mode;
@@ -217,11 +225,17 @@ u8 country_to_global_op_class(const char *country, u8 op_class);
 
 const struct oper_class_map * get_oper_class(const char *country, u8 op_class);
 int oper_class_bw_to_int(const struct oper_class_map *map);
+int center_idx_to_bw_6ghz(u8 idx);
+int is_6ghz_freq(int freq);
+int is_6ghz_op_class(u8 op_class);
+int is_6ghz_psc_frequency(int freq);
 
 int ieee802_11_parse_candidate_list(const char *pos, u8 *nei_rep,
 				    size_t nei_rep_len);
 
 int ieee802_11_ext_capab(const u8 *ie, unsigned int capab);
+int op_class_to_bandwidth(u8 op_class);
+int op_class_to_ch_width(u8 op_class);
 
 /* element iteration helpers */
 #define for_each_element(_elem, _data, _datalen)			\

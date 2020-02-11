@@ -274,9 +274,17 @@ static int ieee802_11_parse_extension(const u8 *pos, size_t elen,
 		elems->he_capabilities = pos;
 		elems->he_capabilities_len = elen;
 		break;
+	case WLAN_EID_EXT_HE_OPERATION:
+		elems->he_operation = pos;
+		elems->he_operation_len = elen;
+		break;
 	case WLAN_EID_EXT_OCV_OCI:
 		elems->oci = pos;
 		elems->oci_len = elen;
+		break;
+	case WLAN_EID_EXT_SHORT_SSID_LIST:
+		elems->short_ssid_list = pos;
+		elems->short_ssid_list_len = elen;
 		break;
 	default:
 		if (show_errors) {
@@ -360,6 +368,10 @@ ParseRes ieee802_11_parse_elems(const u8 *start, size_t len,
 		case WLAN_EID_RSN:
 			elems->rsn_ie = pos;
 			elems->rsn_ie_len = elen;
+			break;
+		case WLAN_EID_RSNX:
+			elems->rsnxe = pos;
+			elems->rsnxe_len = elen;
 			break;
 		case WLAN_EID_PWR_CAPABILITY:
 			if (elen < 2)
@@ -870,6 +882,19 @@ enum hostapd_hw_mode ieee80211_freq_to_channel_ext(unsigned int freq,
 		return HOSTAPD_MODE_IEEE80211A;
 	}
 
+	if (freq > 5940 && freq <= 7105) {
+		int bw;
+		u8 idx = (freq - 5940) / 5;
+
+		bw = center_idx_to_bw_6ghz(idx);
+		if (bw < 0)
+			return NUM_HOSTAPD_MODES;
+
+		*channel = idx;
+		*op_class = 131 + bw;
+		return HOSTAPD_MODE_IEEE80211A;
+	}
+
 	/* 56.16 GHz, channel 1..6 */
 	if (freq >= 56160 + 2160 * 1 && freq <= 56160 + 2160 * 6) {
 		if (sec_channel)
@@ -1240,6 +1265,14 @@ static int ieee80211_chan_to_freq_global(u8 op_class, u8 chan)
 		if (chan < 36 || chan > 128)
 			return -1;
 		return 5000 + 5 * chan;
+	case 131: /* UHB channels, 20 MHz: 1, 5, 9.. */
+	case 132: /* UHB channels, 40 MHz: 3, 11, 19.. */
+	case 133: /* UHB channels, 80 MHz: 7, 23, 39.. */
+	case 134: /* UHB channels, 160 MHz: 15, 47, 79.. */
+	case 135: /* UHB channels, 80+80 MHz: 7, 23, 39.. */
+		if (chan < 1 || chan > 233)
+			return -1;
+		return 5940 + chan * 5;
 	case 180: /* 60 GHz band, channels 1..8 */
 		if (chan < 1 || chan > 8)
 			return -1;
@@ -1410,6 +1443,186 @@ const char * fc2str(u16 fc)
 }
 
 
+const char * reason2str(u16 reason)
+{
+#define R2S(r) case WLAN_REASON_ ## r: return #r;
+	switch (reason) {
+	R2S(UNSPECIFIED)
+	R2S(PREV_AUTH_NOT_VALID)
+	R2S(DEAUTH_LEAVING)
+	R2S(DISASSOC_DUE_TO_INACTIVITY)
+	R2S(DISASSOC_AP_BUSY)
+	R2S(CLASS2_FRAME_FROM_NONAUTH_STA)
+	R2S(CLASS3_FRAME_FROM_NONASSOC_STA)
+	R2S(DISASSOC_STA_HAS_LEFT)
+	R2S(STA_REQ_ASSOC_WITHOUT_AUTH)
+	R2S(PWR_CAPABILITY_NOT_VALID)
+	R2S(SUPPORTED_CHANNEL_NOT_VALID)
+	R2S(BSS_TRANSITION_DISASSOC)
+	R2S(INVALID_IE)
+	R2S(MICHAEL_MIC_FAILURE)
+	R2S(4WAY_HANDSHAKE_TIMEOUT)
+	R2S(GROUP_KEY_UPDATE_TIMEOUT)
+	R2S(IE_IN_4WAY_DIFFERS)
+	R2S(GROUP_CIPHER_NOT_VALID)
+	R2S(PAIRWISE_CIPHER_NOT_VALID)
+	R2S(AKMP_NOT_VALID)
+	R2S(UNSUPPORTED_RSN_IE_VERSION)
+	R2S(INVALID_RSN_IE_CAPAB)
+	R2S(IEEE_802_1X_AUTH_FAILED)
+	R2S(CIPHER_SUITE_REJECTED)
+	R2S(TDLS_TEARDOWN_UNREACHABLE)
+	R2S(TDLS_TEARDOWN_UNSPECIFIED)
+	R2S(SSP_REQUESTED_DISASSOC)
+	R2S(NO_SSP_ROAMING_AGREEMENT)
+	R2S(BAD_CIPHER_OR_AKM)
+	R2S(NOT_AUTHORIZED_THIS_LOCATION)
+	R2S(SERVICE_CHANGE_PRECLUDES_TS)
+	R2S(UNSPECIFIED_QOS_REASON)
+	R2S(NOT_ENOUGH_BANDWIDTH)
+	R2S(DISASSOC_LOW_ACK)
+	R2S(EXCEEDED_TXOP)
+	R2S(STA_LEAVING)
+	R2S(END_TS_BA_DLS)
+	R2S(UNKNOWN_TS_BA)
+	R2S(TIMEOUT)
+	R2S(PEERKEY_MISMATCH)
+	R2S(AUTHORIZED_ACCESS_LIMIT_REACHED)
+	R2S(EXTERNAL_SERVICE_REQUIREMENTS)
+	R2S(INVALID_FT_ACTION_FRAME_COUNT)
+	R2S(INVALID_PMKID)
+	R2S(INVALID_MDE)
+	R2S(INVALID_FTE)
+	R2S(MESH_PEERING_CANCELLED)
+	R2S(MESH_MAX_PEERS)
+	R2S(MESH_CONFIG_POLICY_VIOLATION)
+	R2S(MESH_CLOSE_RCVD)
+	R2S(MESH_MAX_RETRIES)
+	R2S(MESH_CONFIRM_TIMEOUT)
+	R2S(MESH_INVALID_GTK)
+	R2S(MESH_INCONSISTENT_PARAMS)
+	R2S(MESH_INVALID_SECURITY_CAP)
+	R2S(MESH_PATH_ERROR_NO_PROXY_INFO)
+	R2S(MESH_PATH_ERROR_NO_FORWARDING_INFO)
+	R2S(MESH_PATH_ERROR_DEST_UNREACHABLE)
+	R2S(MAC_ADDRESS_ALREADY_EXISTS_IN_MBSS)
+	R2S(MESH_CHANNEL_SWITCH_REGULATORY_REQ)
+	R2S(MESH_CHANNEL_SWITCH_UNSPECIFIED)
+	}
+	return "UNKNOWN";
+#undef R2S
+}
+
+
+const char * status2str(u16 status)
+{
+#define S2S(s) case WLAN_STATUS_ ## s: return #s;
+	switch (status) {
+	S2S(SUCCESS)
+	S2S(UNSPECIFIED_FAILURE)
+	S2S(TDLS_WAKEUP_ALTERNATE)
+	S2S(TDLS_WAKEUP_REJECT)
+	S2S(SECURITY_DISABLED)
+	S2S(UNACCEPTABLE_LIFETIME)
+	S2S(NOT_IN_SAME_BSS)
+	S2S(CAPS_UNSUPPORTED)
+	S2S(REASSOC_NO_ASSOC)
+	S2S(ASSOC_DENIED_UNSPEC)
+	S2S(NOT_SUPPORTED_AUTH_ALG)
+	S2S(UNKNOWN_AUTH_TRANSACTION)
+	S2S(CHALLENGE_FAIL)
+	S2S(AUTH_TIMEOUT)
+	S2S(AP_UNABLE_TO_HANDLE_NEW_STA)
+	S2S(ASSOC_DENIED_RATES)
+	S2S(ASSOC_DENIED_NOSHORT)
+	S2S(SPEC_MGMT_REQUIRED)
+	S2S(PWR_CAPABILITY_NOT_VALID)
+	S2S(SUPPORTED_CHANNEL_NOT_VALID)
+	S2S(ASSOC_DENIED_NO_SHORT_SLOT_TIME)
+	S2S(ASSOC_DENIED_NO_HT)
+	S2S(R0KH_UNREACHABLE)
+	S2S(ASSOC_DENIED_NO_PCO)
+	S2S(ASSOC_REJECTED_TEMPORARILY)
+	S2S(ROBUST_MGMT_FRAME_POLICY_VIOLATION)
+	S2S(UNSPECIFIED_QOS_FAILURE)
+	S2S(DENIED_INSUFFICIENT_BANDWIDTH)
+	S2S(DENIED_POOR_CHANNEL_CONDITIONS)
+	S2S(DENIED_QOS_NOT_SUPPORTED)
+	S2S(REQUEST_DECLINED)
+	S2S(INVALID_PARAMETERS)
+	S2S(REJECTED_WITH_SUGGESTED_CHANGES)
+	S2S(INVALID_IE)
+	S2S(GROUP_CIPHER_NOT_VALID)
+	S2S(PAIRWISE_CIPHER_NOT_VALID)
+	S2S(AKMP_NOT_VALID)
+	S2S(UNSUPPORTED_RSN_IE_VERSION)
+	S2S(INVALID_RSN_IE_CAPAB)
+	S2S(CIPHER_REJECTED_PER_POLICY)
+	S2S(TS_NOT_CREATED)
+	S2S(DIRECT_LINK_NOT_ALLOWED)
+	S2S(DEST_STA_NOT_PRESENT)
+	S2S(DEST_STA_NOT_QOS_STA)
+	S2S(ASSOC_DENIED_LISTEN_INT_TOO_LARGE)
+	S2S(INVALID_FT_ACTION_FRAME_COUNT)
+	S2S(INVALID_PMKID)
+	S2S(INVALID_MDIE)
+	S2S(INVALID_FTIE)
+	S2S(REQUESTED_TCLAS_NOT_SUPPORTED)
+	S2S(INSUFFICIENT_TCLAS_PROCESSING_RESOURCES)
+	S2S(TRY_ANOTHER_BSS)
+	S2S(GAS_ADV_PROTO_NOT_SUPPORTED)
+	S2S(NO_OUTSTANDING_GAS_REQ)
+	S2S(GAS_RESP_NOT_RECEIVED)
+	S2S(STA_TIMED_OUT_WAITING_FOR_GAS_RESP)
+	S2S(GAS_RESP_LARGER_THAN_LIMIT)
+	S2S(REQ_REFUSED_HOME)
+	S2S(ADV_SRV_UNREACHABLE)
+	S2S(REQ_REFUSED_SSPN)
+	S2S(REQ_REFUSED_UNAUTH_ACCESS)
+	S2S(INVALID_RSNIE)
+	S2S(U_APSD_COEX_NOT_SUPPORTED)
+	S2S(U_APSD_COEX_MODE_NOT_SUPPORTED)
+	S2S(BAD_INTERVAL_WITH_U_APSD_COEX)
+	S2S(ANTI_CLOGGING_TOKEN_REQ)
+	S2S(FINITE_CYCLIC_GROUP_NOT_SUPPORTED)
+	S2S(CANNOT_FIND_ALT_TBTT)
+	S2S(TRANSMISSION_FAILURE)
+	S2S(REQ_TCLAS_NOT_SUPPORTED)
+	S2S(TCLAS_RESOURCES_EXCHAUSTED)
+	S2S(REJECTED_WITH_SUGGESTED_BSS_TRANSITION)
+	S2S(REJECT_WITH_SCHEDULE)
+	S2S(REJECT_NO_WAKEUP_SPECIFIED)
+	S2S(SUCCESS_POWER_SAVE_MODE)
+	S2S(PENDING_ADMITTING_FST_SESSION)
+	S2S(PERFORMING_FST_NOW)
+	S2S(PENDING_GAP_IN_BA_WINDOW)
+	S2S(REJECT_U_PID_SETTING)
+	S2S(REFUSED_EXTERNAL_REASON)
+	S2S(REFUSED_AP_OUT_OF_MEMORY)
+	S2S(REJECTED_EMERGENCY_SERVICE_NOT_SUPPORTED)
+	S2S(QUERY_RESP_OUTSTANDING)
+	S2S(REJECT_DSE_BAND)
+	S2S(TCLAS_PROCESSING_TERMINATED)
+	S2S(TS_SCHEDULE_CONFLICT)
+	S2S(DENIED_WITH_SUGGESTED_BAND_AND_CHANNEL)
+	S2S(MCCAOP_RESERVATION_CONFLICT)
+	S2S(MAF_LIMIT_EXCEEDED)
+	S2S(MCCA_TRACK_LIMIT_EXCEEDED)
+	S2S(DENIED_DUE_TO_SPECTRUM_MANAGEMENT)
+	S2S(ASSOC_DENIED_NO_VHT)
+	S2S(ENABLEMENT_DENIED)
+	S2S(RESTRICTION_FROM_AUTHORIZED_GDB)
+	S2S(AUTHORIZATION_DEENABLED)
+	S2S(FILS_AUTHENTICATION_FAILURE)
+	S2S(UNKNOWN_AUTHENTICATION_SERVER)
+	S2S(UNKNOWN_PASSWORD_IDENTIFIER)
+	S2S(SAE_HASH_TO_ELEMENT)
+	}
+	return "UNKNOWN";
+#undef S2S
+}
+
+
 int mb_ies_info_by_ies(struct mb_ies_info *info, const u8 *ies_buf,
 		       size_t ies_len)
 {
@@ -1502,6 +1715,7 @@ const struct oper_class_map global_op_class[] = {
 	{ HOSTAPD_MODE_IEEE80211A, 128, 36, 161, 4, BW80, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 129, 50, 114, 16, BW160, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 130, 36, 161, 4, BW80P80, P2P_SUPP },
+	{ HOSTAPD_MODE_IEEE80211A, 131, 1, 233, 4, BW20, P2P_SUPP },
 
 	/*
 	 * IEEE Std 802.11ad-2012 and P802.ay/D5.0 60 GHz operating classes.
@@ -1825,6 +2039,63 @@ int oper_class_bw_to_int(const struct oper_class_map *map)
 }
 
 
+int center_idx_to_bw_6ghz(u8 idx)
+{
+	/* channels: 1, 5, 9, 13... */
+	if ((idx & 0x3) == 0x1)
+		return 0; /* 20 MHz */
+	/* channels 3, 11, 19... */
+	if ((idx & 0x7) == 0x3)
+		return 1; /* 40 MHz */
+	/* channels 7, 23, 39.. */
+	if ((idx & 0xf) == 0x7)
+		return 2; /* 80 MHz */
+	/* channels 15, 47, 79...*/
+	if ((idx & 0x1f) == 0xf)
+		return 3; /* 160 MHz */
+
+	return -1;
+}
+
+
+int is_6ghz_freq(int freq)
+{
+	if (freq < 5940 || freq > 7105)
+		return 0;
+
+	if (center_idx_to_bw_6ghz((freq - 5940) / 5) < 0)
+		return 0;
+
+	return 1;
+}
+
+
+int is_6ghz_op_class(u8 op_class)
+{
+	return op_class >= 131 && op_class <= 135;
+}
+
+
+int is_6ghz_psc_frequency(int freq)
+{
+	int i;
+
+	if (!is_6ghz_freq(freq))
+		return 0;
+	if ((((freq - 5940) / 5) & 0x3) != 0x1)
+		return 0;
+
+	i = (freq - 5940 + 55) % 80;
+	if (i == 0)
+		i = (freq - 5940 + 55) / 80;
+
+	if (i >= 1 && i <= 15)
+		return 1;
+
+	return 0;
+}
+
+
 int ieee802_11_parse_candidate_list(const char *pos, u8 *nei_rep,
 				    size_t nei_rep_len)
 {
@@ -2004,4 +2275,122 @@ int ieee802_edmg_is_allowed(struct ieee80211_edmg_config allowed,
 		return 0;
 
 	return 1;
+}
+
+
+int op_class_to_bandwidth(u8 op_class)
+{
+	switch (op_class) {
+	case 81:
+	case 82:
+		return 20;
+	case 83: /* channels 1..9; 40 MHz */
+	case 84: /* channels 5..13; 40 MHz */
+		return 40;
+	case 115: /* channels 36,40,44,48; indoor only */
+		return 20;
+	case 116: /* channels 36,44; 40 MHz; indoor only */
+	case 117: /* channels 40,48; 40 MHz; indoor only */
+		return 40;
+	case 118: /* channels 52,56,60,64; dfs */
+		return 20;
+	case 119: /* channels 52,60; 40 MHz; dfs */
+	case 120: /* channels 56,64; 40 MHz; dfs */
+		return 40;
+	case 121: /* channels 100-140 */
+		return 20;
+	case 122: /* channels 100-142; 40 MHz */
+	case 123: /* channels 104-136; 40 MHz */
+		return 40;
+	case 124: /* channels 149,153,157,161 */
+	case 125: /* channels 149,153,157,161,165,169 */
+		return 20;
+	case 126: /* channels 149,157; 40 MHz */
+	case 127: /* channels 153,161; 40 MHz */
+		return 40;
+	case 128: /* center freqs 42, 58, 106, 122, 138, 155; 80 MHz */
+		return 80;
+	case 129: /* center freqs 50, 114; 160 MHz */
+		return 160;
+	case 130: /* center freqs 42, 58, 106, 122, 138, 155; 80+80 MHz */
+		return 80;
+	case 131: /* UHB channels, 20 MHz: 1, 5, 9.. */
+		return 20;
+	case 132: /* UHB channels, 40 MHz: 3, 11, 19.. */
+		return 40;
+	case 133: /* UHB channels, 80 MHz: 7, 23, 39.. */
+		return 80;
+	case 134: /* UHB channels, 160 MHz: 15, 47, 79.. */
+	case 135: /* UHB channels, 80+80 MHz: 7, 23, 39.. */
+		return 160;
+	case 180: /* 60 GHz band, channels 1..8 */
+		return 2160;
+	case 181: /* 60 GHz band, EDMG CB2, channels 9..15 */
+		return 4320;
+	case 182: /* 60 GHz band, EDMG CB3, channels 17..22 */
+		return 6480;
+	case 183: /* 60 GHz band, EDMG CB4, channel 25..29 */
+		return 8640;
+	}
+
+	return 20;
+}
+
+
+int op_class_to_ch_width(u8 op_class)
+{
+	switch (op_class) {
+	case 81:
+	case 82:
+		return CHANWIDTH_USE_HT;
+	case 83: /* channels 1..9; 40 MHz */
+	case 84: /* channels 5..13; 40 MHz */
+		return CHANWIDTH_USE_HT;
+	case 115: /* channels 36,40,44,48; indoor only */
+		return CHANWIDTH_USE_HT;
+	case 116: /* channels 36,44; 40 MHz; indoor only */
+	case 117: /* channels 40,48; 40 MHz; indoor only */
+		return CHANWIDTH_USE_HT;
+	case 118: /* channels 52,56,60,64; dfs */
+		return CHANWIDTH_USE_HT;
+	case 119: /* channels 52,60; 40 MHz; dfs */
+	case 120: /* channels 56,64; 40 MHz; dfs */
+		return CHANWIDTH_USE_HT;
+	case 121: /* channels 100-140 */
+		return CHANWIDTH_USE_HT;
+	case 122: /* channels 100-142; 40 MHz */
+	case 123: /* channels 104-136; 40 MHz */
+		return CHANWIDTH_USE_HT;
+	case 124: /* channels 149,153,157,161 */
+	case 125: /* channels 149,153,157,161,165,169 */
+		return CHANWIDTH_USE_HT;
+	case 126: /* channels 149,157; 40 MHz */
+	case 127: /* channels 153,161; 40 MHz */
+		return CHANWIDTH_USE_HT;
+	case 128: /* center freqs 42, 58, 106, 122, 138, 155; 80 MHz */
+		return CHANWIDTH_80MHZ;
+	case 129: /* center freqs 50, 114; 160 MHz */
+		return CHANWIDTH_160MHZ;
+	case 130: /* center freqs 42, 58, 106, 122, 138, 155; 80+80 MHz */
+		return CHANWIDTH_80P80MHZ;
+	case 131: /* UHB channels, 20 MHz: 1, 5, 9.. */
+		return CHANWIDTH_USE_HT;
+	case 132: /* UHB channels, 40 MHz: 3, 11, 19.. */
+		return CHANWIDTH_USE_HT;
+	case 133: /* UHB channels, 80 MHz: 7, 23, 39.. */
+		return CHANWIDTH_80MHZ;
+	case 134: /* UHB channels, 160 MHz: 15, 47, 79.. */
+		return CHANWIDTH_160MHZ;
+	case 135: /* UHB channels, 80+80 MHz: 7, 23, 39.. */
+		return CHANWIDTH_80P80MHZ;
+	case 180: /* 60 GHz band, channels 1..8 */
+		return CHANWIDTH_2160MHZ;
+	case 181: /* 60 GHz band, EDMG CB2, channels 9..15 */
+		return CHANWIDTH_4320MHZ;
+	case 182: /* 60 GHz band, EDMG CB3, channels 17..22 */
+		return CHANWIDTH_6480MHZ;
+	case 183: /* 60 GHz band, EDMG CB4, channel 25..29 */
+		return CHANWIDTH_8640MHZ;
+	}
+	return CHANWIDTH_USE_HT;
 }

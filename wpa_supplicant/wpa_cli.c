@@ -52,6 +52,7 @@ static char *ctrl_ifname = NULL;
 static const char *global = NULL;
 static const char *pid_file = NULL;
 static const char *action_file = NULL;
+static int reconnect = 0;
 static int ping_interval = 5;
 static int interactive = 0;
 static char *ifname_prefix = NULL;
@@ -80,7 +81,7 @@ static void update_ifnames(struct wpa_ctrl *ctrl);
 
 static void usage(void)
 {
-	printf("wpa_cli [-p<path to ctrl sockets>] [-i<ifname>] [-hvB] "
+	printf("wpa_cli [-p<path to ctrl sockets>] [-i<ifname>] [-hvBr] "
 	       "[-a<action file>] \\\n"
 	       "        [-P<pid file>] [-g<global ctrl>] [-G<ping interval>] "
 	       "\\\n"
@@ -91,6 +92,8 @@ static void usage(void)
 	       "  -a = run in daemon mode executing the action file based on "
 	       "events from\n"
 	       "       wpa_supplicant\n"
+	       "  -r = try to reconnect when client socket is disconnected.\n"
+	       "       This is useful only when used with -a.\n"
 	       "  -B = run a daemon in the background\n"
 	       "  default path: " CONFIG_CTRL_IFACE_DIR "\n"
 	       "  default interface: first interface found in socket path\n");
@@ -1299,7 +1302,7 @@ static int wpa_cli_cmd_log_level(struct wpa_ctrl *ctrl, int argc, char *argv[])
 static int wpa_cli_cmd_list_networks(struct wpa_ctrl *ctrl, int argc,
 				     char *argv[])
 {
-	return wpa_ctrl_command(ctrl, "LIST_NETWORKS");
+	return wpa_cli_cmd(ctrl, "LIST_NETWORKS", 0, argc, argv);
 }
 
 
@@ -1427,17 +1430,12 @@ static const char *network_fields[] = {
 #ifdef IEEE8021X_EAPOL
 	"eap_workaround", "pac_file", "fragment_size", "ocsp",
 #endif /* IEEE8021X_EAPOL */
-#ifdef CONFIG_MESH
-	"mode", "no_auto_peer", "mesh_rssi_threshold",
-#else /* CONFIG_MESH */
 	"mode",
-#endif /* CONFIG_MESH */
 	"proactive_key_caching", "disabled", "id_str",
-#ifdef CONFIG_IEEE80211W
 	"ieee80211w",
-#endif /* CONFIG_IEEE80211W */
 	"mixed_cell", "frequency", "fixed_freq",
 #ifdef CONFIG_MESH
+	"no_auto_peer", "mesh_rssi_threshold",
 	"mesh_basic_rates", "dot11MeshMaxRetries",
 	"dot11MeshRetryTimeout", "dot11MeshConfirmTimeout",
 	"dot11MeshHoldingTimeout",
@@ -2063,6 +2061,13 @@ static int wpa_cli_cmd_mesh_peer_add(struct wpa_ctrl *ctrl, int argc,
 				     char *argv[])
 {
 	return wpa_cli_cmd(ctrl, "MESH_PEER_ADD", 1, argc, argv);
+}
+
+
+static int wpa_cli_cmd_mesh_link_probe(struct wpa_ctrl *ctrl, int argc,
+				       char *argv[])
+{
+	return wpa_cli_cmd(ctrl, "MESH_LINK_PROBE", 1, argc, argv);
 }
 
 #endif /* CONFIG_MESH */
@@ -3385,6 +3390,9 @@ static const struct wpa_cli_cmd wpa_cli_commands[] = {
 	{ "mesh_peer_add", wpa_cli_cmd_mesh_peer_add, NULL,
 	  cli_cmd_flag_none,
 	  "<addr> [duration=<seconds>] = Add a mesh peer" },
+	{ "mesh_link_probe", wpa_cli_cmd_mesh_link_probe, NULL,
+	  cli_cmd_flag_none,
+	  "<addr> [payload=<hex dump of payload>] = Probe a mesh link for a given peer by injecting a frame." },
 #endif /* CONFIG_MESH */
 #ifdef CONFIG_P2P
 	{ "p2p_find", wpa_cli_cmd_p2p_find, wpa_cli_complete_p2p_find,
@@ -3968,6 +3976,8 @@ static void wpa_cli_action_process(const char *msg)
 			wpa_cli_connected = 0;
 			wpa_cli_exec(action_file, ifname, "DISCONNECTED");
 		}
+	} else if (str_starts(pos, WPA_EVENT_CHANNEL_SWITCH_STARTED)) {
+		wpa_cli_exec(action_file, ctrl_ifname, pos);
 	} else if (str_starts(pos, AP_EVENT_ENABLED)) {
 		wpa_cli_exec(action_file, ctrl_ifname, pos);
 	} else if (str_starts(pos, AP_EVENT_DISABLED)) {
@@ -3994,6 +4004,10 @@ static void wpa_cli_action_process(const char *msg)
 		wpa_cli_exec(action_file, ifname, pos);
 	} else if (str_starts(pos, WPS_EVENT_ACTIVE)) {
 		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, WPS_EVENT_PIN_ACTIVE)) {
+		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, WPS_EVENT_CANCEL)) {
+		wpa_cli_exec(action_file, ifname, pos);
 	} else if (str_starts(pos, WPS_EVENT_TIMEOUT)) {
 		wpa_cli_exec(action_file, ifname, pos);
 	} else if (str_starts(pos, WPS_EVENT_FAIL)) {
@@ -4010,9 +4024,26 @@ static void wpa_cli_action_process(const char *msg)
 		wpa_cli_exec(action_file, ifname, pos);
 	} else if (str_starts(pos, HS20_T_C_ACCEPTANCE)) {
 		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, DPP_EVENT_CONF_RECEIVED)) {
+		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, DPP_EVENT_CONFOBJ_AKM)) {
+		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, DPP_EVENT_CONFOBJ_SSID)) {
+		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, DPP_EVENT_CONNECTOR)) {
+		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, DPP_EVENT_CONFOBJ_PASS)) {
+		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, DPP_EVENT_CONFOBJ_PSK)) {
+		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, DPP_EVENT_C_SIGN_KEY)) {
+		wpa_cli_exec(action_file, ifname, pos);
+	} else if (str_starts(pos, DPP_EVENT_NET_ACCESS_KEY)) {
+		wpa_cli_exec(action_file, ifname, pos);
 	} else if (str_starts(pos, WPA_EVENT_TERMINATING)) {
 		printf("wpa_supplicant is terminating - stop monitoring\n");
-		wpa_cli_quit = 1;
+		if (!reconnect)
+			wpa_cli_quit = 1;
 	}
 }
 
@@ -4204,6 +4235,10 @@ static void wpa_cli_recv_pending(struct wpa_ctrl *ctrl, int action_monitor)
 	if (wpa_ctrl_pending(ctrl) < 0) {
 		printf("Connection to wpa_supplicant lost - trying to "
 		       "reconnect\n");
+		if (reconnect) {
+			eloop_terminate();
+			return;
+		}
 		wpa_cli_reconnect();
 	}
 }
@@ -4551,6 +4586,8 @@ static void wpa_cli_cleanup(void)
 static void wpa_cli_terminate(int sig, void *ctx)
 {
 	eloop_terminate();
+	if (reconnect)
+		wpa_cli_quit = 1;
 }
 
 
@@ -4581,8 +4618,11 @@ static char * wpa_cli_get_default_ifname(void)
 		if (dent->d_type != DT_SOCK && dent->d_type != DT_UNKNOWN)
 			continue;
 #endif /* _DIRENT_HAVE_D_TYPE */
+		/* Skip current/previous directory and special P2P Device
+		 * interfaces. */
 		if (os_strcmp(dent->d_name, ".") == 0 ||
-		    os_strcmp(dent->d_name, "..") == 0)
+		    os_strcmp(dent->d_name, "..") == 0 ||
+		    os_strncmp(dent->d_name, "p2p-dev-", 8) == 0)
 			continue;
 		printf("Selected interface '%s'\n", dent->d_name);
 		ifname = os_strdup(dent->d_name);
@@ -4628,7 +4668,7 @@ int main(int argc, char *argv[])
 		return -1;
 
 	for (;;) {
-		c = getopt(argc, argv, "a:Bg:G:hi:p:P:s:v");
+		c = getopt(argc, argv, "a:Bg:G:hi:p:P:rs:v");
 		if (c < 0)
 			break;
 		switch (c) {
@@ -4660,6 +4700,9 @@ int main(int argc, char *argv[])
 		case 'P':
 			pid_file = optarg;
 			break;
+		case 'r':
+			reconnect = 1;
+			break;
 		case 's':
 			client_socket_dir = optarg;
 			break;
@@ -4685,7 +4728,22 @@ int main(int argc, char *argv[])
 	if (ctrl_ifname == NULL)
 		ctrl_ifname = wpa_cli_get_default_ifname();
 
-	if (interactive) {
+	if (reconnect && action_file && ctrl_ifname) {
+		while (!wpa_cli_quit) {
+			if (ctrl_conn)
+				wpa_cli_action(ctrl_conn);
+			else
+				os_sleep(1, 0);
+			wpa_cli_close_connection();
+			wpa_cli_open_connection(ctrl_ifname, 0);
+			if (ctrl_conn) {
+				if (wpa_ctrl_attach(ctrl_conn) != 0)
+					wpa_cli_close_connection();
+				else
+					wpa_cli_attached = 1;
+			}
+		}
+	} else if (interactive) {
 		wpa_cli_interactive();
 	} else {
 		if (!global &&

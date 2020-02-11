@@ -239,6 +239,11 @@ int wpa_supplicant_conf_ap_ht(struct wpa_supplicant *wpa_s,
 				conf->vht_capab |= mode->vht_capab;
 				wpas_conf_ap_vht(wpa_s, ssid, conf, mode);
 			}
+
+			if (mode->he_capab[wpas_mode_to_ieee80211_mode(
+					    ssid->mode)].he_supported &&
+			    ssid->he)
+				conf->ieee80211ax = 1;
 		}
 	}
 
@@ -376,7 +381,9 @@ static int wpa_supplicant_conf_ap(struct wpa_supplicant *wpa_s,
 	else
 		bss->wpa_key_mgmt = ssid->key_mgmt;
 	bss->wpa_pairwise = ssid->pairwise_cipher;
-	if (ssid->psk_set) {
+	if (wpa_key_mgmt_sae(bss->wpa_key_mgmt) && ssid->passphrase) {
+		bss->ssid.wpa_passphrase = os_strdup(ssid->passphrase);
+	} else if (ssid->psk_set) {
 		bin_clear_free(bss->ssid.wpa_psk, sizeof(*bss->ssid.wpa_psk));
 		bss->ssid.wpa_psk = os_zalloc(sizeof(struct hostapd_wpa_psk));
 		if (bss->ssid.wpa_psk == NULL)
@@ -402,6 +409,34 @@ static int wpa_supplicant_conf_ap(struct wpa_supplicant *wpa_s,
 		wep->idx = ssid->wep_tx_keyidx;
 		wep->keys_set = 1;
 	}
+#ifdef CONFIG_SAE
+	if (ssid->sae_password) {
+		struct sae_password_entry *pw;
+
+		pw = os_zalloc(sizeof(*pw));
+		if (!pw)
+			return -1;
+		os_memset(pw->peer_addr, 0xff, ETH_ALEN);
+		pw->password = os_strdup(ssid->sae_password);
+		if (!pw->password) {
+			os_free(pw);
+			return -1;
+		}
+		if (ssid->sae_password_id) {
+			pw->identifier = os_strdup(ssid->sae_password_id);
+			if (!pw->identifier) {
+				str_clear_free(pw->password);
+				os_free(pw);
+				return -1;
+			}
+		}
+
+		pw->next = bss->sae_passwords;
+		bss->sae_passwords = pw;
+	}
+
+	bss->sae_pwe = wpa_s->conf->sae_pwe;
+#endif /* CONFIG_SAE */
 
 	if (wpa_s->conf->go_interworking) {
 		wpa_printf(MSG_DEBUG,
@@ -495,10 +530,8 @@ static int wpa_supplicant_conf_ap(struct wpa_supplicant *wpa_s,
 		bss->wpa_group_rekey = 86400;
 	}
 
-#ifdef CONFIG_IEEE80211W
 	if (ssid->ieee80211w != MGMT_FRAME_PROTECTION_DEFAULT)
 		bss->ieee80211w = ssid->ieee80211w;
-#endif /* CONFIG_IEEE80211W */
 
 #ifdef CONFIG_OCV
 	bss->ocv = ssid->ocv;
@@ -1404,7 +1437,7 @@ int ap_ctrl_iface_chanswitch(struct wpa_supplicant *wpa_s, const char *pos)
 
 
 void wpas_ap_ch_switch(struct wpa_supplicant *wpa_s, int freq, int ht,
-		       int offset, int width, int cf1, int cf2)
+		       int offset, int width, int cf1, int cf2, int finished)
 {
 	struct hostapd_iface *iface = wpa_s->ap_iface;
 
@@ -1416,7 +1449,7 @@ void wpas_ap_ch_switch(struct wpa_supplicant *wpa_s, int freq, int ht,
 	if (wpa_s->current_ssid)
 		wpa_s->current_ssid->frequency = freq;
 	hostapd_event_ch_switch(iface->bss[0], freq, ht,
-				offset, width, cf1, cf2);
+				offset, width, cf1, cf2, finished);
 }
 
 

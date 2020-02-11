@@ -26,11 +26,11 @@ struct wpa_sm_ctx {
 
 	void (*set_state)(void *ctx, enum wpa_states state);
 	enum wpa_states (*get_state)(void *ctx);
-	void (*deauthenticate)(void * ctx, int reason_code);
+	void (*deauthenticate)(void * ctx, u16 reason_code);
 	int (*set_key)(void *ctx, enum wpa_alg alg,
 		       const u8 *addr, int key_idx, int set_tx,
 		       const u8 *seq, size_t seq_len,
-		       const u8 *key, size_t key_len);
+		       const u8 *key, size_t key_len, enum key_flag key_flag);
 	void * (*get_network_ctx)(void *ctx);
 	int (*get_bssid)(void *ctx, u8 *bssid);
 	int (*ether_send)(void *ctx, const u8 *dest, u16 proto, const u8 *buf,
@@ -99,6 +99,7 @@ enum wpa_sm_conf_params {
 	WPA_PARAM_RSN_ENABLED,
 	WPA_PARAM_MFP,
 	WPA_PARAM_OCV,
+	WPA_PARAM_SAE_PWE,
 	WPA_PARAM_ADAPT_FT_KEY_MGMT
 };
 
@@ -113,6 +114,7 @@ struct rsn_supp_config {
 	int wpa_ptk_rekey;
 	int p2p;
 	int wpa_rsc_relaxation;
+	int owe_ptk_workaround;
 	const u8 *fils_cache_id;
 };
 
@@ -135,8 +137,12 @@ void wpa_sm_set_eapol(struct wpa_sm *sm, struct eapol_sm *eapol);
 int wpa_sm_set_assoc_wpa_ie(struct wpa_sm *sm, const u8 *ie, size_t len);
 int wpa_sm_set_assoc_wpa_ie_default(struct wpa_sm *sm, u8 *wpa_ie,
 				    size_t *wpa_ie_len);
+int wpa_sm_set_assoc_rsnxe_default(struct wpa_sm *sm, u8 *rsnxe,
+				   size_t *rsnxe_len);
+int wpa_sm_set_assoc_rsnxe(struct wpa_sm *sm, const u8 *ie, size_t len);
 int wpa_sm_set_ap_wpa_ie(struct wpa_sm *sm, const u8 *ie, size_t len);
 int wpa_sm_set_ap_rsn_ie(struct wpa_sm *sm, const u8 *ie, size_t len);
+int wpa_sm_set_ap_rsnxe(struct wpa_sm *sm, const u8 *ie, size_t len);
 int wpa_sm_get_mib(struct wpa_sm *sm, char *buf, size_t buflen);
 
 int wpa_sm_set_param(struct wpa_sm *sm, enum wpa_sm_conf_params param,
@@ -168,6 +174,7 @@ int wpa_sm_pmksa_exists(struct wpa_sm *sm, const u8 *bssid,
 			const void *network_ctx);
 void wpa_sm_drop_sa(struct wpa_sm *sm);
 int wpa_sm_has_ptk(struct wpa_sm *sm);
+int wpa_sm_has_ptk_installed(struct wpa_sm *sm);
 
 void wpa_sm_update_replay_ctr(struct wpa_sm *sm, const u8 *replay_ctr);
 
@@ -257,6 +264,12 @@ static inline int wpa_sm_set_ap_wpa_ie(struct wpa_sm *sm, const u8 *ie,
 
 static inline int wpa_sm_set_ap_rsn_ie(struct wpa_sm *sm, const u8 *ie,
 				       size_t len)
+{
+	return -1;
+}
+
+static inline int wpa_sm_set_ap_rsnxe(struct wpa_sm *sm, const u8 *ie,
+				      size_t len)
 {
 	return -1;
 }

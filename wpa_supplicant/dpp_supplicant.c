@@ -1,7 +1,7 @@
 /*
  * wpa_supplicant - DPP
  * Copyright (c) 2017, Qualcomm Atheros, Inc.
- * Copyright (c) 2018-2019, The Linux Foundation
+ * Copyright (c) 2018-2020, The Linux Foundation
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -11,6 +11,7 @@
 
 #include "utils/common.h"
 #include "utils/eloop.h"
+#include "utils/ip_addr.h"
 #include "common/dpp.h"
 #include "common/gas.h"
 #include "common/gas_server.h"
@@ -87,6 +88,89 @@ int wpas_dpp_qr_code(struct wpa_supplicant *wpa_s, const char *cmd)
 }
 
 
+/**
+ * wpas_dpp_nfc_uri - Parse and add DPP bootstrapping info from NFC Tag (URI)
+ * @wpa_s: Pointer to wpa_supplicant data
+ * @cmd: DPP URI read from a NFC Tag (URI NDEF message)
+ * Returns: Identifier of the stored info or -1 on failure
+ */
+int wpas_dpp_nfc_uri(struct wpa_supplicant *wpa_s, const char *cmd)
+{
+	struct dpp_bootstrap_info *bi;
+
+	bi = dpp_add_nfc_uri(wpa_s->dpp, cmd);
+	if (!bi)
+		return -1;
+
+	return bi->id;
+}
+
+
+int wpas_dpp_nfc_handover_req(struct wpa_supplicant *wpa_s, const char *cmd)
+{
+	const char *pos;
+	struct dpp_bootstrap_info *peer_bi, *own_bi;
+
+	pos = os_strstr(cmd, " own=");
+	if (!pos)
+		return -1;
+	pos += 5;
+	own_bi = dpp_bootstrap_get_id(wpa_s->dpp, atoi(pos));
+	if (!own_bi)
+		return -1;
+
+	pos = os_strstr(cmd, " uri=");
+	if (!pos)
+		return -1;
+	pos += 5;
+	peer_bi = dpp_add_nfc_uri(wpa_s->dpp, pos);
+	if (!peer_bi) {
+		wpa_printf(MSG_INFO,
+			   "DPP: Failed to parse URI from NFC Handover Request");
+		return -1;
+	}
+
+	if (dpp_nfc_update_bi(own_bi, peer_bi) < 0)
+		return -1;
+
+	return peer_bi->id;
+}
+
+
+int wpas_dpp_nfc_handover_sel(struct wpa_supplicant *wpa_s, const char *cmd)
+{
+	const char *pos;
+	struct dpp_bootstrap_info *peer_bi, *own_bi;
+
+	pos = os_strstr(cmd, " own=");
+	if (!pos)
+		return -1;
+	pos += 5;
+	own_bi = dpp_bootstrap_get_id(wpa_s->dpp, atoi(pos));
+	if (!own_bi)
+		return -1;
+
+	pos = os_strstr(cmd, " uri=");
+	if (!pos)
+		return -1;
+	pos += 5;
+	peer_bi = dpp_add_nfc_uri(wpa_s->dpp, pos);
+	if (!peer_bi) {
+		wpa_printf(MSG_INFO,
+			   "DPP: Failed to parse URI from NFC Handover Select");
+		return -1;
+	}
+
+	if (peer_bi->curve != own_bi->curve) {
+		wpa_printf(MSG_INFO,
+			   "DPP: Peer (NFC Handover Selector) used different curve");
+		return -1;
+	}
+
+	return peer_bi->id;
+}
+
+
 static void wpas_dpp_auth_resp_retry_timeout(void *eloop_ctx, void *timeout_ctx)
 {
 	struct wpa_supplicant *wpa_s = eloop_ctx;
@@ -147,6 +231,8 @@ static void wpas_dpp_auth_resp_retry(struct wpa_supplicant *wpa_s)
 static void wpas_dpp_try_to_connect(struct wpa_supplicant *wpa_s)
 {
 	wpa_printf(MSG_DEBUG, "DPP: Trying to connect to the new network");
+	wpa_s->suitable_network = 0;
+	wpa_s->no_suitable_network = 0;
 	wpa_s->disconnected = 0;
 	wpa_s->reassociate = 1;
 	wpa_s->scan_runs = 0;
@@ -154,6 +240,143 @@ static void wpas_dpp_try_to_connect(struct wpa_supplicant *wpa_s)
 	wpa_supplicant_cancel_sched_scan(wpa_s);
 	wpa_supplicant_req_scan(wpa_s, 0, 0);
 }
+
+
+#ifdef CONFIG_DPP2
+
+static void wpas_dpp_conn_status_result_timeout(void *eloop_ctx,
+						void *timeout_ctx)
+{
+	struct wpa_supplicant *wpa_s = eloop_ctx;
+	struct dpp_authentication *auth = wpa_s->dpp_auth;
+	enum dpp_status_error result;
+
+	if (!auth || !auth->conn_status_requested)
+		return;
+
+	wpa_printf(MSG_DEBUG,
+		   "DPP: Connection timeout - report Connection Status Result");
+	if (wpa_s->suitable_network)
+		result = DPP_STATUS_AUTH_FAILURE;
+	else if (wpa_s->no_suitable_network)
+		result = DPP_STATUS_NO_AP;
+	else
+		result = 255; /* What to report here for unexpected state? */
+	if (wpa_s->wpa_state == WPA_SCANNING)
+		wpas_abort_ongoing_scan(wpa_s);
+	wpas_dpp_send_conn_status_result(wpa_s, result);
+}
+
+
+static char * wpas_dpp_scan_channel_list(struct wpa_supplicant *wpa_s)
+{
+	char *str, *end, *pos;
+	size_t len;
+	unsigned int i;
+	u8 last_op_class = 0;
+	int res;
+
+	if (!wpa_s->last_scan_freqs || !wpa_s->num_last_scan_freqs)
+		return NULL;
+
+	len = wpa_s->num_last_scan_freqs * 8;
+	str = os_zalloc(len);
+	if (!str)
+		return NULL;
+	end = str + len;
+	pos = str;
+
+	for (i = 0; i < wpa_s->num_last_scan_freqs; i++) {
+		enum hostapd_hw_mode mode;
+		u8 op_class, channel;
+
+		mode = ieee80211_freq_to_channel_ext(wpa_s->last_scan_freqs[i],
+						     0, 0, &op_class, &channel);
+		if (mode == NUM_HOSTAPD_MODES)
+			continue;
+		if (op_class == last_op_class)
+			res = os_snprintf(pos, end - pos, ",%d", channel);
+		else
+			res = os_snprintf(pos, end - pos, "%s%d/%d",
+					  pos == str ? "" : ",",
+					  op_class, channel);
+		if (os_snprintf_error(end - pos, res)) {
+			*pos = '\0';
+			break;
+		}
+		pos += res;
+		last_op_class = op_class;
+	}
+
+	if (pos == str) {
+		os_free(str);
+		str = NULL;
+	}
+	return str;
+}
+
+
+void wpas_dpp_send_conn_status_result(struct wpa_supplicant *wpa_s,
+				      enum dpp_status_error result)
+{
+	struct wpabuf *msg;
+	const char *channel_list = NULL;
+	char *channel_list_buf = NULL;
+	struct wpa_ssid *ssid = wpa_s->current_ssid;
+	struct dpp_authentication *auth = wpa_s->dpp_auth;
+
+	eloop_cancel_timeout(wpas_dpp_conn_status_result_timeout, wpa_s, NULL);
+
+	if (!auth || !auth->conn_status_requested)
+		return;
+	auth->conn_status_requested = 0;
+	wpa_printf(MSG_DEBUG, "DPP: Report connection status result %d",
+		   result);
+
+	if (result == DPP_STATUS_NO_AP) {
+		channel_list_buf = wpas_dpp_scan_channel_list(wpa_s);
+		channel_list = channel_list_buf;
+	}
+
+	msg = dpp_build_conn_status_result(auth, result,
+					   ssid ? ssid->ssid :
+					   wpa_s->dpp_last_ssid,
+					   ssid ? ssid->ssid_len :
+					   wpa_s->dpp_last_ssid_len,
+					   channel_list);
+	os_free(channel_list_buf);
+	if (!msg) {
+		dpp_auth_deinit(wpa_s->dpp_auth);
+		wpa_s->dpp_auth = NULL;
+		return;
+	}
+
+	wpa_msg(wpa_s, MSG_INFO,
+		DPP_EVENT_TX "dst=" MACSTR " freq=%u type=%d",
+		MAC2STR(auth->peer_mac_addr), auth->curr_freq,
+		DPP_PA_CONNECTION_STATUS_RESULT);
+	offchannel_send_action(wpa_s, auth->curr_freq,
+			       auth->peer_mac_addr, wpa_s->own_addr, broadcast,
+			       wpabuf_head(msg), wpabuf_len(msg),
+			       500, wpas_dpp_tx_status, 0);
+	wpabuf_free(msg);
+
+	/* This exchange will be terminated in the TX status handler */
+	auth->remove_on_tx_status = 1;
+
+	return;
+}
+
+
+void wpas_dpp_connected(struct wpa_supplicant *wpa_s)
+{
+	struct dpp_authentication *auth = wpa_s->dpp_auth;
+
+	if (auth && auth->conn_status_requested)
+		wpas_dpp_send_conn_status_result(wpa_s, DPP_STATUS_OK);
+}
+
+#endif /* CONFIG_DPP2 */
 
 
 static void wpas_dpp_tx_status(struct wpa_supplicant *wpa_s,
@@ -181,18 +404,30 @@ static void wpas_dpp_tx_status(struct wpa_supplicant *wpa_s,
 
 #ifdef CONFIG_DPP2
 	if (auth->connect_on_tx_status) {
+		auth->connect_on_tx_status = 0;
 		wpa_printf(MSG_DEBUG,
 			   "DPP: Try to connect after completed configuration result");
 		wpas_dpp_try_to_connect(wpa_s);
-		dpp_auth_deinit(wpa_s->dpp_auth);
-		wpa_s->dpp_auth = NULL;
+		if (auth->conn_status_requested) {
+			wpa_printf(MSG_DEBUG,
+				   "DPP: Start 15 second timeout for reporting connection status result");
+			eloop_cancel_timeout(
+				wpas_dpp_conn_status_result_timeout,
+				wpa_s, NULL);
+			eloop_register_timeout(
+				15, 0, wpas_dpp_conn_status_result_timeout,
+				wpa_s, NULL);
+		} else {
+			dpp_auth_deinit(wpa_s->dpp_auth);
+			wpa_s->dpp_auth = NULL;
+		}
 		return;
 	}
 #endif /* CONFIG_DPP2 */
 
 	if (wpa_s->dpp_auth->remove_on_tx_status) {
 		wpa_printf(MSG_DEBUG,
-			   "DPP: Terminate authentication exchange due to an earlier error");
+			   "DPP: Terminate authentication exchange due to a request to do so on TX status");
 		eloop_cancel_timeout(wpas_dpp_init_timeout, wpa_s, NULL);
 		eloop_cancel_timeout(wpas_dpp_reply_wait_timeout, wpa_s, NULL);
 		eloop_cancel_timeout(wpas_dpp_auth_resp_retry_timeout, wpa_s,
@@ -435,8 +670,15 @@ int wpas_dpp_auth_init(struct wpa_supplicant *wpa_s, const char *cmd)
 {
 	const char *pos;
 	struct dpp_bootstrap_info *peer_bi, *own_bi = NULL;
+	struct dpp_authentication *auth;
 	u8 allowed_roles = DPP_CAPAB_CONFIGURATOR;
 	unsigned int neg_freq = 0;
+	int tcp = 0;
+#ifdef CONFIG_DPP2
+	int tcp_port = DPP_TCP_PORT;
+	struct hostapd_ip_addr ipaddr;
+	char *addr;
+#endif /* CONFIG_DPP2 */
 
 	wpa_s->dpp_gas_client = 0;
 
@@ -450,6 +692,25 @@ int wpas_dpp_auth_init(struct wpa_supplicant *wpa_s, const char *cmd)
 			   "DPP: Could not find bootstrapping info for the identified peer");
 		return -1;
 	}
+
+#ifdef CONFIG_DPP2
+	pos = os_strstr(cmd, " tcp_port=");
+	if (pos) {
+		pos += 10;
+		tcp_port = atoi(pos);
+	}
+
+	addr = get_param(cmd, " tcp_addr=");
+	if (addr) {
+		int res;
+
+		res = hostapd_parse_ip_addr(addr, &ipaddr);
+		os_free(addr);
+		if (res)
+			return -1;
+		tcp = 1;
+	}
+#endif /* CONFIG_DPP2 */
 
 	pos = os_strstr(cmd, " own=");
 	if (pos) {
@@ -486,39 +747,51 @@ int wpas_dpp_auth_init(struct wpa_supplicant *wpa_s, const char *cmd)
 	pos = os_strstr(cmd, " netrole=");
 	if (pos) {
 		pos += 9;
-		wpa_s->dpp_netrole_ap = os_strncmp(pos, "ap", 2) == 0;
+		if (os_strncmp(pos, "ap", 2) == 0)
+			wpa_s->dpp_netrole = DPP_NETROLE_AP;
+		else if (os_strncmp(pos, "configurator", 12) == 0)
+			wpa_s->dpp_netrole = DPP_NETROLE_CONFIGURATOR;
+		else
+			wpa_s->dpp_netrole = DPP_NETROLE_STA;
+	} else {
+		wpa_s->dpp_netrole = DPP_NETROLE_STA;
 	}
 
 	pos = os_strstr(cmd, " neg_freq=");
 	if (pos)
 		neg_freq = atoi(pos + 10);
 
-	if (wpa_s->dpp_auth) {
+	if (!tcp && wpa_s->dpp_auth) {
 		eloop_cancel_timeout(wpas_dpp_init_timeout, wpa_s, NULL);
 		eloop_cancel_timeout(wpas_dpp_reply_wait_timeout, wpa_s, NULL);
 		eloop_cancel_timeout(wpas_dpp_auth_resp_retry_timeout, wpa_s,
 				     NULL);
 		offchannel_send_action_done(wpa_s);
 		dpp_auth_deinit(wpa_s->dpp_auth);
-	}
-	wpa_s->dpp_auth = dpp_auth_init(wpa_s, peer_bi, own_bi, allowed_roles,
-					neg_freq,
-					wpa_s->hw.modes, wpa_s->hw.num_modes);
-	if (!wpa_s->dpp_auth)
-		goto fail;
-	wpas_dpp_set_testing_options(wpa_s, wpa_s->dpp_auth);
-	if (dpp_set_configurator(wpa_s->dpp, wpa_s, wpa_s->dpp_auth, cmd) < 0) {
-		dpp_auth_deinit(wpa_s->dpp_auth);
 		wpa_s->dpp_auth = NULL;
+	}
+
+	auth = dpp_auth_init(wpa_s, peer_bi, own_bi, allowed_roles, neg_freq,
+			     wpa_s->hw.modes, wpa_s->hw.num_modes);
+	if (!auth)
+		goto fail;
+	wpas_dpp_set_testing_options(wpa_s, auth);
+	if (dpp_set_configurator(wpa_s->dpp, wpa_s, auth, cmd) < 0) {
+		dpp_auth_deinit(auth);
 		goto fail;
 	}
 
-	wpa_s->dpp_auth->neg_freq = neg_freq;
+	auth->neg_freq = neg_freq;
 
 	if (!is_zero_ether_addr(peer_bi->mac_addr))
-		os_memcpy(wpa_s->dpp_auth->peer_mac_addr, peer_bi->mac_addr,
-			  ETH_ALEN);
+		os_memcpy(auth->peer_mac_addr, peer_bi->mac_addr, ETH_ALEN);
 
+#ifdef CONFIG_DPP2
+	if (tcp)
+		return dpp_tcp_init(wpa_s->dpp, auth, &ipaddr, tcp_port);
+#endif /* CONFIG_DPP2 */
+
+	wpa_s->dpp_auth = auth;
 	return wpas_dpp_auth_init_next(wpa_s);
 fail:
 	return -1;
@@ -633,7 +906,12 @@ int wpas_dpp_listen(struct wpa_supplicant *wpa_s, const char *cmd)
 		wpa_s->dpp_allowed_roles = DPP_CAPAB_CONFIGURATOR |
 			DPP_CAPAB_ENROLLEE;
 	wpa_s->dpp_qr_mutual = os_strstr(cmd, " qr=mutual") != NULL;
-	wpa_s->dpp_netrole_ap = os_strstr(cmd, " netrole=ap") != NULL;
+	if (os_strstr(cmd, " netrole=ap"))
+		wpa_s->dpp_netrole = DPP_NETROLE_AP;
+	else if (os_strstr(cmd, " netrole=configurator"))
+		wpa_s->dpp_netrole = DPP_NETROLE_CONFIGURATOR;
+	else
+		wpa_s->dpp_netrole = DPP_NETROLE_STA;
 	if (wpa_s->dpp_listen_freq == (unsigned int) freq) {
 		wpa_printf(MSG_DEBUG, "DPP: Already listening on %u MHz",
 			   freq);
@@ -779,12 +1057,13 @@ static void wpas_dpp_start_gas_server(struct wpa_supplicant *wpa_s)
 
 
 static struct wpa_ssid * wpas_dpp_add_network(struct wpa_supplicant *wpa_s,
-					      struct dpp_authentication *auth)
+					      struct dpp_authentication *auth,
+					      struct dpp_config_obj *conf)
 {
 	struct wpa_ssid *ssid;
 
 #ifdef CONFIG_DPP2
-	if (auth->akm == DPP_AKM_SAE) {
+	if (conf->akm == DPP_AKM_SAE) {
 #ifdef CONFIG_SAE
 		struct wpa_driver_capa capa;
 		int res;
@@ -811,27 +1090,27 @@ static struct wpa_ssid * wpas_dpp_add_network(struct wpa_supplicant *wpa_s,
 	wpa_config_set_network_defaults(ssid);
 	ssid->disabled = 1;
 
-	ssid->ssid = os_malloc(auth->ssid_len);
+	ssid->ssid = os_malloc(conf->ssid_len);
 	if (!ssid->ssid)
 		goto fail;
-	os_memcpy(ssid->ssid, auth->ssid, auth->ssid_len);
-	ssid->ssid_len = auth->ssid_len;
+	os_memcpy(ssid->ssid, conf->ssid, conf->ssid_len);
+	ssid->ssid_len = conf->ssid_len;
 
-	if (auth->connector) {
+	if (conf->connector) {
 		ssid->key_mgmt = WPA_KEY_MGMT_DPP;
 		ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
-		ssid->dpp_connector = os_strdup(auth->connector);
+		ssid->dpp_connector = os_strdup(conf->connector);
 		if (!ssid->dpp_connector)
 			goto fail;
 	}
 
-	if (auth->c_sign_key) {
-		ssid->dpp_csign = os_malloc(wpabuf_len(auth->c_sign_key));
+	if (conf->c_sign_key) {
+		ssid->dpp_csign = os_malloc(wpabuf_len(conf->c_sign_key));
 		if (!ssid->dpp_csign)
 			goto fail;
-		os_memcpy(ssid->dpp_csign, wpabuf_head(auth->c_sign_key),
-			  wpabuf_len(auth->c_sign_key));
-		ssid->dpp_csign_len = wpabuf_len(auth->c_sign_key);
+		os_memcpy(ssid->dpp_csign, wpabuf_head(conf->c_sign_key),
+			  wpabuf_len(conf->c_sign_key));
+		ssid->dpp_csign_len = wpabuf_len(conf->c_sign_key);
 	}
 
 	if (auth->net_access_key) {
@@ -846,28 +1125,31 @@ static struct wpa_ssid * wpas_dpp_add_network(struct wpa_supplicant *wpa_s,
 		ssid->dpp_netaccesskey_expiry = auth->net_access_key_expiry;
 	}
 
-	if (!auth->connector || dpp_akm_psk(auth->akm) ||
-	    dpp_akm_sae(auth->akm)) {
-		if (!auth->connector)
+	if (!conf->connector || dpp_akm_psk(conf->akm) ||
+	    dpp_akm_sae(conf->akm)) {
+		if (!conf->connector)
 			ssid->key_mgmt = 0;
-		if (dpp_akm_psk(auth->akm))
+		if (dpp_akm_psk(conf->akm))
 			ssid->key_mgmt |= WPA_KEY_MGMT_PSK |
 				WPA_KEY_MGMT_PSK_SHA256 | WPA_KEY_MGMT_FT_PSK;
-		if (dpp_akm_sae(auth->akm))
+		if (dpp_akm_sae(conf->akm))
 			ssid->key_mgmt |= WPA_KEY_MGMT_SAE |
 				WPA_KEY_MGMT_FT_SAE;
 		ssid->ieee80211w = MGMT_FRAME_PROTECTION_OPTIONAL;
-		if (auth->passphrase[0]) {
+		if (conf->passphrase[0]) {
 			if (wpa_config_set_quoted(ssid, "psk",
-						  auth->passphrase) < 0)
+						  conf->passphrase) < 0)
 				goto fail;
 			wpa_config_update_psk(ssid);
 			ssid->export_keys = 1;
 		} else {
-			ssid->psk_set = auth->psk_set;
-			os_memcpy(ssid->psk, auth->psk, PMK_LEN);
+			ssid->psk_set = conf->psk_set;
+			os_memcpy(ssid->psk, conf->psk, PMK_LEN);
 		}
 	}
+
+	os_memcpy(wpa_s->dpp_last_ssid, conf->ssid, conf->ssid_len);
+	wpa_s->dpp_last_ssid_len = conf->ssid_len;
 
 	return ssid;
 fail:
@@ -878,14 +1160,15 @@ fail:
 
 
 static int wpas_dpp_process_config(struct wpa_supplicant *wpa_s,
-				   struct dpp_authentication *auth)
+				   struct dpp_authentication *auth,
+				   struct dpp_config_obj *conf)
 {
 	struct wpa_ssid *ssid;
 
 	if (wpa_s->conf->dpp_config_processing < 1)
 		return 0;
 
-	ssid = wpas_dpp_add_network(wpa_s, auth);
+	ssid = wpas_dpp_add_network(wpa_s, auth, conf);
 	if (!ssid)
 		return -1;
 
@@ -902,49 +1185,59 @@ static int wpas_dpp_process_config(struct wpa_supplicant *wpa_s,
 		wpa_printf(MSG_DEBUG, "DPP: Failed to update configuration");
 #endif /* CONFIG_NO_CONFIG_WRITE */
 
+	return 0;
+}
+
+
+static void wpas_dpp_post_process_config(struct wpa_supplicant *wpa_s,
+					 struct dpp_authentication *auth)
+{
 	if (wpa_s->conf->dpp_config_processing < 2)
-		return 0;
+		return;
 
 #ifdef CONFIG_DPP2
 	if (auth->peer_version >= 2) {
 		wpa_printf(MSG_DEBUG,
 			   "DPP: Postpone connection attempt to wait for completion of DPP Configuration Result");
 		auth->connect_on_tx_status = 1;
-		return 0;
+		return;
 	}
 #endif /* CONFIG_DPP2 */
 
 	wpas_dpp_try_to_connect(wpa_s);
-	return 0;
 }
 
 
 static int wpas_dpp_handle_config_obj(struct wpa_supplicant *wpa_s,
-				      struct dpp_authentication *auth)
+				      struct dpp_authentication *auth,
+				      struct dpp_config_obj *conf)
 {
 	wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_RECEIVED);
-	if (auth->ssid_len)
+	if (conf->ssid_len)
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONFOBJ_SSID "%s",
-			wpa_ssid_txt(auth->ssid, auth->ssid_len));
-	if (auth->connector) {
+			wpa_ssid_txt(conf->ssid, conf->ssid_len));
+	if (conf->ssid_charset)
+		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONFOBJ_SSID_CHARSET "%d",
+			conf->ssid_charset);
+	if (conf->connector) {
 		/* TODO: Save the Connector and consider using a command
 		 * to fetch the value instead of sending an event with
 		 * it. The Connector could end up being larger than what
 		 * most clients are ready to receive as an event
 		 * message. */
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONNECTOR "%s",
-			auth->connector);
+			conf->connector);
 	}
-	if (auth->c_sign_key) {
+	if (conf->c_sign_key) {
 		char *hex;
 		size_t hexlen;
 
-		hexlen = 2 * wpabuf_len(auth->c_sign_key) + 1;
+		hexlen = 2 * wpabuf_len(conf->c_sign_key) + 1;
 		hex = os_malloc(hexlen);
 		if (hex) {
 			wpa_snprintf_hex(hex, hexlen,
-					 wpabuf_head(auth->c_sign_key),
-					 wpabuf_len(auth->c_sign_key));
+					 wpabuf_head(conf->c_sign_key),
+					 wpabuf_len(conf->c_sign_key));
 			wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_C_SIGN_KEY "%s",
 				hex);
 			os_free(hex);
@@ -973,12 +1266,38 @@ static int wpas_dpp_handle_config_obj(struct wpa_supplicant *wpa_s,
 	}
 
 	wpas_notify_dpp_configuration_failure(wpa_s);
-	wpas_notify_dpp_conf(wpa_s, DPP_CONF_RECEIVED, auth->ssid,
-			    auth->ssid_len, auth->connector,
-			    auth->c_sign_key, auth->net_access_key,
-			    auth->net_access_key_expiry, auth->passphrase,
-			    auth->psk_set, auth->psk);
-	return wpas_dpp_process_config(wpa_s, auth);
+	wpas_notify_dpp_conf(wpa_s, DPP_CONF_RECEIVED, conf->ssid,
+			    conf->ssid_len, conf->connector,
+			    conf->c_sign_key, auth->net_access_key,
+			    auth->net_access_key_expiry, conf->passphrase,
+			    conf->psk_set, conf->psk);
+	return wpas_dpp_process_config(wpa_s, auth, conf);
+}
+
+
+static int wpas_dpp_handle_key_pkg(struct wpa_supplicant *wpa_s,
+				   struct dpp_asymmetric_key *key)
+{
+#ifdef CONFIG_DPP2
+	int res;
+
+	if (!key)
+		return 0;
+
+	wpa_printf(MSG_DEBUG, "DPP: Received Configurator backup");
+	wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_RECEIVED);
+
+	while (key) {
+		res = dpp_configurator_from_backup(wpa_s->dpp, key);
+		if (res < 0)
+			return -1;
+		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONFIGURATOR_ID "%d",
+			res);
+		key = key->next;
+	}
+#endif /* CONFIG_DPP2 */
+
+	return 0;
 }
 
 
@@ -992,6 +1311,7 @@ static void wpas_dpp_gas_resp_cb(void *ctx, const u8 *addr, u8 dialog_token,
 	struct dpp_authentication *auth = wpa_s->dpp_auth;
 	int res;
 	enum dpp_status_error status = DPP_STATUS_CONFIG_REJECTED;
+	unsigned int i;
 
 	wpa_s->dpp_gas_dialog_token = -1;
 
@@ -1029,8 +1349,15 @@ static void wpas_dpp_gas_resp_cb(void *ctx, const u8 *addr, u8 dialog_token,
 		goto fail;
 	}
 
-	res = wpas_dpp_handle_config_obj(wpa_s, auth);
-	if (res < 0)
+	for (i = 0; i < auth->num_conf_obj; i++) {
+		res = wpas_dpp_handle_config_obj(wpa_s, auth,
+						 &auth->conf_obj[i]);
+		if (res < 0)
+			goto fail;
+	}
+	if (auth->num_conf_obj)
+		wpas_dpp_post_process_config(wpa_s, auth);
+	if (wpas_dpp_handle_key_pkg(wpa_s, auth->conf_key_pkg) < 0)
 		goto fail;
 
 	status = DPP_STATUS_OK;
@@ -1082,27 +1409,19 @@ static void wpas_dpp_start_gas_client(struct wpa_supplicant *wpa_s)
 {
 	struct dpp_authentication *auth = wpa_s->dpp_auth;
 	struct wpabuf *buf;
-	char json[100];
 	int res;
+	int *supp_op_classes;
 
 	wpa_s->dpp_gas_client = 1;
-	os_snprintf(json, sizeof(json),
-		    "{\"name\":\"Test\","
-		    "\"wi-fi_tech\":\"infra\","
-		    "\"netRole\":\"%s\"}",
-		    wpa_s->dpp_netrole_ap ? "ap" : "sta");
-#ifdef CONFIG_TESTING_OPTIONS
-	if (dpp_test == DPP_TEST_INVALID_CONFIG_ATTR_OBJ_CONF_REQ) {
-		wpa_printf(MSG_INFO, "DPP: TESTING - invalid Config Attr");
-		json[29] = 'k'; /* replace "infra" with "knfra" */
-	}
-#endif /* CONFIG_TESTING_OPTIONS */
-	wpa_printf(MSG_DEBUG, "DPP: GAS Config Attributes: %s", json);
-
 	offchannel_send_action_done(wpa_s);
 	wpas_dpp_listen_stop(wpa_s);
 
-	buf = dpp_build_conf_req(auth, json);
+	supp_op_classes = wpas_supp_op_classes(wpa_s);
+	buf = dpp_build_conf_req_helper(auth, wpa_s->conf->dpp_name,
+					wpa_s->dpp_netrole,
+					wpa_s->conf->dpp_mud_url,
+					supp_op_classes);
+	os_free(supp_op_classes);
 	if (!buf) {
 		wpa_printf(MSG_DEBUG,
 			   "DPP: No configuration request data available");
@@ -1256,6 +1575,24 @@ static void wpas_dpp_config_result_wait_timeout(void *eloop_ctx,
 }
 
 
+static void wpas_dpp_conn_status_result_wait_timeout(void *eloop_ctx,
+						     void *timeout_ctx)
+{
+	struct wpa_supplicant *wpa_s = eloop_ctx;
+	struct dpp_authentication *auth = wpa_s->dpp_auth;
+
+	if (!auth || !auth->waiting_conn_status_result)
+		return;
+
+	wpa_printf(MSG_DEBUG,
+		   "DPP: Timeout while waiting for Connection Status Result");
+	wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONN_STATUS_RESULT "timeout");
+	wpas_dpp_listen_stop(wpa_s);
+	dpp_auth_deinit(auth);
+	wpa_s->dpp_auth = NULL;
+}
+
+
 static void wpas_dpp_rx_conf_result(struct wpa_supplicant *wpa_s, const u8 *src,
 				    const u8 *hdr, const u8 *buf, size_t len)
 {
@@ -1279,6 +1616,23 @@ static void wpas_dpp_rx_conf_result(struct wpa_supplicant *wpa_s, const u8 *src,
 
 	status = dpp_conf_result_rx(auth, hdr, buf, len);
 
+	if (status == DPP_STATUS_OK && auth->send_conn_status) {
+		wpa_msg(wpa_s, MSG_INFO,
+			DPP_EVENT_CONF_SENT "wait_conn_status=1");
+		wpa_printf(MSG_DEBUG, "DPP: Wait for Connection Status Result");
+		eloop_cancel_timeout(wpas_dpp_config_result_wait_timeout,
+				     wpa_s, NULL);
+		auth->waiting_conn_status_result = 1;
+		eloop_cancel_timeout(wpas_dpp_conn_status_result_wait_timeout,
+				     wpa_s, NULL);
+		eloop_register_timeout(16, 0,
+				       wpas_dpp_conn_status_result_wait_timeout,
+				       wpa_s, NULL);
+		offchannel_send_action_done(wpa_s);
+		wpas_dpp_listen_start(wpa_s, auth->neg_freq ? auth->neg_freq :
+				      auth->curr_freq);
+		return;
+	}
 	offchannel_send_action_done(wpa_s);
 	wpas_dpp_listen_stop(wpa_s);
 	if (status == DPP_STATUS_OK)
@@ -1288,6 +1642,60 @@ static void wpas_dpp_rx_conf_result(struct wpa_supplicant *wpa_s, const u8 *src,
 	dpp_auth_deinit(auth);
 	wpa_s->dpp_auth = NULL;
 	eloop_cancel_timeout(wpas_dpp_config_result_wait_timeout, wpa_s, NULL);
+}
+
+
+static void wpas_dpp_rx_conn_status_result(struct wpa_supplicant *wpa_s,
+					   const u8 *src, const u8 *hdr,
+					   const u8 *buf, size_t len)
+{
+	struct dpp_authentication *auth = wpa_s->dpp_auth;
+	enum dpp_status_error status;
+	u8 ssid[SSID_MAX_LEN];
+	size_t ssid_len = 0;
+	char *channel_list = NULL;
+
+	wpa_printf(MSG_DEBUG, "DPP: Connection Status Result");
+
+	if (!auth || !auth->waiting_conn_status_result) {
+		wpa_printf(MSG_DEBUG,
+			   "DPP: No DPP Configuration waiting for connection status result - drop");
+		return;
+	}
+
+	status = dpp_conn_status_result_rx(auth, hdr, buf, len,
+					   ssid, &ssid_len, &channel_list);
+	wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONN_STATUS_RESULT
+		"result=%d ssid=%s channel_list=%s",
+		status, wpa_ssid_txt(ssid, ssid_len),
+		channel_list ? channel_list : "N/A");
+	os_free(channel_list);
+	offchannel_send_action_done(wpa_s);
+	wpas_dpp_listen_stop(wpa_s);
+	dpp_auth_deinit(auth);
+	wpa_s->dpp_auth = NULL;
+	eloop_cancel_timeout(wpas_dpp_conn_status_result_wait_timeout,
+			     wpa_s, NULL);
+}
+
+
+static int wpas_dpp_process_conf_obj(void *ctx,
+				     struct dpp_authentication *auth)
+{
+	struct wpa_supplicant *wpa_s = ctx;
+	unsigned int i;
+	int res = -1;
+
+	for (i = 0; i < auth->num_conf_obj; i++) {
+		res = wpas_dpp_handle_config_obj(wpa_s, auth,
+						 &auth->conf_obj[i]);
+		if (res)
+			break;
+	}
+	if (!res)
+		wpas_dpp_post_process_config(wpa_s, auth);
+
+	return res;
 }
 
 #endif /* CONFIG_DPP2 */
@@ -1360,6 +1768,9 @@ static void wpas_dpp_rx_peer_disc_resp(struct wpa_supplicant *wpa_s,
 			   status[0]);
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_INTRO "peer=" MACSTR
 			" status=%u", MAC2STR(src), status[0]);
+#ifdef CONFIG_DPP2
+		wpas_dpp_send_conn_status_result(wpa_s, status[0]);
+#endif /* CONFIG_DPP2 */
 		goto fail;
 	}
 
@@ -1383,6 +1794,9 @@ static void wpas_dpp_rx_peer_disc_resp(struct wpa_supplicant *wpa_s,
 			   "DPP: Network Introduction protocol resulted in failure");
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_INTRO "peer=" MACSTR
 			" fail=peer_connector_validation_failed", MAC2STR(src));
+#ifdef CONFIG_DPP2
+		wpas_dpp_send_conn_status_result(wpa_s, res);
+#endif /* CONFIG_DPP2 */
 		goto fail;
 	}
 
@@ -1748,6 +2162,7 @@ wpas_dpp_rx_pkex_commit_reveal_resp(struct wpa_supplicant *wpa_s, const u8 *src,
 	if (wpas_dpp_auth_init(wpa_s, cmd) < 0) {
 		wpa_printf(MSG_DEBUG,
 			   "DPP: Authentication initialization failed");
+		offchannel_send_action_done(wpa_s);
 		return;
 	}
 }
@@ -1825,6 +2240,9 @@ void wpas_dpp_rx_action(struct wpa_supplicant *wpa_s, const u8 *src,
 	case DPP_PA_CONFIGURATION_RESULT:
 		wpas_dpp_rx_conf_result(wpa_s, src, hdr, buf, len);
 		break;
+	case DPP_PA_CONNECTION_STATUS_RESULT:
+		wpas_dpp_rx_conn_status_result(wpa_s, src, hdr, buf, len);
+		break;
 #endif /* CONFIG_DPP2 */
 	default:
 		wpa_printf(MSG_DEBUG,
@@ -1860,6 +2278,18 @@ wpas_dpp_gas_req_handler(void *ctx, const u8 *sa, const u8 *query,
 		wpa_printf(MSG_DEBUG, "DPP: No matching exchange in progress");
 		return NULL;
 	}
+
+	if (wpa_s->dpp_auth_ok_on_ack && auth->configurator) {
+		wpa_printf(MSG_DEBUG,
+			   "DPP: Have not received ACK for Auth Confirm yet - assume it was received based on this GAS request");
+		/* wpas_dpp_auth_success() would normally have been called from
+		 * TX status handler, but since there was no such handler call
+		 * yet, simply send out the event message and proceed with
+		 * exchange. */
+		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_AUTH_SUCCESS "init=1");
+		wpa_s->dpp_auth_ok_on_ack = 0;
+	}
+
 	wpa_hexdump(MSG_DEBUG,
 		    "DPP: Received Configuration Request (GAS Query Request)",
 		    query, query_len);
@@ -1947,7 +2377,10 @@ int wpas_dpp_configurator_sign(struct wpa_supplicant *wpa_s, const char *cmd)
 	wpas_dpp_set_testing_options(wpa_s, auth);
 	if (dpp_set_configurator(wpa_s->dpp, wpa_s, auth, cmd) == 0 &&
 	    dpp_configurator_own_config(auth, curve, 0) == 0)
-		ret = wpas_dpp_handle_config_obj(wpa_s, auth);
+		ret = wpas_dpp_handle_config_obj(wpa_s, auth,
+						 &auth->conf_obj[0]);
+	if (!ret)
+		wpas_dpp_post_process_config(wpa_s, auth);
 
 	dpp_auth_deinit(auth);
 	os_free(curve);
@@ -2222,6 +2655,8 @@ int wpas_dpp_pkex_remove(struct wpa_supplicant *wpa_s, const char *id)
 
 void wpas_dpp_stop(struct wpa_supplicant *wpa_s)
 {
+	if (wpa_s->dpp_auth || wpa_s->dpp_pkex)
+		offchannel_send_action_done(wpa_s);
 	dpp_auth_deinit(wpa_s->dpp_auth);
 	wpa_s->dpp_auth = NULL;
 	dpp_pkex_free(wpa_s->dpp_pkex);
@@ -2233,6 +2668,7 @@ void wpas_dpp_stop(struct wpa_supplicant *wpa_s)
 
 int wpas_dpp_init(struct wpa_supplicant *wpa_s)
 {
+	struct dpp_global_config config;
 	u8 adv_proto_id[7];
 
 	adv_proto_id[0] = WLAN_EID_VENDOR_SPECIFIC;
@@ -2245,7 +2681,14 @@ int wpas_dpp_init(struct wpa_supplicant *wpa_s)
 				sizeof(adv_proto_id), wpas_dpp_gas_req_handler,
 				wpas_dpp_gas_status_handler, wpa_s) < 0)
 		return -1;
-	wpa_s->dpp = dpp_global_init();
+
+	os_memset(&config, 0, sizeof(config));
+	config.msg_ctx = wpa_s;
+	config.cb_ctx = wpa_s;
+#ifdef CONFIG_DPP2
+	config.process_conf_obj = wpas_dpp_process_conf_obj;
+#endif /* CONFIG_DPP2 */
+	wpa_s->dpp = dpp_global_init(&config);
 	return wpa_s->dpp ? 0 : -1;
 }
 
@@ -2270,6 +2713,9 @@ void wpas_dpp_deinit(struct wpa_supplicant *wpa_s)
 	eloop_cancel_timeout(wpas_dpp_auth_resp_retry_timeout, wpa_s, NULL);
 #ifdef CONFIG_DPP2
 	eloop_cancel_timeout(wpas_dpp_config_result_wait_timeout, wpa_s, NULL);
+	eloop_cancel_timeout(wpas_dpp_conn_status_result_wait_timeout,
+			     wpa_s, NULL);
+	eloop_cancel_timeout(wpas_dpp_conn_status_result_timeout, wpa_s, NULL);
 	dpp_pfs_free(wpa_s->dpp_pfs);
 	wpa_s->dpp_pfs = NULL;
 #endif /* CONFIG_DPP2 */
@@ -2281,3 +2727,23 @@ void wpas_dpp_deinit(struct wpa_supplicant *wpa_s)
 	os_free(wpa_s->dpp_configurator_params);
 	wpa_s->dpp_configurator_params = NULL;
 }
+
+
+#ifdef CONFIG_DPP2
+int wpas_dpp_controller_start(struct wpa_supplicant *wpa_s, const char *cmd)
+{
+	struct dpp_controller_config config;
+	const char *pos;
+
+	os_memset(&config, 0, sizeof(config));
+	if (cmd) {
+		pos = os_strstr(cmd, " tcp_port=");
+		if (pos) {
+			pos += 10;
+			config.tcp_port = atoi(pos);
+		}
+	}
+	config.configurator_params = wpa_s->dpp_configurator_params;
+	return dpp_controller_start(wpa_s->dpp, &config);
+}
+#endif /* CONFIG_DPP2 */

@@ -48,6 +48,15 @@ struct psk_list_entry {
 	u8 p2p;
 };
 
+enum wpas_mode {
+	WPAS_MODE_INFRA = 0,
+	WPAS_MODE_IBSS = 1,
+	WPAS_MODE_AP = 2,
+	WPAS_MODE_P2P_GO = 3,
+	WPAS_MODE_P2P_GROUP_FORMATION = 4,
+	WPAS_MODE_MESH = 5,
+};
+
 /**
  * struct wpa_ssid - Network configuration data
  *
@@ -203,6 +212,8 @@ struct wpa_ssid {
 	 * not included, the default SAE password is used instead.
 	 */
 	char *sae_password_id;
+
+	struct sae_pt *pt;
 
 	/**
 	 * ext_psk - PSK/passphrase name in external storage
@@ -394,14 +405,7 @@ struct wpa_ssid {
 	 * CCMP, but not both), and psk must also be set (either directly or
 	 * using ASCII passphrase).
 	 */
-	enum wpas_mode {
-		WPAS_MODE_INFRA = 0,
-		WPAS_MODE_IBSS = 1,
-		WPAS_MODE_AP = 2,
-		WPAS_MODE_P2P_GO = 3,
-		WPAS_MODE_P2P_GROUP_FORMATION = 4,
-		WPAS_MODE_MESH = 5,
-	} mode;
+	enum wpas_mode mode;
 
 	/**
 	 * pbss - Whether to use PBSS. Relevant to DMG networks only.
@@ -444,7 +448,6 @@ struct wpa_ssid {
 	 */
 	char *id_str;
 
-#ifdef CONFIG_IEEE80211W
 	/**
 	 * ieee80211w - Whether management frame protection is enabled
 	 *
@@ -458,7 +461,6 @@ struct wpa_ssid {
 	 * followed).
 	 */
 	enum mfp_options ieee80211w;
-#endif /* CONFIG_IEEE80211W */
 
 #ifdef CONFIG_OCV
 	/**
@@ -1007,6 +1009,19 @@ struct wpa_ssid {
 	int owe_only;
 
 	/**
+	 * owe_ptk_workaround - OWE PTK derivation workaround
+	 *
+	 * Initial OWE implementation used SHA256 when deriving the PTK for all
+	 * OWE groups. This was supposed to change to SHA384 for group 20 and
+	 * SHA512 for group 21. This parameter can be used to enable older
+	 * behavior mainly for testing purposes. There is no impact to group 19
+	 * behavior, but if enabled, this will make group 20 and 21 cases use
+	 * SHA256-based PTK derivation which will not work with the updated
+	 * OWE implementation on the AP side.
+	 */
+	int owe_ptk_workaround;
+
+	/**
 	 * owe_transition_bss_select_count - OWE transition BSS select count
 	 *
 	 * This is an internally used variable (i.e., not used in external
@@ -1022,6 +1037,16 @@ struct wpa_ssid {
 	 * 1 = Multi-AP backhaul station
 	 */
 	int multi_ap_backhaul_sta;
+
+	/**
+	 * ft_eap_pmksa_caching - Whether FT-EAP PMKSA caching is allowed
+	 * 0 = do not try to use PMKSA caching with FT-EAP
+	 * 1 = try to use PMKSA caching with FT-EAP
+	 *
+	 * This controls whether to try to use PMKSA caching with FT-EAP for the
+	 * FT initial mobility domain association.
+	 */
+	int ft_eap_pmksa_caching;
 };
 
 #endif /* CONFIG_SSID_H */

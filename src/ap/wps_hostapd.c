@@ -358,12 +358,10 @@ static int hapd_wps_reconfig_in_memory(struct hostapd_data *hapd,
 		    (cred->auth_type & WPS_AUTH_WPA2PSK) &&
 		    cred->key_len != 2 * PMK_LEN) {
 			bss->wpa_key_mgmt |= WPA_KEY_MGMT_SAE;
-#ifdef CONFIG_IEEE80211W
 			if (bss->ieee80211w == NO_MGMT_FRAME_PROTECTION)
 				bss->ieee80211w =
 					MGMT_FRAME_PROTECTION_OPTIONAL;
 			bss->sae_require_mfp = 1;
-#endif /* CONFIG_IEEE80211W */
 		}
 
 		if (cred->key_len >= 8 && cred->key_len < 64) {
@@ -533,9 +531,7 @@ static int hapd_wps_cred_cb(struct hostapd_data *hapd, void *ctx)
 
 	if (wpa) {
 		char *prefix;
-#ifdef CONFIG_IEEE80211W
 		int sae = 0;
-#endif /* CONFIG_IEEE80211W */
 
 		fprintf(nconf, "wpa=%d\n", wpa);
 
@@ -553,13 +549,10 @@ static int hapd_wps_cred_cb(struct hostapd_data *hapd, void *ctx)
 		    (cred->auth_type & WPS_AUTH_WPA2PSK) &&
 		    cred->key_len != 2 * PMK_LEN) {
 			fprintf(nconf, "%sSAE", prefix);
-#ifdef CONFIG_IEEE80211W
 			sae = 1;
-#endif /* CONFIG_IEEE80211W */
 		}
 		fprintf(nconf, "\n");
 
-#ifdef CONFIG_IEEE80211W
 		if (sae && hapd->conf->ieee80211w == NO_MGMT_FRAME_PROTECTION) {
 			fprintf(nconf, "ieee80211w=%d\n",
 				MGMT_FRAME_PROTECTION_OPTIONAL);
@@ -567,7 +560,6 @@ static int hapd_wps_cred_cb(struct hostapd_data *hapd, void *ctx)
 		}
 		if (sae)
 			fprintf(nconf, "sae_require_mfp=1\n");
-#endif /* CONFIG_IEEE80211W */
 
 		fprintf(nconf, "wpa_pairwise=");
 		prefix = "";
@@ -993,6 +985,21 @@ static int hostapd_wps_set_vendor_ext(struct hostapd_data *hapd,
 }
 
 
+static int hostapd_wps_set_application_ext(struct hostapd_data *hapd,
+					   struct wps_context *wps)
+{
+	wpabuf_free(wps->dev.application_ext);
+
+	if (!hapd->conf->wps_application_ext) {
+		wps->dev.application_ext = NULL;
+		return 0;
+	}
+
+	wps->dev.application_ext = wpabuf_dup(hapd->conf->wps_application_ext);
+	return wps->dev.application_ext ? 0 : -1;
+}
+
+
 static void hostapd_free_wps(struct wps_context *wps)
 {
 	int i;
@@ -1082,7 +1089,8 @@ int hostapd_init_wps(struct hostapd_data *hapd,
 	os_memcpy(wps->dev.pri_dev_type, hapd->conf->device_type,
 		  WPS_DEV_TYPE_LEN);
 
-	if (hostapd_wps_set_vendor_ext(hapd, wps) < 0)
+	if (hostapd_wps_set_vendor_ext(hapd, wps) < 0 ||
+	    hostapd_wps_set_application_ext(hapd, wps) < 0)
 		goto fail;
 
 	wps->dev.os_version = WPA_GET_BE32(hapd->conf->os_version);
@@ -1319,6 +1327,7 @@ void hostapd_update_wps(struct hostapd_data *hapd)
 #endif /* CONFIG_WPS_UPNP */
 
 	hostapd_wps_set_vendor_ext(hapd, hapd->wps);
+	hostapd_wps_set_application_ext(hapd, hapd->wps);
 
 	if (hapd->conf->wps_state)
 		wps_registrar_update_ie(hapd->wps->registrar);
@@ -1425,6 +1434,7 @@ static int wps_cancel(struct hostapd_data *hapd, void *ctx)
 		data->count++;
 		wps_registrar_wps_cancel(hapd->wps->registrar);
 		ap_for_each_sta(hapd, ap_sta_wps_cancel, NULL);
+		wpa_msg(hapd->msg_ctx, MSG_INFO, WPS_EVENT_CANCEL);
 	}
 
 	return 0;

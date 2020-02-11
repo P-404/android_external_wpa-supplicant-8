@@ -2855,30 +2855,6 @@ static const struct wpa_dbus_property_desc wpas_dbus_bss_properties[] = {
 	  NULL,
 	  NULL
 	},
-	{
-	  "RoamTime", WPAS_DBUS_NEW_IFACE_INTERFACE, "u",
-	  wpas_dbus_getter_roam_time,
-	  NULL,
-	  NULL
-	},
-	{
-	  "RoamComplete", WPAS_DBUS_NEW_IFACE_INTERFACE, "b",
-	  wpas_dbus_getter_roam_complete,
-	  NULL,
-	  NULL
-	},
-	{
-	  "SessionLength", WPAS_DBUS_NEW_IFACE_INTERFACE, "u",
-	  wpas_dbus_getter_session_length,
-	  NULL,
-	  NULL
-	},
-	{
-	  "BSSTMStatus", WPAS_DBUS_NEW_IFACE_INTERFACE, "u",
-	  wpas_dbus_getter_bss_tm_status,
-	  NULL,
-	  NULL
-	},
 	{ NULL, NULL, NULL, NULL, NULL, NULL }
 };
 
@@ -3786,6 +3762,30 @@ static const struct wpa_dbus_property_desc wpas_dbus_interface_properties[] = {
 	  NULL,
 	  NULL
 	},
+	{
+	  "RoamTime", WPAS_DBUS_NEW_IFACE_INTERFACE, "u",
+	  wpas_dbus_getter_roam_time,
+	  NULL,
+	  NULL
+	},
+	{
+	  "RoamComplete", WPAS_DBUS_NEW_IFACE_INTERFACE, "b",
+	  wpas_dbus_getter_roam_complete,
+	  NULL,
+	  NULL
+	},
+	{
+	  "SessionLength", WPAS_DBUS_NEW_IFACE_INTERFACE, "u",
+	  wpas_dbus_getter_session_length,
+	  NULL,
+	  NULL
+	},
+	{
+	  "BSSTMStatus", WPAS_DBUS_NEW_IFACE_INTERFACE, "u",
+	  wpas_dbus_getter_bss_tm_status,
+	  NULL,
+	  NULL
+	},
 #ifdef CONFIG_MESH
 	{ "MeshPeers", WPAS_DBUS_NEW_IFACE_MESH, "aay",
 	  wpas_dbus_getter_mesh_peers,
@@ -3801,6 +3801,12 @@ static const struct wpa_dbus_property_desc wpas_dbus_interface_properties[] = {
 	{ "Stations", WPAS_DBUS_NEW_IFACE_INTERFACE, "ao",
 	  wpas_dbus_getter_stas,
 	  NULL,
+	  NULL
+	},
+	{ "MACAddressRandomizationMask", WPAS_DBUS_NEW_IFACE_INTERFACE,
+	  "a{say}",
+	  wpas_dbus_getter_mac_address_randomization_mask,
+	  wpas_dbus_setter_mac_address_randomization_mask,
 	  NULL
 	},
 	{ NULL, NULL, NULL, NULL, NULL, NULL }
@@ -4791,8 +4797,8 @@ void wpas_dbus_unregister_p2p_group(struct wpa_supplicant *wpa_s,
 
 	if (!wpa_s->dbus_groupobj_path) {
 		wpa_printf(MSG_DEBUG,
-			   "%s: Group object '%s' already unregistered",
-			   __func__, wpa_s->dbus_groupobj_path);
+			   "%s: Group object has already unregistered",
+			   __func__);
 		return;
 	}
 

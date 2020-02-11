@@ -46,9 +46,7 @@ static void ap_handle_session_timer(void *eloop_ctx, void *timeout_ctx);
 static void ap_handle_session_warning_timer(void *eloop_ctx, void *timeout_ctx);
 static void ap_sta_deauth_cb_timeout(void *eloop_ctx, void *timeout_ctx);
 static void ap_sta_disassoc_cb_timeout(void *eloop_ctx, void *timeout_ctx);
-#ifdef CONFIG_IEEE80211W
 static void ap_sa_query_timer(void *eloop_ctx, void *timeout_ctx);
-#endif /* CONFIG_IEEE80211W */
 static int ap_sta_remove(struct hostapd_data *hapd, struct sta_info *sta);
 static void ap_sta_delayed_1x_auth_fail_cb(void *eloop_ctx, void *timeout_ctx);
 
@@ -301,10 +299,8 @@ void ap_free_sta(struct hostapd_data *hapd, struct sta_info *sta)
 
 	os_free(sta->challenge);
 
-#ifdef CONFIG_IEEE80211W
 	os_free(sta->sa_query_trans_id);
 	eloop_cancel_timeout(ap_sa_query_timer, hapd, sta);
-#endif /* CONFIG_IEEE80211W */
 
 #ifdef CONFIG_P2P
 	p2p_group_notif_disassoc(hapd->p2p_group, sta->addr);
@@ -330,6 +326,7 @@ void ap_free_sta(struct hostapd_data *hapd, struct sta_info *sta)
 	os_free(sta->ht_capabilities);
 	os_free(sta->vht_capabilities);
 	os_free(sta->vht_operation);
+	os_free(sta->he_capab);
 	hostapd_free_psk_list(sta->psk);
 	os_free(sta->identity);
 	os_free(sta->radius_cui);
@@ -375,6 +372,10 @@ void ap_free_sta(struct hostapd_data *hapd, struct sta_info *sta)
 #endif /* CONFIG_WNM_AP */
 
 	os_free(sta->ifname_wds);
+
+#ifdef CONFIG_TESTING_OPTIONS
+	os_free(sta->sae_postponed_commit);
+#endif /* CONFIG_TESTING_OPTIONS */
 
 	os_free(sta);
 }
@@ -589,7 +590,8 @@ static void ap_handle_session_timer(void *eloop_ctx, void *timeout_ctx)
 
 	wpa_printf(MSG_DEBUG, "%s: Session timer for STA " MACSTR,
 		   hapd->conf->iface, MAC2STR(sta->addr));
-	if (!(sta->flags & WLAN_STA_AUTH)) {
+	if (!(sta->flags & (WLAN_STA_AUTH | WLAN_STA_ASSOC |
+			    WLAN_STA_AUTHORIZED))) {
 		if (sta->flags & WLAN_STA_GAS) {
 			wpa_printf(MSG_DEBUG, "GAS: Remove temporary STA "
 				   "entry " MACSTR, MAC2STR(sta->addr));
@@ -670,6 +672,7 @@ void ap_sta_session_warning_timeout(struct hostapd_data *hapd,
 struct sta_info * ap_sta_add(struct hostapd_data *hapd, const u8 *addr)
 {
 	struct sta_info *sta;
+	int i;
 
 	sta = ap_get_sta(hapd, addr);
 	if (sta)
@@ -693,6 +696,15 @@ struct sta_info * ap_sta_add(struct hostapd_data *hapd, const u8 *addr)
 		os_free(sta);
 		return NULL;
 	}
+
+	for (i = 0; i < WLAN_SUPP_RATES_MAX; i++) {
+		if (!hapd->iface->basic_rates)
+			break;
+		if (hapd->iface->basic_rates[i] < 0)
+			break;
+		sta->supported_rates[i] = hapd->iface->basic_rates[i] / 5;
+	}
+	sta->supported_rates_len = i;
 
 	if (!(hapd->iface->drv_flags & WPA_DRIVER_FLAGS_INACTIVITY_TIMER)) {
 		wpa_printf(MSG_DEBUG, "%s: register ap_handle_timer timeout "
@@ -812,6 +824,8 @@ void ap_sta_disassociate(struct hostapd_data *hapd, struct sta_info *sta,
 			       ap_handle_timer, hapd, sta);
 	accounting_sta_stop(hapd, sta);
 	ieee802_1x_free_station(hapd, sta);
+	wpa_auth_sta_deinit(sta->wpa_sm);
+	sta->wpa_sm = NULL;
 
 	sta->disassoc_reason = reason;
 	sta->flags |= WLAN_STA_PENDING_DISASSOC_CB;
@@ -1036,7 +1050,8 @@ int ap_sta_bind_vlan(struct hostapd_data *hapd, struct sta_info *sta)
 	if (sta->vlan_id == old_vlanid)
 		goto skip_counting;
 
-	if (sta->vlan_id > 0 && vlan == NULL) {
+	if (sta->vlan_id > 0 && !vlan &&
+	    !(hapd->iface->drv_flags & WPA_DRIVER_FLAGS_VLAN_OFFLOAD)) {
 		hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE80211,
 			       HOSTAPD_LEVEL_DEBUG, "could not find VLAN for "
 			       "binding station to (vlan_id=%d)",
@@ -1081,8 +1096,6 @@ done:
 #endif /* CONFIG_NO_VLAN */
 }
 
-
-#ifdef CONFIG_IEEE80211W
 
 int ap_check_sa_query_timeout(struct hostapd_data *hapd, struct sta_info *sta)
 {
@@ -1172,8 +1185,6 @@ void ap_sta_stop_sa_query(struct hostapd_data *hapd, struct sta_info *sta)
 	sta->sa_query_trans_id = NULL;
 	sta->sa_query_count = 0;
 }
-
-#endif /* CONFIG_IEEE80211W */
 
 
 const char * ap_sta_wpa_get_keyid(struct hostapd_data *hapd,
@@ -1399,7 +1410,7 @@ int ap_sta_flags_txt(u32 flags, char *buf, size_t buflen)
 	int res;
 
 	buf[0] = '\0';
-	res = os_snprintf(buf, buflen, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
+	res = os_snprintf(buf, buflen, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
 			  (flags & WLAN_STA_AUTH ? "[AUTH]" : ""),
 			  (flags & WLAN_STA_ASSOC ? "[ASSOC]" : ""),
 			  (flags & WLAN_STA_AUTHORIZED ? "[AUTHORIZED]" : ""),
@@ -1418,6 +1429,7 @@ int ap_sta_flags_txt(u32 flags, char *buf, size_t buflen)
 			  (flags & WLAN_STA_GAS ? "[GAS]" : ""),
 			  (flags & WLAN_STA_HT ? "[HT]" : ""),
 			  (flags & WLAN_STA_VHT ? "[VHT]" : ""),
+			  (flags & WLAN_STA_HE ? "[HE]" : ""),
 			  (flags & WLAN_STA_VENDOR_VHT ? "[VENDOR_VHT]" : ""),
 			  (flags & WLAN_STA_WNM_SLEEP_MODE ?
 			   "[WNM_SLEEP_MODE]" : ""));

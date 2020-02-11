@@ -94,13 +94,13 @@ int isPskPassphraseValid(const std::string &psk)
 void setBandScanFreqsList(
     struct wpa_supplicant *wpa_s,
     enum hostapd_hw_mode band,
-    struct wpa_driver_scan_params *params)
+    struct wpa_driver_scan_params *params, int is_6ghz)
 {
 	/* Include only supported channels for the specified band */
 	struct hostapd_hw_modes *mode;
 	int count, i;
 
-	mode = get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes, band);
+	mode = get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes, band, is_6ghz);
 	if (mode == NULL) {
 		/* No channels supported in this band. */
 		return;
@@ -163,7 +163,7 @@ struct wpa_ssid* addGroupClientNetwork(
 
 	// set P2p network defaults
 	wpa_network->p2p_group = 1;
-	wpa_network->mode = wpa_ssid::wpas_mode::WPAS_MODE_INFRA;
+	wpa_network->mode = wpas_mode::WPAS_MODE_INFRA;
 
 	wpa_network->auth_alg = WPA_AUTH_ALG_OPEN;
 	wpa_network->key_mgmt = WPA_KEY_MGMT_PSK;
@@ -248,11 +248,11 @@ int joinScanReq(
 				switch (freq) {
 				case 2:
 					setBandScanFreqsList(wpa_s,
-					    HOSTAPD_MODE_IEEE80211G, &params);
+					    HOSTAPD_MODE_IEEE80211G, &params, 0);
 				break;
 				case 5:
 					setBandScanFreqsList(wpa_s,
-					    HOSTAPD_MODE_IEEE80211A, &params);
+					    HOSTAPD_MODE_IEEE80211A, &params, 0);
 				break;
 				}
 				if (!params.freqs) {

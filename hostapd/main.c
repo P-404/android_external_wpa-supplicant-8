@@ -83,9 +83,6 @@ static void hostapd_logger_cb(void *ctx, const u8 *addr, unsigned int module,
 	case HOSTAPD_MODULE_DRIVER:
 		module_str = "DRIVER";
 		break;
-	case HOSTAPD_MODULE_IAPP:
-		module_str = "IAPP";
-		break;
 	case HOSTAPD_MODULE_MLME:
 		module_str = "MLME";
 		break;
@@ -265,7 +262,7 @@ hostapd_interface_init(struct hapd_interfaces *interfaces, const char *if_name,
 	struct hostapd_iface *iface;
 	int k;
 
-	wpa_printf(MSG_ERROR, "Configuration file: %s", config_fname);
+	wpa_printf(MSG_DEBUG, "Configuration file: %s", config_fname);
 	iface = hostapd_init(interfaces, config_fname);
 	if (!iface)
 		return NULL;
@@ -655,6 +652,9 @@ int main(int argc, char *argv[])
 	int start_ifaces_in_sync = 0;
 	char **if_names = NULL;
 	size_t if_names_size = 0;
+#ifdef CONFIG_DPP
+	struct dpp_global_config dpp_conf;
+#endif /* CONFIG_DPP */
 
 	if (os_program_init())
 		return -1;
@@ -674,7 +674,9 @@ int main(int argc, char *argv[])
 	dl_list_init(&interfaces.eth_p_oui);
 #endif /* CONFIG_ETH_P_OUI */
 #ifdef CONFIG_DPP
-	interfaces.dpp = dpp_global_init();
+	os_memset(&dpp_conf, 0, sizeof(dpp_conf));
+	/* TODO: dpp_conf.msg_ctx? */
+	interfaces.dpp = dpp_global_init(&dpp_conf);
 	if (!interfaces.dpp)
 		return -1;
 #endif /* CONFIG_DPP */
@@ -775,7 +777,7 @@ int main(int argc, char *argv[])
 
 	if (log_file)
 		wpa_debug_open_file(log_file);
-	else
+	if (!log_file && !wpa_debug_syslog)
 		wpa_debug_setup_stdout();
 #ifdef CONFIG_DEBUG_SYSLOG
 	if (wpa_debug_syslog)

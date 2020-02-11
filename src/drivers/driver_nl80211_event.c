@@ -539,7 +539,8 @@ static int calculate_chan_offset(int width, int freq, int cf1, int cf2)
 static void mlme_event_ch_switch(struct wpa_driver_nl80211_data *drv,
 				 struct nlattr *ifindex, struct nlattr *freq,
 				 struct nlattr *type, struct nlattr *bw,
-				 struct nlattr *cf1, struct nlattr *cf2)
+				 struct nlattr *cf1, struct nlattr *cf2,
+				 int finished)
 {
 	struct i802_bss *bss;
 	union wpa_event_data data;
@@ -547,7 +548,8 @@ static void mlme_event_ch_switch(struct wpa_driver_nl80211_data *drv,
 	int chan_offset = 0;
 	int ifidx;
 
-	wpa_printf(MSG_DEBUG, "nl80211: Channel switch event");
+	wpa_printf(MSG_DEBUG, "nl80211: Channel switch%s event",
+		   finished ? "" : " started");
 
 	if (!freq)
 		return;
@@ -598,10 +600,12 @@ static void mlme_event_ch_switch(struct wpa_driver_nl80211_data *drv,
 	if (cf2)
 		data.ch_switch.cf2 = nla_get_u32(cf2);
 
-	bss->freq = data.ch_switch.freq;
+	if (finished)
+		bss->freq = data.ch_switch.freq;
 	drv->assoc_freq = data.ch_switch.freq;
 
-	wpa_supplicant_event(bss->ctx, EVENT_CH_SWITCH, &data);
+	wpa_supplicant_event(bss->ctx, finished ?
+			     EVENT_CH_SWITCH : EVENT_CH_SWITCH_STARTED, &data);
 }
 
 
@@ -690,12 +694,12 @@ static void mlme_event_mgmt_tx_status(struct wpa_driver_nl80211_data *drv,
 			return;
 
 		cookie_val = nla_get_u64(cookie);
-		wpa_printf(MSG_DEBUG, "nl80211: Action TX status:"
-			   " cookie=0x%llx%s (ack=%d)",
+		wpa_printf(MSG_DEBUG,
+			   "nl80211: Frame TX status: cookie=0x%llx%s (ack=%d)",
 			   (long long unsigned int) cookie_val,
-			   cookie_val == drv->send_action_cookie ?
+			   cookie_val == drv->send_frame_cookie ?
 			   " (match)" : " (unknown)", ack != NULL);
-		if (cookie_val != drv->send_action_cookie)
+		if (cookie_val != drv->send_frame_cookie)
 			return;
 	}
 
@@ -1736,30 +1740,61 @@ static enum hostapd_hw_mode get_qca_hw_mode(u8 hw_mode)
 }
 
 
+static unsigned int chan_2ghz_or_5ghz_to_freq(u8 chan)
+{
+	if (chan >= 1 && chan <= 13)
+		return 2407 + 5 * chan;
+	if (chan == 14)
+		return 2484;
+	if (chan >= 36 && chan <= 169)
+		return 5000 + 5 * chan;
+
+	return 0;
+}
+
+
 static void qca_nl80211_acs_select_ch(struct wpa_driver_nl80211_data *drv,
 				   const u8 *data, size_t len)
 {
 	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_ACS_MAX + 1];
 	union wpa_event_data event;
+	u8 chan;
 
 	wpa_printf(MSG_DEBUG,
 		   "nl80211: ACS channel selection vendor event received");
 
 	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_ACS_MAX,
 		      (struct nlattr *) data, len, NULL) ||
-	    !tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL] ||
-	    !tb[QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL])
+	    (!tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_FREQUENCY] &&
+	     !tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL]) ||
+	    (!tb[QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_FREQUENCY] &&
+	     !tb[QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL]))
 		return;
 
 	os_memset(&event, 0, sizeof(event));
-	event.acs_selected_channels.pri_channel =
-		nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL]);
-	event.acs_selected_channels.sec_channel =
-		nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL]);
+	if (tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_FREQUENCY]) {
+		event.acs_selected_channels.pri_freq = nla_get_u32(
+			tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_FREQUENCY]);
+	} else {
+		chan = nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL]);
+		event.acs_selected_channels.pri_freq =
+			chan_2ghz_or_5ghz_to_freq(chan);
+	}
+
+	if (tb[QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_FREQUENCY]) {
+		event.acs_selected_channels.sec_freq = nla_get_u32(
+			tb[QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_FREQUENCY]);
+	} else {
+		chan = nla_get_u8(
+			tb[QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL]);
+		event.acs_selected_channels.sec_freq =
+			chan_2ghz_or_5ghz_to_freq(chan);
+	}
+
 	if (tb[QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL])
 		event.acs_selected_channels.vht_seg0_center_ch =
 			nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL]);
-	if (tb[QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL])
+	if (tb[QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL])
 		event.acs_selected_channels.vht_seg1_center_ch =
 			nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL]);
 	if (tb[QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH])
@@ -1780,9 +1815,9 @@ static void qca_nl80211_acs_select_ch(struct wpa_driver_nl80211_data *drv,
 	}
 
 	wpa_printf(MSG_INFO,
-		   "nl80211: ACS Results: PCH: %d SCH: %d BW: %d VHT0: %d VHT1: %d HW_MODE: %d",
-		   event.acs_selected_channels.pri_channel,
-		   event.acs_selected_channels.sec_channel,
+		   "nl80211: ACS Results: PFreq: %d SFreq: %d BW: %d VHT0: %d VHT1: %d HW_MODE: %d",
+		   event.acs_selected_channels.pri_freq,
+		   event.acs_selected_channels.sec_freq,
 		   event.acs_selected_channels.ch_width,
 		   event.acs_selected_channels.vht_seg0_center_ch,
 		   event.acs_selected_channels.vht_seg1_center_ch,
@@ -2466,6 +2501,18 @@ static void nl80211_sta_opmode_change_event(struct wpa_driver_nl80211_data *drv,
 }
 
 
+static void nl80211_control_port_frame(struct wpa_driver_nl80211_data *drv,
+				       struct nlattr **tb)
+{
+	if (!tb[NL80211_ATTR_MAC] || !tb[NL80211_ATTR_FRAME])
+		return;
+
+	drv_event_eapol_rx(drv->ctx, nla_data(tb[NL80211_ATTR_MAC]),
+			   nla_data(tb[NL80211_ATTR_FRAME]),
+			   nla_len(tb[NL80211_ATTR_FRAME]));
+}
+
+
 static void do_process_drv_event(struct i802_bss *bss, int cmd,
 				 struct nlattr **tb)
 {
@@ -2589,6 +2636,16 @@ static void do_process_drv_event(struct i802_bss *bss, int cmd,
 				   tb[NL80211_ATTR_PMK],
 				   tb[NL80211_ATTR_PMKID]);
 		break;
+	case NL80211_CMD_CH_SWITCH_STARTED_NOTIFY:
+		mlme_event_ch_switch(drv,
+				     tb[NL80211_ATTR_IFINDEX],
+				     tb[NL80211_ATTR_WIPHY_FREQ],
+				     tb[NL80211_ATTR_WIPHY_CHANNEL_TYPE],
+				     tb[NL80211_ATTR_CHANNEL_WIDTH],
+				     tb[NL80211_ATTR_CENTER_FREQ1],
+				     tb[NL80211_ATTR_CENTER_FREQ2],
+				     0);
+		break;
 	case NL80211_CMD_CH_SWITCH_NOTIFY:
 		mlme_event_ch_switch(drv,
 				     tb[NL80211_ATTR_IFINDEX],
@@ -2596,7 +2653,8 @@ static void do_process_drv_event(struct i802_bss *bss, int cmd,
 				     tb[NL80211_ATTR_WIPHY_CHANNEL_TYPE],
 				     tb[NL80211_ATTR_CHANNEL_WIDTH],
 				     tb[NL80211_ATTR_CENTER_FREQ1],
-				     tb[NL80211_ATTR_CENTER_FREQ2]);
+				     tb[NL80211_ATTR_CENTER_FREQ2],
+				     1);
 		break;
 	case NL80211_CMD_DISCONNECT:
 		mlme_event_disconnect(drv, tb[NL80211_ATTR_REASON_CODE],
@@ -2670,6 +2728,9 @@ static void do_process_drv_event(struct i802_bss *bss, int cmd,
 	case NL80211_CMD_UPDATE_OWE_INFO:
 		mlme_event_dh_event(drv, bss, tb);
 		break;
+	case NL80211_CMD_CONTROL_PORT_FRAME:
+		nl80211_control_port_frame(drv, tb);
+		break;
 	default:
 		wpa_dbg(drv->ctx, MSG_DEBUG, "nl80211: Ignored unknown event "
 			"(cmd=%d)", cmd);
@@ -2718,8 +2779,9 @@ int process_global_event(struct nl_msg *msg, void *arg)
 			}
 		}
 		wpa_printf(MSG_DEBUG,
-			   "nl80211: Ignored event (cmd=%d) for foreign interface (ifindex %d wdev 0x%llx)",
-			   gnlh->cmd, ifidx, (long long unsigned int) wdev_id);
+			   "nl80211: Ignored event %d (%s) for foreign interface (ifindex %d wdev 0x%llx)",
+			   gnlh->cmd, nl80211_command_to_string(gnlh->cmd),
+			   ifidx, (long long unsigned int) wdev_id);
 	}
 
 	return NL_SKIP;
