@@ -4991,6 +4991,17 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 						 data->sta_opmode.rx_nss);
 #endif /* CONFIG_AP */
 		break;
+	case EVENT_UPDATE_STA_CHANNEL_INFO:
+		if (!wpa_s->last_ssid) {
+			wpa_printf(MSG_DEBUG, "last_ssid is NULL");
+			break;
+		}
+		else {
+			wpa_printf(MSG_DEBUG, "%s %d %s",wpa_s->last_ssid->ssid,
+				   data->update_sta_chan_info.chan_count,
+				   data->update_sta_chan_info.disc_channels);
+		}
+		break;
 	default:
 		wpa_msg(wpa_s, MSG_INFO, "Unknown event %d", event);
 		break;
