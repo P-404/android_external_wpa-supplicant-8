@@ -41,9 +41,9 @@
 #include <android/hardware/wifi/supplicant/1.0/ISupplicant.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantIface.h>
-#include <vendor/qti/hardware/wifi/supplicant/2.0/ISupplicantVendor.h>
+#include <vendor/qti/hardware/wifi/supplicant/2.2/ISupplicantVendor.h>
 #include <vendor/qti/hardware/wifi/supplicant/2.0/ISupplicantVendorIface.h>
-#include <vendor/qti/hardware/wifi/supplicant/2.0/ISupplicantVendorStaIface.h>
+#include <vendor/qti/hardware/wifi/supplicant/2.2/ISupplicantVendorStaIface.h>
 
 extern "C" {
 #include "utils/common.h"
@@ -57,7 +57,7 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace supplicantvendor{
-namespace V2_0 {
+namespace V2_2 {
 namespace Implementation {
 using namespace android::hardware::wifi::supplicant::V1_0;
 using namespace android::hardware;
@@ -67,7 +67,7 @@ using namespace vendor::qti::hardware::wifi::supplicant::V2_0;
  * object is used core for global control operations on
  * wpa_supplicant.
  */
-class SupplicantVendor : public vendor::qti::hardware::wifi::supplicant::V2_0::ISupplicantVendor
+class SupplicantVendor : public vendor::qti::hardware::wifi::supplicant::V2_2::ISupplicantVendor
 {
 public:
 	SupplicantVendor(struct wpa_global* global);
@@ -91,7 +91,7 @@ private:
 };
 
 }  // namespace implementation
-}  // namespace V2_0
+}  // namespace V2_2
 }  // namespace supplicant
 }  // namespace wifi
 }  // namespace hardware
