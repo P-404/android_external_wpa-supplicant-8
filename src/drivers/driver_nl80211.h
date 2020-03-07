@@ -24,6 +24,11 @@
 #define nl80211_handle_destroy nl_socket_free
 #endif /* CONFIG_LIBNL20 */
 
+#ifndef NL_CAPABILITY_VERSION_3_5_0
+#define nla_nest_start(msg, attrtype) \
+	nla_nest_start(msg, NLA_F_NESTED | (attrtype))
+#endif
+
 struct nl80211_global {
 	void *ctx;
 	struct dl_list interfaces;
