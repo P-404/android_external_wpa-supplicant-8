@@ -6,6 +6,7 @@
         <interface>
             <name>IHostapd</name>
             <instance>default</instance>
+            <instance>wigighostapd</instance>
         </interface>
     </hal>
     <hal format="hidl">
@@ -15,6 +16,7 @@
         <interface>
             <name>IHostapdVendor</name>
             <instance>default</instance>
+            <instance>wigighostapd</instance>
         </interface>
     </hal>
 </manifest>
