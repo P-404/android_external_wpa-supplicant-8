@@ -2382,10 +2382,6 @@ int StaNetwork::setByteArrayKeyFieldAndResetState(
  */
 void StaNetwork::setFastTransitionKeyMgmt(uint32_t &key_mgmt_mask)
 {
-	if (key_mgmt_mask & WPA_KEY_MGMT_SAE) {
-		key_mgmt_mask |= WPA_KEY_MGMT_FT_SAE;
-	}
-
 	if (key_mgmt_mask & WPA_KEY_MGMT_PSK) {
 		key_mgmt_mask |= WPA_KEY_MGMT_FT_PSK;
 	}
@@ -2401,10 +2397,6 @@ void StaNetwork::setFastTransitionKeyMgmt(uint32_t &key_mgmt_mask)
  */
 void StaNetwork::resetFastTransitionKeyMgmt(uint32_t &key_mgmt_mask)
 {
-	if (key_mgmt_mask & WPA_KEY_MGMT_SAE) {
-		key_mgmt_mask &= ~WPA_KEY_MGMT_FT_SAE;
-	}
-
 	if (key_mgmt_mask & WPA_KEY_MGMT_PSK) {
 		key_mgmt_mask &= ~WPA_KEY_MGMT_FT_PSK;
 	}
