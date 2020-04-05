@@ -4755,6 +4755,12 @@ enum wpa_event_type {
 	  * EVENT_UPDATE_DH - Notification of updated DH information
 	  */
 	EVENT_UPDATE_DH,
+
+	/**
+	  * EVENT_UPDATE_STA_CHANNEL_INFO - Notify disconnect channels numbers
+	  * and disconnected channels info
+	  */
+	EVENT_UPDATE_STA_CHANNEL_INFO,
 };
 
 
@@ -5597,6 +5603,14 @@ union wpa_event_data {
 		const u8 *ie;
 		size_t ie_len;
 	} update_dh;
+
+	/**
+	 * struct update_sta_chan_info - Data for EVENT_UPDATE_STA_CHANNEL_INFO
+	 */
+	struct update_sta_chan_info {
+		int chan_count;
+		const u8 *disc_channels;
+	} update_sta_chan_info;
 };
 
 /**

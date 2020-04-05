@@ -2078,9 +2078,11 @@ static void qca_nl80211_update_sta_info_event(struct wpa_driver_nl80211_data *dr
 {
 	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_MAX + 1];
 	u32 *chan = NULL;
-	int nl_len;
-	int i, res;
+	int nl_len, i, res;
+	int chan_count = 0;
 	char buff[1000], *pos, *end;
+	union wpa_event_data event;
+
 	wpa_printf(MSG_DEBUG,
 		   "nl80211: update sta info vendor event received");
 
@@ -2095,15 +2097,29 @@ static void qca_nl80211_update_sta_info_event(struct wpa_driver_nl80211_data *dr
 	pos = buff;
 	end = pos + 1000;
 	memset(buff, 0, 1000);
-	for (i = 0; i < nl_len/4; i++) {
-		res = os_snprintf(pos, end - pos, "%d ",
-				  chan[i]);
-		if (!os_snprintf_error(end - pos, res))
-			pos += res;
+	if (nl_len/4 > 20) {
+		chan_count = 20;
+		for (i = 0; i < 20; i++) {
+			res = os_snprintf(pos, end - pos, "%d ",
+					  chan[i]);
+			if (!os_snprintf_error(end - pos, res))
+				pos += res;
+		}
+	}
+	else {
+		for (i = 0; i < nl_len/4; i++) {
+			res = os_snprintf(pos, end - pos, "%d ",
+					  chan[i]);
+			if (!os_snprintf_error(end - pos, res)) {
+				pos += res;
+				chan_count ++;
+			}
+		}
 	}
 	*pos = '\0';
-	wpa_printf(MSG_DEBUG, "nl80211: channels are: %s",
-		   buff);
+	event.update_sta_chan_info.chan_count = chan_count;
+	event.update_sta_chan_info.disc_channels = (u8 *)buff;
+	wpa_supplicant_event(drv->ctx, EVENT_UPDATE_STA_CHANNEL_INFO, &event);
 
 }
 
