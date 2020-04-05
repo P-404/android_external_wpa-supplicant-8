@@ -583,6 +583,10 @@ enum qca_radiotap_vendor_ids {
  *	binary blobs from application/service to firmware. The attributes
  *	defined in enum qca_wlan_vendor_attr_oem_data_params are used to deliver
  *	the parameters.
+ * @QCA_NL80211_VENDOR_SUBCMD_UPDATE_STA_INFO: This acts as a vendor event and
+ *	is used to update the information about the station from the driver to
+ *	userspace. Uses attributes from enum
+ *	qca_wlan_vendor_attr_update_sta_info.
  */
 enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_UNSPEC = 0,
@@ -754,6 +758,7 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_BEACON_REPORTING = 180,
 	QCA_NL80211_VENDOR_SUBCMD_INTEROP_ISSUES_AP = 181,
 	QCA_NL80211_VENDOR_SUBCMD_OEM_DATA = 182,
+	QCA_NL80211_VENDOR_SUBCMD_UPDATE_STA_INFO = 188,
 };
 
 enum qca_wlan_vendor_attr {
@@ -5390,6 +5395,29 @@ enum qca_wlan_tdls_caps_features_supported {
 	WIFI_TDLS_SUPPORT = (1 << (0)),
 	WIFI_TDLS_EXTERNAL_CONTROL_SUPPORT = (1 << (1)),
 	WIFI_TDLS_OFFCHANNEL_SUPPORT = (1 << (2))
+};
+
+/**
+ * enum qca_wlan_vendor_attr_update_sta_info - Defines attributes
+ * used by QCA_NL80211_VENDOR_SUBCMD_UPDATE_STA_INFO vendor command.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_CONNECT_CHANNELS: Type is NLA_UNSPEC.
+ * Used in STA mode. This attribute represents the list of channel center
+ * frequencies in MHz (u32) the station has learnt during the last connection
+ * or roaming attempt. This information shall not signify the channels for
+ * an explicit scan request from the user space. Host drivers can update this
+ * information to the user space in both connected and disconnected state.
+ * In the disconnected state this information shall signify the channels
+ * scanned in the last connection/roam attempt that lead to the disconnection.
+ */
+enum qca_wlan_vendor_attr_update_sta_info {
+        QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_INVALID = 0,
+        QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_CONNECT_CHANNELS = 1,
+
+        /* keep last */
+        QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_AFTER_LAST,
+        QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_MAX =
+                QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_AFTER_LAST - 1,
 };
 
 /**

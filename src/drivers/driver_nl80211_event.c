@@ -2073,6 +2073,40 @@ static void qca_nl80211_p2p_lo_stop_event(struct wpa_driver_nl80211_data *drv,
 	wpa_supplicant_event(drv->ctx, EVENT_P2P_LO_STOP, &event);
 }
 
+static void qca_nl80211_update_sta_info_event(struct wpa_driver_nl80211_data *drv,
+					  u8 *data, size_t len)
+{
+	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_MAX + 1];
+	u32 *chan = NULL;
+	int nl_len;
+	int i, res;
+	char buff[1000], *pos, *end;
+	wpa_printf(MSG_DEBUG,
+		   "nl80211: update sta info vendor event received");
+
+	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_MAX,
+		      (struct nlattr *) data, len, NULL) ||
+	    !tb[QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_CONNECT_CHANNELS])
+		return;
+	nl_len = nla_len(tb[QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_CONNECT_CHANNELS]);
+	if (nl_len < 4)
+		return;
+	chan = (u32 *)nla_data(tb[QCA_WLAN_VENDOR_ATTR_UPDATE_STA_INFO_CONNECT_CHANNELS]);
+	pos = buff;
+	end = pos + 1000;
+	memset(buff, 0, 1000);
+	for (i = 0; i < nl_len/4; i++) {
+		res = os_snprintf(pos, end - pos, "%d ",
+				  chan[i]);
+		if (!os_snprintf_error(end - pos, res))
+			pos += res;
+	}
+	*pos = '\0';
+	wpa_printf(MSG_DEBUG, "nl80211: channels are: %s",
+		   buff);
+
+}
+
 #endif /* CONFIG_DRIVER_NL80211_QCA */
 
 
@@ -2108,6 +2142,9 @@ static void nl80211_vendor_event_qca(struct wpa_driver_nl80211_data *drv,
 		break;
 	case QCA_NL80211_VENDOR_SUBCMD_P2P_LISTEN_OFFLOAD_STOP:
 		qca_nl80211_p2p_lo_stop_event(drv, data, len);
+		break;
+	case QCA_NL80211_VENDOR_SUBCMD_UPDATE_STA_INFO:
+		qca_nl80211_update_sta_info_event(drv, data, len);
 		break;
 #endif /* CONFIG_DRIVER_NL80211_QCA */
 	default:
