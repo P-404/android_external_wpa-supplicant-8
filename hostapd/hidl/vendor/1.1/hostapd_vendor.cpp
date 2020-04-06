@@ -49,6 +49,9 @@
 extern "C"
 {
 #include "utils/eloop.h"
+
+extern int hostapd_ctrl_iface_deauthenticate(struct hostapd_data *hapd,
+			    const char *txtaddr);
 }
 
 // This HIDL implementation for hostapd add or update a hostapd.conf dynamically
@@ -599,6 +602,18 @@ HostapdStatus HostapdVendor::removeVendorAccessPointInternal(const std::string& 
 
 HostapdStatus HostapdVendor::setHostapdParamsInternal(const std::string& cmd)
 {
+	wpa_printf(MSG_INFO, "setHostapdParams - cmd=%s", cmd.c_str());
+
+	if (cmd == "deauth_all") {
+		if (!interfaces_ || !interfaces_->iface)
+			return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
+
+		for (int i = 0; i < interfaces_->count; i++) {
+			hostapd_ctrl_iface_deauthenticate(
+				interfaces_->iface[i]->bss[0], "ff:ff:ff:ff:ff:ff");
+		}
+		return {HostapdStatusCode::SUCCESS, ""};
+	}
 	if (qsap_cmd(cmd))
 		return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
 
