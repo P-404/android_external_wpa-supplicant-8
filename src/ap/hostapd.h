@@ -38,6 +38,10 @@ union wps_event_data;
 struct mesh_conf;
 #endif /* CONFIG_MESH */
 
+#ifdef CONFIG_CTRL_IFACE_UDP
+#define CTRL_IFACE_COOKIE_LEN 8
+#endif /* CONFIG_CTRL_IFACE_UDP */
+
 struct hostapd_iface;
 
 struct hapd_interfaces {
@@ -75,6 +79,11 @@ struct hapd_interfaces {
 #ifdef CONFIG_DPP
 	struct dpp_global *dpp;
 #endif /* CONFIG_DPP */
+
+#ifdef CONFIG_CTRL_IFACE_UDP
+       unsigned char ctrl_iface_cookie[CTRL_IFACE_COOKIE_LEN];
+#endif /* CONFIG_CTRL_IFACE_UDP */
+
 };
 
 enum hostapd_chan_status {
@@ -398,6 +407,10 @@ struct hostapd_data {
 #ifdef CONFIG_SQLITE
 	sqlite3 *rad_attr_db;
 #endif /* CONFIG_SQLITE */
+
+#ifdef CONFIG_CTRL_IFACE_UDP
+       unsigned char ctrl_iface_cookie[CTRL_IFACE_COOKIE_LEN];
+#endif /* CONFIG_CTRL_IFACE_UDP */
 };
 
 
@@ -466,9 +479,6 @@ struct hostapd_iface {
 	struct ap_info *ap_hash[STA_HASH_SIZE];
 
 	u64 drv_flags;
-
-	/* SMPS modes supported by the driver (WPA_DRIVER_SMPS_MODE_*) */
-	unsigned int smps_modes;
 
 	/*
 	 * A bitmap of supported protocols for probe response offload. See
