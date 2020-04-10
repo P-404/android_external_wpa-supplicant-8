@@ -62,6 +62,7 @@ struct wpabuf * wpas_wps_er_nfc_config_token(struct wpa_supplicant *wpa_s,
 					     int ndef, const char *uuid);
 int wpas_wps_terminate_pending(struct wpa_supplicant *wpa_s);
 void wpas_wps_update_config(struct wpa_supplicant *wpa_s);
+void wpas_wps_update_mac_addr(struct wpa_supplicant *wpa_s);
 struct wpabuf * wpas_wps_network_config_token(struct wpa_supplicant *wpa_s,
 					  int ndef, struct wpa_ssid * ssid);
 void wpas_wps_update_mac_addr(struct wpa_supplicant *wpa_s);
