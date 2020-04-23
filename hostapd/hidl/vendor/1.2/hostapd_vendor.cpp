@@ -393,6 +393,22 @@ std::string CreateHostapdConfig(
 		    "freqlist=%s",
 		    channelParams.acsShouldExcludeDfs,
 		    freqList_as_string.c_str());
+
+		if (((band & BandMask::BAND_6_GHZ) != 0)) {
+			int op_class = 134;
+			channel_config_as_string = StringPrintf(
+			    "channel=0\n"
+			    "acs_exclude_dfs=%d\n"
+			    "ht_capab=[HT40+]\n"
+			    "vht_oper_chwidth=1\n"
+			    "he_oper_chwidth=1\n"
+			    "freqlist=%s\n"
+			    "op_class=%d",
+			    channelParams.acsShouldExcludeDfs,
+			    freqList_as_string.c_str(),
+			    op_class);
+		}
+
 	} else {
 		int op_class = getOpClassForChannel(channelParams.channel, band,
 				  iface_params.hwModeParams.enable80211N,
