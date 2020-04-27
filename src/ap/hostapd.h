@@ -479,6 +479,7 @@ struct hostapd_iface {
 	struct ap_info *ap_hash[STA_HASH_SIZE];
 
 	u64 drv_flags;
+	u64 drv_flags2;
 
 	/*
 	 * A bitmap of supported protocols for probe response offload. See
