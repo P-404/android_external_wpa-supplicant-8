@@ -16,14 +16,6 @@ ifeq ($(WPA_BUILD_HOSTAPD),true)
 
 include $(LOCAL_PATH)/android.config
 
-ifeq ($(call is-board-platform-in-list,msm8909 msm8937 msm8953 msm8996 msm8998 sdm660 sdm710 sdm845 $(MSMSTEPPE) $(TRINKET) msmnile lito atoll bengal),true)
-  $(warning "Disabling WPA3 support in hostapd for $(TARGET_BOARD_PLATFORM)")
-  CONFIG_OWE=n
-  CONFIG_DPP=n
-  CONFIG_SAE=n
-  CONFIG_SUITEB192=n
-endif
-
 # To ignore possible wrong network configurations
 L_CFLAGS = -DWPA_IGNORE_CONFIG_ERRORS
 
