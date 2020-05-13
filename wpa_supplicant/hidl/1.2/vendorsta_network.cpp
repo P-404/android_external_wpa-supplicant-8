@@ -82,7 +82,7 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace supplicantvendor {
-namespace V2_0 {
+namespace V2_2 {
 namespace Implementation {
 using android::hardware::wifi::supplicant::V1_2::implementation::hidl_return_util::validateAndCall;
 
@@ -743,7 +743,7 @@ int VendorStaNetwork::setHexStr2bin(
 	return 0;
 }
 }  // namespace implementation
-}  // namespace V2_0
+}  // namespace V2_2
 }  // namespace wifi
 }  // namespace supplicantvendor
 }  // namespace hardware

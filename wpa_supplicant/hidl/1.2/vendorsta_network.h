@@ -59,7 +59,7 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace supplicantvendor {
-namespace V2_0 {
+namespace V2_2 {
 namespace Implementation {
 using namespace android::hardware::wifi::supplicant::V1_0;
 using namespace vendor::qti::hardware::wifi::supplicant::V2_0;
@@ -192,7 +192,7 @@ private:
 };
 
 }  // namespace implementation
-}  // namespace V2_0
+}  // namespace V2_2
 }  // namespace supplicantvendor
 }  // namespace wifi
 }  // namespace hardware

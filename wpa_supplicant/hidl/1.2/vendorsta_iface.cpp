@@ -57,7 +57,7 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace supplicantvendor {
-namespace V2_1 {
+namespace V2_2 {
 namespace Implementation {
 using android::hardware::wifi::supplicant::V1_2::implementation::hidl_return_util::validateAndCall;
 
@@ -206,6 +206,13 @@ Return<void> VendorStaIface::getWifiGenerationStatus(getWifiGenerationStatus_cb 
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
 	    &VendorStaIface::getWifiGenerationStatusInternal, _hidl_cb);
+}
+
+Return<void> VendorStaIface::doDriverCmd(const hidl_string &command, doDriverCmd_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
+	    &VendorStaIface::doDriverCmdInternal,_hidl_cb, command);
 }
 
 SupplicantStatus VendorStaIface::registerCallbackInternal(
@@ -555,6 +562,24 @@ std::pair<SupplicantStatus, WifiGenerationStatus>
 		std::move(wifi_generation_status)};
 }
 
+std::pair<SupplicantStatus, std::string>
+VendorStaIface::doDriverCmdInternal(const std::string &command)
+{
+	const char * cmd = command.c_str();
+	std::vector<char> cmd_vec(cmd, cmd + strlen(cmd) + 1);
+	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+	char driver_cmd_reply_buf[4096] = {};
+	int ret = wpa_drv_driver_cmd(wpa_s, cmd_vec.data(),
+				     driver_cmd_reply_buf,
+				     sizeof(driver_cmd_reply_buf));
+
+       if (ret < 0) {
+               return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, ""};
+       }
+
+       return {{SupplicantStatusCode::SUCCESS, ""}, driver_cmd_reply_buf};
+}
+
 /**
  * Retrieve the underlying |wpa_supplicant| struct
  * pointer for this iface.
@@ -566,7 +591,7 @@ wpa_supplicant *VendorStaIface::retrieveIfacePtr()
 	return wpa_supplicant_get_iface(wpa_global_, ifname_.c_str());
 }
 }  // namespace implementation
-}  // namespace V2_0
+}  // namespace V2_2
 }  // namespace supplicant
 }  // namespace wifi
 }  // namespace hardware
