@@ -1,3 +1,4 @@
+ifneq ($(TARGET_PRODUCT),qssi)
 LOCAL_PATH:= $(call my-dir)
 
 ifneq ($(filter VER_0_8_X VER_2_1_DEVEL,$(WPA_SUPPLICANT_VERSION)),)
@@ -8,3 +9,4 @@ ifneq ($(filter VER_0_8_X VER_2_1_DEVEL,$(WPA_SUPPLICANT_VERSION)),)
 include $(LOCAL_PATH)/hostapd/Android.mk \
         $(LOCAL_PATH)/wpa_supplicant/Android.mk
 endif
+endif #End of Check for qssi target
