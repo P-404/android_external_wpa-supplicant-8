@@ -123,7 +123,9 @@ void hostapd_hidl_deinit(struct hapd_interfaces *interfaces)
 	os_free(interfaces->hidl_service_name);
 	interfaces->hidl_service_name = NULL;
 #ifdef CONFIG_USE_VENDOR_HIDL
-	vendor_service->invalidate();
-	vendor_service.clear();
+	if (vendor_service) {
+		vendor_service->invalidate();
+		vendor_service.clear();
+	}
 #endif /* CONFIG_USE_VENDOR_HIDL */
 }
