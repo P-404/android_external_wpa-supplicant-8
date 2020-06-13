@@ -173,44 +173,47 @@ uint32_t convertWpaKeyMgmtCapabilitiesToHidl (
 	    (ISupplicantStaNetwork::KeyMgmtMask::NONE |
 	     ISupplicantStaNetwork::KeyMgmtMask::IEEE8021X);
 
-	if (capa->key_mgmt &
+	if (capa->key_mgmt_iftype[WPA_IF_STATION] &
 	    (WPA_DRIVER_CAPA_KEY_MGMT_WPA | WPA_DRIVER_CAPA_KEY_MGMT_WPA2)) {
 		mask |= ISupplicantStaNetwork::KeyMgmtMask::WPA_EAP;
 	}
 
-	if (capa->key_mgmt & (WPA_DRIVER_CAPA_KEY_MGMT_WPA_PSK |
-			     WPA_DRIVER_CAPA_KEY_MGMT_WPA2_PSK)) {
+	if (capa->key_mgmt_iftype[WPA_IF_STATION] &
+	    (WPA_DRIVER_CAPA_KEY_MGMT_WPA_PSK | WPA_DRIVER_CAPA_KEY_MGMT_WPA2_PSK)) {
 		mask |= ISupplicantStaNetwork::KeyMgmtMask::WPA_PSK;
 	}
 #ifdef CONFIG_SUITEB192
-	if (capa->key_mgmt & WPA_DRIVER_CAPA_KEY_MGMT_SUITE_B_192) {
+	if (capa->key_mgmt_iftype[WPA_IF_STATION] & WPA_DRIVER_CAPA_KEY_MGMT_SUITE_B_192) {
 		mask |= ISupplicantStaNetworkV1_2::ISupplicantStaNetwork::KeyMgmtMask::SUITE_B_192;
 	}
 #endif /* CONFIG_SUITEB192 */
 #ifdef CONFIG_OWE
-	if (capa->key_mgmt & WPA_DRIVER_CAPA_KEY_MGMT_OWE) {
+	if (capa->key_mgmt_iftype[WPA_IF_STATION] & WPA_DRIVER_CAPA_KEY_MGMT_OWE) {
 		mask |= ISupplicantStaNetworkV1_2::ISupplicantStaNetwork::KeyMgmtMask::OWE;
 	}
 #endif /* CONFIG_OWE */
 #ifdef CONFIG_SAE
-	if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_SAE) {
+	if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_SAE ||
+	    (capa->key_mgmt_iftype[WPA_IF_STATION] & WPA_DRIVER_CAPA_KEY_MGMT_SAE)) {
 		mask |= ISupplicantStaNetworkV1_2::ISupplicantStaNetwork::KeyMgmtMask::SAE;
 	}
 #endif /* CONFIG_SAE */
 #ifdef CONFIG_DPP
-	if (capa->key_mgmt & WPA_DRIVER_CAPA_KEY_MGMT_DPP) {
+	if (capa->key_mgmt_iftype[WPA_IF_STATION] & WPA_DRIVER_CAPA_KEY_MGMT_DPP) {
 		mask |= ISupplicantStaNetworkV1_2::ISupplicantStaNetwork::KeyMgmtMask::DPP;
 	}
 #endif
 #ifdef CONFIG_WAPI_INTERFACE
-	mask |= ISupplicantStaNetworkV1_3::ISupplicantStaNetwork::KeyMgmtMask::WAPI_PSK;
+	if (capa->key_mgmt_iftype[WPA_IF_STATION] & WPA_DRIVER_CAPA_KEY_MGMT_WAPI_PSK) {
+		mask |= ISupplicantStaNetworkV1_3::ISupplicantStaNetwork::KeyMgmtMask::WAPI_PSK;
+	}
 	mask |= ISupplicantStaNetworkV1_3::ISupplicantStaNetwork::KeyMgmtMask::WAPI_CERT;
 #endif /* CONFIG_WAPI_INTERFACE */
 #ifdef CONFIG_FILS
-	if (capa->key_mgmt & WPA_DRIVER_CAPA_KEY_MGMT_FILS_SHA256) {
+	if (capa->key_mgmt_iftype[WPA_IF_STATION] & WPA_DRIVER_CAPA_KEY_MGMT_FILS_SHA256) {
 		mask |= ISupplicantStaNetworkV1_3::ISupplicantStaNetwork::KeyMgmtMask::FILS_SHA256;
 	}
-	if (capa->key_mgmt & WPA_DRIVER_CAPA_KEY_MGMT_FILS_SHA384) {
+	if (capa->key_mgmt_iftype[WPA_IF_STATION] & WPA_DRIVER_CAPA_KEY_MGMT_FILS_SHA384) {
 		mask |= ISupplicantStaNetworkV1_3::ISupplicantStaNetwork::KeyMgmtMask::FILS_SHA384;
 	}
 #endif /* CONFIG_FILS */
