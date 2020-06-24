@@ -20,7 +20,6 @@ ifeq ($(call is-board-platform-in-list,msm8909 msm8937 msm8953 msm8996 msm8998 s
   $(warning "Disabling WPA3 support in hostapd for $(TARGET_BOARD_PLATFORM)")
   CONFIG_OWE=n
   CONFIG_DPP=n
-  CONFIG_SAE=n
   CONFIG_SUITEB192=n
 endif
 
