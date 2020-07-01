@@ -36,8 +36,8 @@ static int hidl_fd = -1;
 static android::sp<IHostapd> service;
 
 #ifdef CONFIG_USE_VENDOR_HIDL
-using vendor::qti::hardware::wifi::hostapd::V1_1::IHostapdVendor;
-using vendor::qti::hardware::wifi::hostapd::V1_1::implementation::HostapdVendor;
+using vendor::qti::hardware::wifi::hostapd::V1_2::IHostapdVendor;
+using vendor::qti::hardware::wifi::hostapd::V1_2::implementation::HostapdVendor;
 
 static android::sp<HostapdVendor> vendor_service;
 #endif /* CONFIG_USE_VENDOR_HIDL */
