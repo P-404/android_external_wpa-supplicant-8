@@ -1471,6 +1471,12 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 	if (bss && ((sel & WPA_KEY_MGMT_PSK) || (sel & WPA_KEY_MGMT_IEEE8021X))) {
 		adaptive_11r_ie = wpa_bss_get_vendor_ie(bss, ADAPTIVE_11R_IE_VENDOR_TYPE);
 
+		if (!adaptive_11r_ie) {
+			wpa_printf(MSG_INFO,
+				   "Check for the Adaptive_11r_ie's from beacon ie's");
+			adaptive_11r_ie = wpa_bss_get_vendor_ie_beacon(bss, ADAPTIVE_11R_IE_VENDOR_TYPE);
+		}
+
 		if (adaptive_11r_ie && (adaptive_11r_ie[6] & 0x1)) {
 			wpa_msg(wpa_s, MSG_ERROR, "Adaptive 11r is Enabled for BSS " MACSTR "",
 				MAC2STR(bss->bssid));
