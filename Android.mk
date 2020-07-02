@@ -1,4 +1,4 @@
-ifneq ($(TARGET_PRODUCT),qssi)
+ifneq ($(TARGET_DEVICE),qssi)
 LOCAL_PATH:= $(call my-dir)
 
 ifneq ($(filter VER_0_8_X VER_2_1_DEVEL,$(WPA_SUPPLICANT_VERSION)),)
