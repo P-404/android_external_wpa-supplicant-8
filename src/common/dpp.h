@@ -77,6 +77,8 @@ enum dpp_attribute_id {
 	DPP_ATTR_CSR_ATTR_REQ = 0x101F,
 };
 
+#endif
+
 enum dpp_status_error {
 	DPP_STATUS_OK = 0,
 	DPP_STATUS_NOT_COMPATIBLE = 1,
@@ -93,6 +95,8 @@ enum dpp_status_error {
 	DPP_STATUS_CSR_NEEDED = 12,
 	DPP_STATUS_CSR_BAD = 13,
 };
+
+#ifdef CONFIG_DPP
 
 #define DPP_CAPAB_ENROLLEE BIT(0)
 #define DPP_CAPAB_CONFIGURATOR BIT(1)
