@@ -26,6 +26,13 @@ ifeq ($(call is-board-platform-in-list,msm8998),true)
   CONFIG_MESH=n
 endif
 
+ifeq ($(call is-board-platform-in-list,msm8909 msm8937 msm8953 msm8996 msm8998 sdm660 sdm710 sdm845 $(MSMSTEPPE) $(TRINKET) msmnile lito atoll bengal kona),true)
+  $(warning "Disabling OCV support in hostapd for $(TARGET_BOARD_PLATFORM)")
+  CONFIG_OCV=n
+  CONFIG_SAE_LOOP_AND_H2E=n
+endif
+
+
 ifeq ($(call is-board-platform-in-list,msm8998 msm8953 msm8937 sdm710 sdm845),true)
   $(warning "Disabling SuiteB-192 support in wpa_supplicant for $(TARGET_BOARD_PLATFORM)")
   CONFIG_SUITEB192=n
@@ -33,6 +40,10 @@ endif
 
 # To ignore possible wrong network configurations
 L_CFLAGS = -DWPA_IGNORE_CONFIG_ERRORS
+
+ifeq ($(CONFIG_SAE_LOOP_AND_H2E),y)
+L_CFLAGS += -DCONFIG_SAE_LOOP_AND_H2E
+endif
 
 L_CFLAGS += -DVERSION_STR_POSTFIX=\"-$(PLATFORM_VERSION)\"
 
@@ -255,7 +266,7 @@ L_CFLAGS += -DCONFIG_SUITEB192
 NEED_SHA384=y
 endif
 
-ifdef CONFIG_OCV
+ifeq ($(CONFIG_OCV),y)
 L_CFLAGS += -DCONFIG_OCV
 OBJS += src/common/ocv.c
 endif

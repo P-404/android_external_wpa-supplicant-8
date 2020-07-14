@@ -297,11 +297,20 @@ std::string CreateHostapdConfig(
 				WPA2_PSK_PASSPHRASE_MAX_LEN_IN_BYTES))) {
 			return "";
 		}
-		encryption_config_as_string = StringPrintf(
-		    "wpa=2\n"
-		    "rsn_pairwise=%s\n"
-		    "wpa_passphrase=%s",
-		    isWigig ? "GCMP" : "CCMP", v_nw_params.passphrase.c_str());
+		if (v_nw_params.enableBeaconProtection) {
+			encryption_config_as_string = StringPrintf(
+			    "wpa=2\n"
+			    "rsn_pairwise=%s\n"
+			    "wpa_passphrase=%s\n"
+			    "ieee80211w=1",
+			    isWigig ? "GCMP" : "CCMP", v_nw_params.passphrase.c_str());
+		} else {
+			encryption_config_as_string = StringPrintf(
+			    "wpa=2\n"
+			    "rsn_pairwise=%s\n"
+			    "wpa_passphrase=%s",
+			    isWigig ? "GCMP" : "CCMP", v_nw_params.passphrase.c_str());
+		}
 		break;
 #ifdef CONFIG_SAE
 	case IHostapdVendor::VendorEncryptionType::SAE_TRANSITION:
@@ -466,6 +475,17 @@ std::string CreateHostapdConfig(
 		    "country_code=%s",
 		    v_iface_params.VendorV1_1.VendorV1_0.countryCode.c_str());
 
+#ifdef CONFIG_OCV
+	std::string ocv_as_string;
+	ocv_as_string = StringPrintf(
+		"ocv=%d",
+		v_nw_params.enableOCV ? 1 : 0);
+#endif
+	std::string bp_as_string;
+	bp_as_string = StringPrintf(
+		"beacon_prot=%d",
+		v_nw_params.enableBeaconProtection ? 1 : 0);
+
 	return StringPrintf(
 	    "interface=%s\n"
 	    "driver=nl80211\n"
@@ -483,6 +503,8 @@ std::string CreateHostapdConfig(
 	    "%s\n"
 	    "ignore_broadcast_ssid=%d\n"
 	    "wowlan_triggers=any\n"
+	    "%s\n"
+	    "%s\n"
 	    "%s\n",
 	    iface_params.ifaceName.c_str(), ssid_as_string.c_str(),
 	    channel_config_as_string.c_str(),
@@ -490,7 +512,8 @@ std::string CreateHostapdConfig(
 	    iface_params.hwModeParams.enable80211AC ? 1 : 0,
 	    he_params_as_string.c_str(), hw_mode_as_string.c_str(),
 	    bridge_as_string.c_str(), country_as_string.c_str(),
-	    nw_params.isHidden ? 1 : 0, encryption_config_as_string.c_str());
+	    nw_params.isHidden ? 1 : 0, encryption_config_as_string.c_str(),
+	    ocv_as_string.c_str(), bp_as_string.c_str());
 }
 
 template <class CallbackType>
