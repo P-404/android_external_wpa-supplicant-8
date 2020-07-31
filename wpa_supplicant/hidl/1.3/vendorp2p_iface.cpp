@@ -54,7 +54,7 @@ namespace qti {
 namespace hardware {
 namespace wifi {
 namespace supplicantvendor {
-namespace V2_0 {
+namespace V2_2 {
 namespace Implementation {
 using android::hardware::wifi::supplicant::V1_3::implementation::hidl_return_util::validateAndCall;
 
@@ -181,7 +181,7 @@ Return<void> VendorP2pIface::setVendorInfoElement(
 }
 
 }  // namespace implementation
-}  // namespace V2_0
+}  // namespace V2_2
 }  // namespace supplicantvendor
 }  // namespace wifi
 }  // namespace hardware
