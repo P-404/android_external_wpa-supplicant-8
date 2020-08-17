@@ -2183,6 +2183,53 @@ static void qca_nl80211_p2p_lo_stop_event(struct wpa_driver_nl80211_data *drv,
 	wpa_supplicant_event(drv->ctx, EVENT_P2P_LO_STOP, &event);
 }
 
+static void qca_nl80211_hang_event(struct wpa_driver_nl80211_data *drv,
+				u8 *data, size_t len)
+{
+	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_HANG_MAX + 1];
+	int reason_code = 0;
+	int data_len = 0;
+	u8 *vendata = NULL;
+	int32_t i = 0, j = 0;
+
+	wpa_printf(MSG_INFO,"Received qca_nl80211_hang_event");
+
+	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_HANG_MAX,
+		(struct nlattr *) data, len, NULL) ||
+		!tb[QCA_WLAN_VENDOR_ATTR_HANG_REASON] ||
+		!tb[QCA_WLAN_VENDOR_ATTR_HANG_REASON_DATA])
+		return;
+
+	reason_code = nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_HANG_REASON]);
+	data_len =  nla_len(tb[QCA_WLAN_VENDOR_ATTR_HANG_REASON_DATA]);
+	vendata = (u8 *)nla_data(tb[QCA_WLAN_VENDOR_ATTR_HANG_REASON_DATA]);
+	wpa_printf(MSG_INFO, "nl80211: sent QCA Hang event data length = %d", data_len);
+
+	if (data_len > 392) {
+		data_len = 392;
+		wpa_printf(MSG_INFO, "nl80211: QCA Hang event data length truncated to = %d", data_len);
+	}
+	size_t hex_len = 2 * data_len + 1;
+	char *hex = os_malloc(hex_len);
+	size_t hex1_len = 2 * data_len + 1 + 12 + 16;
+	char *hex1 = os_malloc(hex1_len);
+
+	if((hex == NULL)||(hex1 == NULL))
+		return;
+
+	os_memset(hex, 0, hex_len);
+	os_memset(hex1, 0, hex1_len);
+
+	wpa_snprintf_hex(hex, hex_len, vendata, data_len);
+
+	wpa_printf(MSG_ERROR, "nl80211: hex length is = %d ",(int) strlen(hex));;
+	snprintf(hex1, hex1_len, "HANGED %d 0 0 0 0 0 0 0 0 %s", reason_code, hex);
+
+	wpa_printf(MSG_ERROR, "nl80211: hex1 data = %s ", hex1);
+
+	os_free(hex);
+	os_free(hex1);
+}
 #endif /* CONFIG_DRIVER_NL80211_QCA */
 
 
@@ -2218,6 +2265,9 @@ static void nl80211_vendor_event_qca(struct wpa_driver_nl80211_data *drv,
 		break;
 	case QCA_NL80211_VENDOR_SUBCMD_P2P_LISTEN_OFFLOAD_STOP:
 		qca_nl80211_p2p_lo_stop_event(drv, data, len);
+		break;
+	case QCA_NL80211_VENDOR_SUBCMD_HANG:
+		qca_nl80211_hang_event(drv, data, len);
 		break;
 #endif /* CONFIG_DRIVER_NL80211_QCA */
 	default:
