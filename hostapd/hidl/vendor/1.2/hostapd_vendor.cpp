@@ -272,6 +272,13 @@ std::string CreateHostapdConfig(
 	switch (v_nw_params.vendorEncryptionType) {
 	case IHostapdVendor::VendorEncryptionType::NONE:
 		// no security params
+#ifdef CONFIG_OWE
+		if (!v_iface_params.VendorV1_1.oweTransIfaceName.empty()) {
+			encryption_config_as_string = StringPrintf(
+				"owe_transition_ifname=%s",
+				v_iface_params.VendorV1_1.oweTransIfaceName.c_str());
+		}
+#endif
 		break;
 	case IHostapdVendor::VendorEncryptionType::WPA:
 		if (!validatePassphrase(
