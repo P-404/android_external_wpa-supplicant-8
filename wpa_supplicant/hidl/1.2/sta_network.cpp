@@ -876,6 +876,8 @@ SupplicantStatus StaNetwork::setKeyMgmtInternal(uint32_t key_mgmt_mask)
 		return {SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
 	}
 	setFastTransitionKeyMgmt(key_mgmt_mask);
+	if (key_mgmt_mask & WPA_KEY_MGMT_OWE)
+		wpa_ssid->owe_ptk_workaround = 1;
 	wpa_ssid->key_mgmt = key_mgmt_mask;
 	wpa_printf(MSG_MSGDUMP, "key_mgmt: 0x%x", wpa_ssid->key_mgmt);
 	resetInternalStateAfterParamsUpdate();
