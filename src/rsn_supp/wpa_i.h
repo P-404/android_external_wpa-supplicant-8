@@ -184,6 +184,7 @@ struct wpa_sm {
 
 #ifdef CONFIG_DPP2
 	struct wpabuf *dpp_z;
+	int dpp_pfs;
 #endif /* CONFIG_DPP2 */
 };
 
