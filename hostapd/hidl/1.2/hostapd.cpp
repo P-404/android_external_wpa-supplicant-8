@@ -20,6 +20,7 @@
 extern "C"
 {
 #include "utils/eloop.h"
+#include "ap/ap_drv_ops.h"
 }
 
 // The HIDL implementation for hostapd creates a hostapd.conf dynamically for
@@ -622,9 +623,24 @@ V1_2::HostapdStatus Hostapd::forceClientDisconnectInternal(const std::string& if
 {
 	struct hostapd_data *hapd = hostapd_get_iface(interfaces_, iface_name.c_str());
 	struct sta_info *sta;
+	bool bcast = true;
+
 	if (!hapd) {
 		wpa_printf(MSG_ERROR, "Interface %s doesn't exist", iface_name.c_str());
 		return {V1_2::HostapdStatusCode::FAILURE_IFACE_UNKNOWN, ""};
+	}
+	for (const uint8_t& addrb : client_address) {
+		if (addrb != 0xff) {
+			bcast = false;
+			break;
+		}
+	}
+	if (bcast) {
+		wpa_printf(MSG_INFO, "Force all clients disconnect by driver with reason: %d",
+			    (uint16_t) reason_code);
+		hostapd_drv_sta_deauth(hapd, client_address.data(), (uint16_t) reason_code);
+		hostapd_free_stas(hapd);
+		return {V1_2::HostapdStatusCode::SUCCESS, ""};
 	}
 	for (sta = hapd->sta_list; sta; sta = sta->next) {
 		int res;
