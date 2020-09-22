@@ -2803,7 +2803,7 @@ void sme_sa_query_rx(struct wpa_supplicant *wpa_s, const u8 *sa,
 
 		if (ocv_verify_tx_params(elems.oci, elems.oci_len, &ci,
 					 channel_width_to_int(ci.chanwidth),
-					 ci.seg1_idx) != 0) {
+					 ci.seg1_idx) != OCI_SUCCESS) {
 			wpa_printf(MSG_WARNING, "%s", ocv_errorstr);
 			return;
 		}
