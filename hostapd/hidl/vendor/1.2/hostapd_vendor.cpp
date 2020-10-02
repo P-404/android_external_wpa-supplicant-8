@@ -456,12 +456,15 @@ std::string CreateHostapdConfig(
 	std::string he_params_as_string;
 #ifdef CONFIG_IEEE80211AX
 	if (v_iface_params.hwModeParams.enable80211AX) {
+		int he_bss_color = os_random() % 63 + 1;
 		he_params_as_string = StringPrintf(
 		    "ieee80211ax=1\n"
+		    "he_bss_color=%d\n"
 		    "he_su_beamformer=%d\n"
 		    "he_su_beamformee=%d\n"
 		    "he_mu_beamformer=%d\n"
 		    "he_twt_required=%d\n",
+		    he_bss_color,
 		    v_iface_params.hwModeParams.enableHeSingleUserBeamformer ? 1 : 0,
 		    v_iface_params.hwModeParams.enableHeSingleUserBeamformee ? 1 : 0,
 		    v_iface_params.hwModeParams.enableHeMultiUserBeamformer ? 1 : 0,
