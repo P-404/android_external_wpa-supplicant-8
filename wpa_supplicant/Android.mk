@@ -81,6 +81,10 @@ ifdef CONFIG_NO_ROAMING
 L_CFLAGS += -DCONFIG_NO_ROAMING
 endif
 
+ifeq ($(WIFI_UPDATE_SUPPLICANT_MAC_ADDR), enabled)
+L_CFLAGS += -DFEATURE_UPDATE_STA_MAC_ADDR
+endif
+
 # Use Android specific directory for control interface sockets
 L_CFLAGS += -DCONFIG_CTRL_IFACE_CLIENT_DIR=\"/data/vendor/wifi/wpa/sockets\"
 L_CFLAGS += -DCONFIG_CTRL_IFACE_DIR=\"/data/vendor/wifi/wpa/sockets\"
@@ -1523,7 +1527,7 @@ endif
 ifdef CONFIG_CTRL_IFACE_HIDL
 WPA_SUPPLICANT_USE_HIDL=y
 L_CFLAGS += -DCONFIG_HIDL -DCONFIG_CTRL_IFACE_HIDL
-HIDL_INTERFACE_VERSION := 1.3
+HIDL_INTERFACE_VERSION := 1.4
 endif
 
 ifdef CONFIG_SUPPLICANT_VENDOR_HIDL
@@ -1783,6 +1787,7 @@ LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.0
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.1
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.2
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.3
+LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.4
 ifeq ($(SUPPLICANT_VENDOR_HIDL), y)
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.0
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.1
@@ -1790,7 +1795,7 @@ LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.2
 endif
 LOCAL_SHARED_LIBRARIES += libhidlbase libutils libbase
 LOCAL_STATIC_LIBRARIES += libwpa_hidl
-LOCAL_VINTF_FRAGMENTS := hidl/$(HIDL_INTERFACE_VERSION)/manifest.xml
+LOCAL_VINTF_FRAGMENTS := hidl/$(HIDL_INTERFACE_VERSION)/android.hardware.wifi.supplicant.xml
 ifeq ($(WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY), true)
 LOCAL_INIT_RC=hidl/$(HIDL_INTERFACE_VERSION)/android.hardware.wifi.supplicant-service.rc
 endif
@@ -1867,6 +1872,7 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.supplicant@1.1 \
     android.hardware.wifi.supplicant@1.2 \
     android.hardware.wifi.supplicant@1.3 \
+    android.hardware.wifi.supplicant@1.4 \
     libbase \
     libhidlbase \
     libutils \

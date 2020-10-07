@@ -787,6 +787,7 @@ struct wpa_supplicant {
 	unsigned int connection_max_nss_tx:4;
 	unsigned int connection_channel_bandwidth:5;
 	unsigned int disable_mbo_oce:1;
+	unsigned int connection_11b_only:1;
 	unsigned int connection_vht_max_eight_spatial_streams:1;
 	unsigned int connection_twt:1;
 
@@ -1074,8 +1075,6 @@ struct wpa_supplicant {
 
 	/* WLAN_STATUS_* status codes from (Re)Association Response frame. */
 	u16 assoc_status_code;
-	/* Indicates if the previous association request timed out. */
-	u8 assoc_timed_out;
 
 	struct ext_password_data *ext_pw;
 
