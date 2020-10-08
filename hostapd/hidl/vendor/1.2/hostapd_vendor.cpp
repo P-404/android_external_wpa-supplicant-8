@@ -489,7 +489,7 @@ std::string CreateHostapdConfig(
 	std::string ocv_as_string;
 	ocv_as_string = StringPrintf(
 		"ocv=%d",
-		v_nw_params.enableOCV ? 1 : 0);
+		v_nw_params.enableOCV ? 2 : 0);
 #endif
 	std::string bp_as_string;
 	bp_as_string = StringPrintf(
