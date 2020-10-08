@@ -94,7 +94,7 @@ static int ieee802_11_send_wnmsleep_resp(struct hostapd_data *hapd,
 	oci_ie_len = 0;
 #ifdef CONFIG_OCV
 	if (action_type == WNM_SLEEP_MODE_EXIT &&
-	    wpa_auth_uses_ocv(sta->wpa_sm)) {
+	    wpa_auth_get_ocv(sta->wpa_sm)) {
 		struct wpa_channel_info ci;
 
 		if (hostapd_drv_channel_info(hapd, &ci) != 0) {
@@ -306,7 +306,7 @@ static void ieee802_11_rx_wnmsleep_req(struct hostapd_data *hapd,
 #ifdef CONFIG_OCV
 	sta = ap_get_sta(hapd, addr);
 	if (wnmsleep_ie->action_type == WNM_SLEEP_MODE_EXIT &&
-	    sta && wpa_auth_uses_ocv(sta->wpa_sm)) {
+	    sta && wpa_auth_get_ocv(sta->wpa_sm)) {
 		struct wpa_channel_info ci;
 
 		if (hostapd_drv_channel_info(hapd, &ci) != 0) {
