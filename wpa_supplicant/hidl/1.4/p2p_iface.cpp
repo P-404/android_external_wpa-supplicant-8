@@ -407,7 +407,7 @@ namespace android {
 namespace hardware {
 namespace wifi {
 namespace supplicant {
-namespace V1_3 {
+namespace V1_4 {
 namespace implementation {
 using hidl_return_util::validateAndCall;
 using V1_0::SupplicantStatusCode;
@@ -1085,8 +1085,9 @@ std::pair<SupplicantStatus, std::string> P2pIface::connectInternal(
 	int edmg = wpa_s->conf->p2p_go_edmg;
 	const char* pin =
 	    pre_selected_pin.length() > 0 ? pre_selected_pin.data() : nullptr;
+	bool auto_join = !join_existing_group;
 	int new_pin = wpas_p2p_connect(
-	    wpa_s, peer_address.data(), pin, wps_method, persistent, false,
+	    wpa_s, peer_address.data(), pin, wps_method, persistent, auto_join,
 	    join_existing_group, false, go_intent_signed, 0, 0, -1, false, ht40,
 	    vht, CHANWIDTH_USE_HT, he, edmg, nullptr, 0);
 	if (new_pin < 0) {
@@ -1858,7 +1859,7 @@ wpa_supplicant* P2pIface::retrieveGroupIfacePtr(const std::string& group_ifname)
 }
 
 }  // namespace implementation
-}  // namespace V1_3
+}  // namespace V1_4
 }  // namespace supplicant
 }  // namespace wifi
 }  // namespace hardware

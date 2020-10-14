@@ -402,7 +402,7 @@ namespace android {
 namespace hardware {
 namespace wifi {
 namespace supplicant {
-namespace V1_3 {
+namespace V1_4 {
 namespace implementation {
 using V1_0::ISupplicantStaIfaceCallback;
 
@@ -1068,8 +1068,12 @@ void HidlManager::notifyDisconnectReason(struct wpa_supplicant *wpa_s)
  *
  * @param wpa_s |wpa_supplicant| struct corresponding to the interface on which
  * the network is present.
+ * @param bssid bssid of AP that rejected the association.
+ * @param timed_out flag to indicate failure is due to timeout
+ * (auth, assoc, ...) rather than explicit rejection response from the AP.
  */
-void HidlManager::notifyAssocReject(struct wpa_supplicant *wpa_s)
+void HidlManager::notifyAssocReject(struct wpa_supplicant *wpa_s,
+    const u8 *bssid, u8 timed_out)
 {
 	if (!wpa_s)
 		return;
@@ -1078,19 +1082,13 @@ void HidlManager::notifyAssocReject(struct wpa_supplicant *wpa_s)
 	    sta_iface_object_map_.end())
 		return;
 
-	const u8 *bssid = wpa_s->bssid;
-	if (is_zero_ether_addr(bssid)) {
-		bssid = wpa_s->pending_bssid;
-	}
-
 	callWithEachStaIfaceCallback(
 	    wpa_s->ifname,
 	    std::bind(
 		&ISupplicantStaIfaceCallback::onAssociationRejected,
 		std::placeholders::_1, bssid,
 		static_cast<ISupplicantStaIfaceCallback::StatusCode>(
-		    wpa_s->assoc_status_code),
-		wpa_s->assoc_timed_out == 1));
+		    wpa_s->assoc_status_code), timed_out == 1));
 }
 
 void HidlManager::notifyAuthTimeout(struct wpa_supplicant *wpa_s)
@@ -1392,7 +1390,7 @@ void HidlManager::notifyP2pGroupStarted(
 		return;
 
 	// For group notifications, need to use the parent iface for callbacks.
-	struct wpa_supplicant *wpa_s = getP2pIfaceForNotifications(wpa_group_s);
+	struct wpa_supplicant *wpa_s = getTargetP2pIfaceForGroup(wpa_group_s);
 	if (!wpa_s)
 		return;
 
@@ -1434,7 +1432,7 @@ void HidlManager::notifyP2pGroupRemoved(
 		return;
 
 	// For group notifications, need to use the parent iface for callbacks.
-	struct wpa_supplicant *wpa_s = getP2pIfaceForNotifications(wpa_group_s);
+	struct wpa_supplicant *wpa_s = getTargetP2pIfaceForGroup(wpa_group_s);
 	if (!wpa_s)
 		return;
 
@@ -1540,17 +1538,16 @@ void HidlManager::notifyP2pSdResponse(
 }
 
 void HidlManager::notifyApStaAuthorized(
-    struct wpa_supplicant *wpa_s, const u8 *sta, const u8 *p2p_dev_addr)
+    struct wpa_supplicant *wpa_group_s, const u8 *sta, const u8 *p2p_dev_addr)
 {
-	if (!wpa_s || !wpa_s->parent || !sta)
+	if (!wpa_group_s || !wpa_group_s->parent || !sta)
 		return;
-
-	wpa_supplicant *target_wpa_s = getP2pIfaceForNotifications(wpa_s);
-	if (!target_wpa_s)
+	wpa_supplicant *wpa_s = getTargetP2pIfaceForGroup(wpa_group_s);
+	if (!wpa_s)
 		return;
 
 	callWithEachP2pIfaceCallback(
-	    target_wpa_s->ifname,
+	    wpa_s->ifname,
 	    std::bind(
 		&ISupplicantP2pIfaceCallback::onStaAuthorized,
 		std::placeholders::_1, sta,
@@ -1558,17 +1555,16 @@ void HidlManager::notifyApStaAuthorized(
 }
 
 void HidlManager::notifyApStaDeauthorized(
-    struct wpa_supplicant *wpa_s, const u8 *sta, const u8 *p2p_dev_addr)
+    struct wpa_supplicant *wpa_group_s, const u8 *sta, const u8 *p2p_dev_addr)
 {
-	if (!wpa_s || !wpa_s->parent || !sta)
+	if (!wpa_group_s || !wpa_group_s->parent || !sta)
 		return;
-
-	wpa_supplicant *target_wpa_s = getP2pIfaceForNotifications(wpa_s);
-	if (!target_wpa_s)
+	wpa_supplicant *wpa_s = getTargetP2pIfaceForGroup(wpa_group_s);
+	if (!wpa_s)
 		return;
 
 	callWithEachP2pIfaceCallback(
-	    target_wpa_s->ifname,
+	    wpa_s->ifname,
 	    std::bind(
 		&ISupplicantP2pIfaceCallback::onStaDeauthorized,
 		std::placeholders::_1, sta,
@@ -1739,7 +1735,7 @@ void HidlManager::notifyDppProgress(struct wpa_supplicant *wpa_s,
  * @param ifname Interface name
  * @param code Status code
  */
-void HidlManager::notifyDppSuccess(struct wpa_supplicant *wpa_s, DppSuccessCode code)
+void HidlManager::notifyDppSuccess(struct wpa_supplicant *wpa_s, V1_3::DppSuccessCode code)
 {
 	if (!wpa_s)
 		return;
@@ -2016,7 +2012,7 @@ int HidlManager::getP2pNetworkHidlObjectByIfnameAndNetworkId(
  */
 int HidlManager::getStaNetworkHidlObjectByIfnameAndNetworkId(
     const std::string &ifname, int network_id,
-    android::sp<ISupplicantStaNetwork> *network_object)
+    android::sp<V1_3::ISupplicantStaNetwork> *network_object)
 {
 	if (ifname.empty() || network_id < 0 || !network_object)
 		return 1;
@@ -2151,27 +2147,27 @@ int HidlManager::addStaNetworkCallbackHidlObject(
  * @param wpa_s the |wpa_supplicant| that triggered the P2P event.
  * @return appropriate |wpa_supplicant| object or NULL if not found.
  */
-struct wpa_supplicant *HidlManager::getP2pIfaceForNotifications(
-	    struct wpa_supplicant *wpa_s)
+struct wpa_supplicant *HidlManager::getTargetP2pIfaceForGroup(
+	    struct wpa_supplicant *wpa_group_s)
 {
-	if (!wpa_s || !wpa_s->parent)
+	if (!wpa_group_s || !wpa_group_s->parent)
 		return NULL;
 
-	struct wpa_supplicant *target_wpa_s = wpa_s->parent;
-	if (p2p_iface_object_map_.find(target_wpa_s->ifname) ==
-	    p2p_iface_object_map_.end()) {
-		// try P2P device if available
-		if (target_wpa_s->p2pdev && target_wpa_s->p2pdev->p2p_mgmt) {
-			target_wpa_s = target_wpa_s->p2pdev;
-			if (p2p_iface_object_map_.find(target_wpa_s->ifname) ==
-			    p2p_iface_object_map_.end())
-				return NULL;
-		} else {
-			return NULL;
-		}
-	}
+	struct wpa_supplicant *target_wpa_s = wpa_group_s->parent;
+	if (p2p_iface_object_map_.find(target_wpa_s->ifname) !=
+	    p2p_iface_object_map_.end())
+		return target_wpa_s;
 
-	return target_wpa_s;
+	// try P2P device if available
+	if (!target_wpa_s->p2pdev || !target_wpa_s->p2pdev->p2p_mgmt)
+		return NULL;
+
+	target_wpa_s = target_wpa_s->p2pdev;
+	if (p2p_iface_object_map_.find(target_wpa_s->ifname) !=
+	    p2p_iface_object_map_.end())
+		return target_wpa_s;
+
+	return NULL;
 }
 
 /**
@@ -2730,7 +2726,7 @@ void HidlManager::notifyDppConf(
 }
 #endif //endif SUPPLICANT_VENDOR_HIDL
 }  // namespace implementation
-}  // namespace V1_3
+}  // namespace V1_4
 }  // namespace supplicant
 }  // namespace wifi
 }  // namespace hardware

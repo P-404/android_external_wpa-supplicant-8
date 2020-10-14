@@ -19,6 +19,7 @@
 
 extern "C"
 {
+#include "common/wpa_ctrl.h"
 #include "utils/eloop.h"
 #include "ap/ap_drv_ops.h"
 }
@@ -35,6 +36,8 @@ using android::base::RemoveFileIfExists;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
 using android::hardware::wifi::hostapd::V1_2::IHostapd;
+using android::hardware::wifi::hostapd::V1_3::Generation;
+using android::hardware::wifi::hostapd::V1_3::Bandwidth;
 
 std::string WriteHostapdConfig(
     const std::string& interface_name, const std::string& config)
@@ -196,6 +199,10 @@ int getOpClassForChannel(int channel, int band, bool support11n, bool support11a
 		if ((channel & 0x1F) == 0x0F) {
 			// 160MHz channel
 			return 134;
+		}
+		if (channel == 2) {
+			// 20MHz channel
+			return 136;
 		}
 		// Error
 		return 0;
@@ -430,6 +437,51 @@ std::string CreateHostapdConfig(
 	    nw_params.V1_0.isHidden ? 1 : 0, encryption_config_as_string.c_str());
 }
 
+Generation getGeneration(hostapd_hw_modes *current_mode)
+{
+	wpa_printf(MSG_DEBUG, "getGeneration hwmode=%d, ht_enabled=%d, vht_enabled=%d",
+		   current_mode->mode, current_mode->ht_capab != 0,
+		   current_mode->vht_capab != 0);
+	switch (current_mode->mode) {
+	case HOSTAPD_MODE_IEEE80211B:
+		return Generation::WIFI_STANDARD_LEGACY;
+	case HOSTAPD_MODE_IEEE80211G:
+		return current_mode->ht_capab == 0 ?
+		       Generation::WIFI_STANDARD_LEGACY : Generation::WIFI_STANDARD_11N;
+	case HOSTAPD_MODE_IEEE80211A:
+		return current_mode->vht_capab == 0 ?
+		       Generation::WIFI_STANDARD_11N : Generation::WIFI_STANDARD_11AC;
+        // TODO: b/162484222 miss HOSTAPD_MODE_IEEE80211AX definition.
+	default:
+		return Generation::WIFI_STANDARD_UNKNOWN;
+	}
+}
+
+Bandwidth getBandwidth(struct hostapd_config *iconf)
+{
+	wpa_printf(MSG_DEBUG, "getBandwidth %d, isHT=%d, isHT40=%d",
+		   iconf->vht_oper_chwidth, iconf->ieee80211n,
+		   iconf->secondary_channel);
+	switch (iconf->vht_oper_chwidth) {
+	case CHANWIDTH_80MHZ:
+		return Bandwidth::WIFI_BANDWIDTH_80;
+	case CHANWIDTH_80P80MHZ:
+		return Bandwidth::WIFI_BANDWIDTH_80P80;
+		break;
+	case CHANWIDTH_160MHZ:
+		return Bandwidth::WIFI_BANDWIDTH_160;
+		break;
+	case CHANWIDTH_USE_HT:
+		if (iconf->ieee80211n) {
+			return iconf->secondary_channel != 0 ?
+				Bandwidth::WIFI_BANDWIDTH_40 : Bandwidth::WIFI_BANDWIDTH_20;
+		}
+		return Bandwidth::WIFI_BANDWIDTH_20_NOHT;
+	default:
+		return Bandwidth::WIFI_BANDWIDTH_INVALID;
+	}
+}
+
 // hostapd core functions accept "C" style function pointers, so use global
 // functions to pass to the hostapd core function and store the corresponding
 // std::function methods to be invoked.
@@ -448,13 +500,43 @@ void onAsyncSetupCompleteCb(void* ctx)
 		on_setup_complete_internal_callback = nullptr;
 	}
 }
+
+// Callback to be invoked on hotspot client connection/disconnection
+std::function<void(struct hostapd_data*, const u8 *mac_addr, int authorized,
+		   const u8 *p2p_dev_addr)> on_sta_authorized_internal_callback;
+void onAsyncStaAuthorizedCb(void* ctx, const u8 *mac_addr, int authorized,
+			    const u8 *p2p_dev_addr)
+{
+	struct hostapd_data* iface_hapd = (struct hostapd_data*)ctx;
+	if (on_sta_authorized_internal_callback) {
+		on_sta_authorized_internal_callback(iface_hapd, mac_addr,
+			authorized, p2p_dev_addr);
+	}
+}
+
+std::function<void(struct hostapd_data*, int level,
+                   enum wpa_msg_type type, const char *txt,
+                   size_t len)> on_wpa_msg_internal_callback;
+
+void onAsyncWpaEventCb(void *ctx, int level,
+                   enum wpa_msg_type type, const char *txt,
+                   size_t len)
+{
+	struct hostapd_data* iface_hapd = (struct hostapd_data*)ctx;
+	if (on_wpa_msg_internal_callback) {
+		on_wpa_msg_internal_callback(iface_hapd, level,
+					       type, txt, len);
+	}
+}
+
+
 }  // namespace
 
 namespace android {
 namespace hardware {
 namespace wifi {
 namespace hostapd {
-namespace V1_2 {
+namespace V1_3 {
 namespace implementation {
 using hidl_return_util::call;
 using namespace android::hardware::wifi::hostapd::V1_0;
@@ -510,6 +592,13 @@ Return<void> Hostapd::registerCallback(
 	    this, &Hostapd::registerCallbackInternal, _hidl_cb, callback);
 }
 
+Return<void> Hostapd::registerCallback_1_3(
+    const sp<V1_3::IHostapdCallback>& callback, registerCallback_1_3_cb _hidl_cb)
+{
+	return call(
+	    this, &Hostapd::registerCallbackInternal_1_3, _hidl_cb, callback);
+}
+
 Return<void> Hostapd::forceClientDisconnect(
     const hidl_string& iface_name, const hidl_array<uint8_t, 6>& client_address,
     V1_2::Ieee80211ReasonCode reason_code, forceClientDisconnect_cb _hidl_cb)
@@ -520,7 +609,7 @@ Return<void> Hostapd::forceClientDisconnect(
 }
 
 Return<void> Hostapd::setDebugParams(
-    DebugLevel level, setDebugParams_cb _hidl_cb)
+     V1_2::DebugLevel level, setDebugParams_cb _hidl_cb)
 {
 	return call(
 	    this, &Hostapd::setDebugParamsInternal, _hidl_cb, level);
@@ -540,25 +629,25 @@ V1_0::HostapdStatus Hostapd::addAccessPointInternal_1_1(
 	return {V1_0::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 }
 
-HostapdStatus Hostapd::addAccessPointInternal_1_2(
+V1_2::HostapdStatus Hostapd::addAccessPointInternal_1_2(
     const IfaceParams& iface_params, const NetworkParams& nw_params)
 {
 	if (hostapd_get_iface(interfaces_, iface_params.V1_1.V1_0.ifaceName.c_str())) {
 		wpa_printf(
 		    MSG_ERROR, "Interface %s already present",
 		    iface_params.V1_1.V1_0.ifaceName.c_str());
-		return {HostapdStatusCode::FAILURE_IFACE_EXISTS, ""};
+		return {V1_2::HostapdStatusCode::FAILURE_IFACE_EXISTS, ""};
 	}
 	const auto conf_params = CreateHostapdConfig(iface_params, nw_params);
 	if (conf_params.empty()) {
 		wpa_printf(MSG_ERROR, "Failed to create config params");
-		return {HostapdStatusCode::FAILURE_ARGS_INVALID, ""};
+		return {V1_2::HostapdStatusCode::FAILURE_ARGS_INVALID, ""};
 	}
 	const auto conf_file_path =
 	    WriteHostapdConfig(iface_params.V1_1.V1_0.ifaceName, conf_params);
 	if (conf_file_path.empty()) {
 		wpa_printf(MSG_ERROR, "Failed to write config file");
-		return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
+		return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	std::string add_iface_param_str = StringPrintf(
 	    "%s config=%s", iface_params.V1_1.V1_0.ifaceName.c_str(),
@@ -569,7 +658,7 @@ HostapdStatus Hostapd::addAccessPointInternal_1_2(
 		wpa_printf(
 		    MSG_ERROR, "Adding interface %s failed",
 		    add_iface_param_str.c_str());
-		return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
+		return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	struct hostapd_data* iface_hapd =
 	    hostapd_get_iface(interfaces_, iface_params.V1_1.V1_0.ifaceName.c_str());
@@ -589,15 +678,55 @@ HostapdStatus Hostapd::addAccessPointInternal_1_2(
 			    }
 		    }
 	    };
+
+	// Rgegister for new client connect/disconnect indication.
+	on_sta_authorized_internal_callback =
+	    [this](struct hostapd_data* iface_hapd, const u8 *mac_addr,
+		   int authorized, const u8 *p2p_dev_addr) {
+		wpa_printf(MSG_DEBUG, "notify client " MACSTR " %s",
+			   MAC2STR(mac_addr),
+			   (authorized) ? "Connected" : "Disconnected");
+
+		for (const auto &callback : callbacks_) {
+		    // TODO: The iface need to separate to iface and ap instance
+		    // identify for AP+AP case.
+		    callback->onConnectedClientsChanged(iface_hapd->conf->iface,
+			    iface_hapd->conf->iface, mac_addr, authorized);
+		}
+	    };
+
+	// Register for wpa_event which used to get channel switch event
+	on_wpa_msg_internal_callback =
+	    [this](struct hostapd_data* iface_hapd, int level,
+		   enum wpa_msg_type type, const char *txt,
+		   size_t len) {
+		wpa_printf(MSG_DEBUG, "Receive wpa msg : %s", txt);
+		if (os_strncmp(txt, WPA_EVENT_CHANNEL_SWITCH,
+			       strlen(WPA_EVENT_CHANNEL_SWITCH)) == 0) {
+		    for (const auto &callback : callbacks_) {
+			callback->onApInstanceInfoChanged(
+				iface_hapd->conf->iface, iface_hapd->conf->iface,
+				iface_hapd->iface->freq, getBandwidth(iface_hapd->iconf),
+				getGeneration(iface_hapd->iface->current_mode),
+				iface_hapd->own_addr);
+		    }
+		}
+	    };
+
+	// Setup callback
 	iface_hapd->setup_complete_cb = onAsyncSetupCompleteCb;
 	iface_hapd->setup_complete_cb_ctx = iface_hapd;
+	iface_hapd->sta_authorized_cb = onAsyncStaAuthorizedCb;
+	iface_hapd->sta_authorized_cb_ctx = iface_hapd;
+	wpa_msg_register_cb(onAsyncWpaEventCb);
+
 	if (hostapd_enable_iface(iface_hapd->iface) < 0) {
 		wpa_printf(
 		    MSG_ERROR, "Enabling interface %s failed",
 		    iface_params.V1_1.V1_0.ifaceName.c_str());
-		return {HostapdStatusCode::FAILURE_UNKNOWN, ""};
+		return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
-	return {HostapdStatusCode::SUCCESS, ""};
+	return {V1_2::HostapdStatusCode::SUCCESS, ""};
 }
 
 V1_0::HostapdStatus Hostapd::removeAccessPointInternal(const std::string& iface_name)
@@ -617,8 +746,14 @@ V1_0::HostapdStatus Hostapd::removeAccessPointInternal(const std::string& iface_
 V1_0::HostapdStatus Hostapd::registerCallbackInternal(
     const sp<V1_1::IHostapdCallback>& callback)
 {
+	return {V1_0::HostapdStatusCode::FAILURE_UNKNOWN, ""};
+}
+
+V1_2::HostapdStatus Hostapd::registerCallbackInternal_1_3(
+    const sp<V1_3::IHostapdCallback>& callback)
+{
 	callbacks_.push_back(callback);
-	return {V1_0::HostapdStatusCode::SUCCESS, ""};
+	return {V1_2::HostapdStatusCode::SUCCESS, ""};
 }
 
 V1_2::HostapdStatus Hostapd::forceClientDisconnectInternal(const std::string& iface_name,
@@ -658,14 +793,14 @@ V1_2::HostapdStatus Hostapd::forceClientDisconnectInternal(const std::string& if
 	return {V1_2::HostapdStatusCode::FAILURE_CLIENT_UNKNOWN, ""};
 }
 
-V1_2::HostapdStatus Hostapd::setDebugParamsInternal(DebugLevel level)
+V1_2::HostapdStatus Hostapd::setDebugParamsInternal(V1_2::DebugLevel level)
 {
 	wpa_debug_level = static_cast<uint32_t>(level);
 	return {V1_2::HostapdStatusCode::SUCCESS, ""};
 }
 
 }  // namespace implementation
-}  // namespace V1_2
+}  // namespace V1_3
 }  // namespace hostapd
 }  // namespace wifi
 }  // namespace hardware
