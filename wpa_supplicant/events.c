@@ -4368,6 +4368,40 @@ static void wpa_supplicant_event_assoc_auth(struct wpa_supplicant *wpa_s,
 }
 
 
+static char *get_connect_fail_reason(enum sta_connect_fail_reason_codes
+				     reason_code)
+{
+	switch (reason_code) {
+	case STA_CONNECT_FAIL_REASON_UNSPECIFIED:
+		return "";
+
+	case STA_CONNECT_FAIL_REASON_NO_BSS_FOUND:
+		return "no_bss_found";
+
+	case STA_CONNECT_FAIL_REASON_AUTH_TX_FAIL:
+		return "auth_tx_fail";
+
+	case STA_CONNECT_FAIL_REASON_AUTH_NO_ACK_RECEIVED:
+		return "auth_no_ack_received";
+
+	case STA_CONNECT_FAIL_REASON_AUTH_NO_RESP_RECEIVED:
+		return "auth_no_resp_received";
+
+	case STA_CONNECT_FAIL_REASON_ASSOC_REQ_TX_FAIL:
+		return "assoc_req_tx_fail";
+
+	case STA_CONNECT_FAIL_REASON_ASSOC_NO_ACK_RECEIVED:
+		return "assoc_no_ack_received";
+
+	case STA_CONNECT_FAIL_REASON_ASSOC_NO_RESP_RECEIVED:
+		return "assoc_no_resp_received";
+
+	default:
+		return "unknown_reason";
+	}
+}
+
+
 static void wpas_event_assoc_reject(struct wpa_supplicant *wpa_s,
 				    union wpa_event_data *data)
 {
@@ -4387,21 +4421,27 @@ static void wpas_event_assoc_reject(struct wpa_supplicant *wpa_s,
 
 	if (data->assoc_reject.bssid)
 		wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_ASSOC_REJECT
-			"bssid=" MACSTR	" status_code=%u%s%s%s",
+			"bssid=" MACSTR	" status_code=%u%s%s%s%s%s",
 			MAC2STR(data->assoc_reject.bssid),
 			data->assoc_reject.status_code,
 			data->assoc_reject.timed_out ? " timeout" : "",
 			data->assoc_reject.timeout_reason ? "=" : "",
 			data->assoc_reject.timeout_reason ?
-			data->assoc_reject.timeout_reason : "");
+			data->assoc_reject.timeout_reason : "",
+			data->assoc_reject.reason_code ?
+			" qca_driver_reason=" : "",
+			get_connect_fail_reason(data->assoc_reject.reason_code));
 	else
 		wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_ASSOC_REJECT
-			"status_code=%u%s%s%s",
+			"status_code=%u%s%s%s%s%s",
 			data->assoc_reject.status_code,
 			data->assoc_reject.timed_out ? " timeout" : "",
 			data->assoc_reject.timeout_reason ? "=" : "",
 			data->assoc_reject.timeout_reason ?
-			data->assoc_reject.timeout_reason : "");
+			data->assoc_reject.timeout_reason : "",
+			data->assoc_reject.reason_code ?
+			" qca_driver_reason=" : "",
+			get_connect_fail_reason(data->assoc_reject.reason_code));
 	wpa_s->assoc_status_code = data->assoc_reject.status_code;
 	wpa_s->assoc_timed_out = data->assoc_reject.timed_out;
 	wpas_notify_assoc_status_code(wpa_s);
