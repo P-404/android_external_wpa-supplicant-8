@@ -2611,7 +2611,7 @@ u8 * wpa_sm_write_assoc_resp_ies(struct wpa_state_machine *sm, u8 *pos,
 			os_free(bigtk);
 		}
 #ifdef CONFIG_OCV
-		if (wpa_auth_get_ocv(sm)) {
+		if (wpa_auth_uses_ocv(sm)) {
 			struct wpa_channel_info ci;
 			u8 *nbuf, *ocipos;
 
@@ -3456,11 +3456,10 @@ int wpa_ft_validate_reassoc(struct wpa_state_machine *sm, const u8 *ies,
 	}
 
 #ifdef CONFIG_OCV
-	if (wpa_auth_get_ocv(sm)) {
+	if (wpa_auth_uses_ocv(sm)) {
 		struct wpa_channel_info ci;
 		int tx_chanwidth;
 		int tx_seg1_idx;
-		enum oci_verify_result res;
 
 		if (wpa_channel_info(sm->wpa_auth, &ci) != 0) {
 			wpa_printf(MSG_WARNING,
@@ -3474,13 +3473,9 @@ int wpa_ft_validate_reassoc(struct wpa_state_machine *sm, const u8 *ies,
 					  &tx_seg1_idx) < 0)
 			return WLAN_STATUS_UNSPECIFIED_FAILURE;
 
-		res = ocv_verify_tx_params(parse.oci, parse.oci_len, &ci,
-					   tx_chanwidth, tx_seg1_idx);
-		if (wpa_auth_get_ocv(sm) == 2 && res == OCI_NOT_FOUND) {
-			wpa_printf(MSG_WARNING, "Disable OCV with the STA that "
-				   "doesn't send OCI");
-			wpa_auth_set_ocv(sm, 0);
-		} else if (res != OCI_SUCCESS) {
+		if (ocv_verify_tx_params(parse.oci, parse.oci_len, &ci,
+					 tx_chanwidth, tx_seg1_idx) !=
+		    OCI_SUCCESS) {
 			wpa_printf(MSG_WARNING, "%s", ocv_errorstr);
 			return WLAN_STATUS_UNSPECIFIED_FAILURE;
 		}

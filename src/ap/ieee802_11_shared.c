@@ -64,7 +64,7 @@ void ieee802_11_send_sa_query_req(struct hostapd_data *hapd,
 
 #ifdef CONFIG_OCV
 	sta = ap_get_sta(hapd, addr);
-	if (sta && wpa_auth_get_ocv(sta->wpa_sm)) {
+	if (sta && wpa_auth_uses_ocv(sta->wpa_sm)) {
 		struct wpa_channel_info ci;
 
 		if (hostapd_drv_channel_info(hapd, &ci) != 0) {
@@ -143,7 +143,7 @@ static void ieee802_11_send_sa_query_resp(struct hostapd_data *hapd,
 	}
 
 #ifdef CONFIG_OCV
-	if (wpa_auth_get_ocv(sta->wpa_sm)) {
+	if (wpa_auth_uses_ocv(sta->wpa_sm)) {
 		struct wpa_channel_info ci;
 
 		if (hostapd_drv_channel_info(hapd, &ci) != 0) {
@@ -224,7 +224,7 @@ void ieee802_11_sa_query_action(struct hostapd_data *hapd,
 	sta = ap_get_sta(hapd, sa);
 
 #ifdef CONFIG_OCV
-	if (sta && wpa_auth_get_ocv(sta->wpa_sm)) {
+	if (sta && wpa_auth_uses_ocv(sta->wpa_sm)) {
 		struct ieee802_11_elems elems;
 		struct wpa_channel_info ci;
 		int tx_chanwidth;

@@ -1271,7 +1271,7 @@ void mesh_mpm_action_rx(struct wpa_supplicant *wpa_s,
 		}
 
 		if (action_field != PLINK_CLOSE &&
-		    wpa_auth_get_ocv(sta->wpa_sm)) {
+		    wpa_auth_uses_ocv(sta->wpa_sm)) {
 			struct wpa_channel_info ci;
 			int tx_chanwidth;
 			int tx_seg1_idx;
