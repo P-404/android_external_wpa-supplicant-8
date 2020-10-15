@@ -35,7 +35,7 @@ constexpr char kConfFileNameFmt[] = "/data/vendor/wifi/hostapd/hostapd_%s.conf";
 using android::base::RemoveFileIfExists;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
-using android::hardware::wifi::hostapd::V1_2::IHostapd;
+using android::hardware::wifi::hostapd::V1_3::IHostapd;
 using android::hardware::wifi::hostapd::V1_3::Generation;
 using android::hardware::wifi::hostapd::V1_3::Bandwidth;
 
@@ -222,13 +222,11 @@ std::string CreateHostapdConfig(
     const IHostapd::IfaceParams& v_iface_params,
     const IHostapd::NetworkParams& nw_params)
 {
-	IHostapd::IfaceParams iface_params = v_iface_params;
-
-	if (nw_params.V1_0.ssid.size() >
+	if (nw_params.V1_2.V1_0.ssid.size() >
 	    static_cast<uint32_t>(
 		IHostapd::ParamSizeLimits::SSID_MAX_LEN_IN_BYTES)) {
 		wpa_printf(
-		    MSG_ERROR, "Invalid SSID size: %zu", nw_params.V1_0.ssid.size());
+		    MSG_ERROR, "Invalid SSID size: %zu", nw_params.V1_2.V1_0.ssid.size());
 		return "";
 	}
 
@@ -236,7 +234,7 @@ std::string CreateHostapdConfig(
 	std::stringstream ss;
 	ss << std::hex;
 	ss << std::setfill('0');
-	for (uint8_t b : nw_params.V1_0.ssid) {
+	for (uint8_t b : nw_params.V1_2.V1_0.ssid) {
 		ss << std::setw(2) << static_cast<unsigned int>(b);
 	}
 	const std::string ssid_as_string = ss.str();
@@ -247,13 +245,13 @@ std::string CreateHostapdConfig(
 
 	// Encryption config string
 	std::string encryption_config_as_string;
-	switch (nw_params.encryptionType) {
+	switch (nw_params.V1_2.encryptionType) {
 	case IHostapd::EncryptionType::NONE:
 		// no security params
 		break;
 	case IHostapd::EncryptionType::WPA:
 		if (!validatePassphrase(
-		    nw_params.passphrase.size(),
+		    nw_params.V1_2.passphrase.size(),
 		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
 				WPA2_PSK_PASSPHRASE_MIN_LEN_IN_BYTES),
 		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
@@ -264,11 +262,12 @@ std::string CreateHostapdConfig(
 		    "wpa=3\n"
 		    "wpa_pairwise=%s\n"
 		    "wpa_passphrase=%s",
-		    isWigig ? "GCMP" : "TKIP CCMP", nw_params.passphrase.c_str());
+		    isWigig ? "GCMP" : "TKIP CCMP",
+		    nw_params.V1_2.passphrase.c_str());
 		break;
 	case IHostapd::EncryptionType::WPA2:
 		if (!validatePassphrase(
-		    nw_params.passphrase.size(),
+		    nw_params.V1_2.passphrase.size(),
 		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
 				WPA2_PSK_PASSPHRASE_MIN_LEN_IN_BYTES),
 		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
@@ -279,11 +278,12 @@ std::string CreateHostapdConfig(
 		    "wpa=2\n"
 		    "rsn_pairwise=%s\n"
 		    "wpa_passphrase=%s",
-		    isWigig ? "GCMP" : "CCMP", nw_params.passphrase.c_str());
+		    isWigig ? "GCMP" : "CCMP",
+		    nw_params.V1_2.passphrase.c_str());
 		break;
 	case IHostapd::EncryptionType::WPA3_SAE_TRANSITION:
 		if (!validatePassphrase(
-		    nw_params.passphrase.size(),
+		    nw_params.V1_2.passphrase.size(),
 		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
 				WPA2_PSK_PASSPHRASE_MIN_LEN_IN_BYTES),
 		    static_cast<uint32_t>(IHostapd::ParamSizeLimits::
@@ -299,11 +299,11 @@ std::string CreateHostapdConfig(
 		    "wpa_passphrase=%s\n"
 		    "sae_password=%s",
 		    isWigig ? "GCMP" : "CCMP",
-		    nw_params.passphrase.c_str(),
-		    nw_params.passphrase.c_str());
+		    nw_params.V1_2.passphrase.c_str(),
+		    nw_params.V1_2.passphrase.c_str());
 		break;
 	case IHostapd::EncryptionType::WPA3_SAE:
-		if (!validatePassphrase(nw_params.passphrase.size(), 1, -1)) {
+		if (!validatePassphrase(nw_params.V1_2.passphrase.size(), 1, -1)) {
 			return "";
 		}
 		encryption_config_as_string = StringPrintf(
@@ -314,7 +314,7 @@ std::string CreateHostapdConfig(
 		    "sae_require_mfp=2\n"
 		    "sae_password=%s",
 		    isWigig ? "GCMP" : "CCMP",
-		    nw_params.passphrase.c_str());
+		    nw_params.V1_2.passphrase.c_str());
 		break;
 	default:
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
@@ -411,6 +411,18 @@ std::string CreateHostapdConfig(
 	}
 #endif /* CONFIG_IEEE80211AX */
 
+#ifdef CONFIG_INTERWORKING
+	std::string access_network_params_as_string;
+	if (nw_params.isMetered) {
+		access_network_params_as_string = StringPrintf(
+		    "interworking=1\n"
+		    "access_network_type=2\n"); // CHARGEABLE_PUBLIC_NETWORK
+	} else {
+	    access_network_params_as_string = StringPrintf(
+		    "interworking=0\n");
+	}
+#endif /* CONFIG_INTERWORKING */
+
 	return StringPrintf(
 	    "interface=%s\n"
 	    "driver=nl80211\n"
@@ -427,6 +439,9 @@ std::string CreateHostapdConfig(
 	    "%s\n"
 	    "ignore_broadcast_ssid=%d\n"
 	    "wowlan_triggers=any\n"
+#ifdef CONFIG_INTERWORKING
+	    "%s\n"
+#endif /* CONFIG_INTERWORKING */
 	    "%s\n",
 	    iface_params.V1_1.V1_0.ifaceName.c_str(), ssid_as_string.c_str(),
 	    channel_config_as_string.c_str(),
@@ -434,7 +449,11 @@ std::string CreateHostapdConfig(
 	    iface_params.V1_1.V1_0.hwModeParams.enable80211AC ? 1 : 0,
 	    he_params_as_string.c_str(),
 	    hw_mode_as_string.c_str(), ht_cap_vht_oper_chwidth_as_string.c_str(),
-	    nw_params.V1_0.isHidden ? 1 : 0, encryption_config_as_string.c_str());
+	    nw_params.V1_2.V1_0.isHidden ? 1 : 0,
+#ifdef CONFIG_INTERWORKING
+            access_network_params_as_string.c_str(),
+#endif /* CONFIG_INTERWORKING */
+            encryption_config_as_string.c_str());
 }
 
 Generation getGeneration(hostapd_hw_modes *current_mode)
@@ -563,12 +582,23 @@ Return<void> Hostapd::addAccessPoint_1_1(
 }
 
 Return<void> Hostapd::addAccessPoint_1_2(
-    const IfaceParams& iface_params, const NetworkParams& nw_params,
+    const V1_2::IHostapd::IfaceParams& iface_params,
+    const V1_2::IHostapd::NetworkParams& nw_params,
     addAccessPoint_1_2_cb _hidl_cb)
 {
 	return call(
 	    this, &Hostapd::addAccessPointInternal_1_2, _hidl_cb, iface_params,
 	    nw_params);
+}
+
+Return<void> Hostapd::addAccessPoint_1_3(
+    const V1_3::IHostapd::IfaceParams& iface_params,
+    const V1_3::IHostapd::NetworkParams& nw_params,
+    addAccessPoint_1_3_cb _hidl_cb)
+{
+        return call(
+            this, &Hostapd::addAccessPointInternal_1_3, _hidl_cb, iface_params,
+            nw_params);
 }
 
 Return<void> Hostapd::removeAccessPoint(
@@ -630,7 +660,14 @@ V1_0::HostapdStatus Hostapd::addAccessPointInternal_1_1(
 }
 
 V1_2::HostapdStatus Hostapd::addAccessPointInternal_1_2(
-    const IfaceParams& iface_params, const NetworkParams& nw_params)
+    const V1_2::IHostapd::IfaceParams& iface_params,
+    const V1_2::IHostapd::NetworkParams& nw_params) {
+	return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN, ""};
+}
+
+V1_2::HostapdStatus Hostapd::addAccessPointInternal_1_3(
+    const V1_2::IHostapd::IfaceParams& iface_params,
+    const V1_3::IHostapd::NetworkParams& nw_params)
 {
 	if (hostapd_get_iface(interfaces_, iface_params.V1_1.V1_0.ifaceName.c_str())) {
 		wpa_printf(
