@@ -1266,7 +1266,6 @@ static int wpas_dpp_handle_config_obj(struct wpa_supplicant *wpa_s,
 		}
 	}
 
-	wpas_notify_dpp_configuration_failure(wpa_s);
 	wpas_notify_dpp_conf(wpa_s, DPP_CONF_RECEIVED, conf->ssid,
 			    conf->ssid_len, conf->connector,
 			    conf->c_sign_key, auth->net_access_key,
