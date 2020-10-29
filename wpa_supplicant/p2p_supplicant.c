@@ -3742,7 +3742,8 @@ static enum chan_allowed wpas_p2p_verify_channel(struct wpa_supplicant *wpa_s,
 
 static int wpas_p2p_setup_channels(struct wpa_supplicant *wpa_s,
 				   struct p2p_channels *chan,
-				   struct p2p_channels *cli_chan)
+				   struct p2p_channels *cli_chan,
+				   int p2p_disable_6ghz)
 {
 	struct hostapd_hw_modes *mode;
 	int cla, op, cli_cla;
@@ -3763,7 +3764,7 @@ static int wpas_p2p_setup_channels(struct wpa_supplicant *wpa_s,
 
 		if (o->p2p == NO_P2P_SUPP ||
 		    (is_6ghz_op_class(o->op_class) &&
-		     wpa_s->conf->p2p_6ghz_disable))
+		     p2p_disable_6ghz))
 			continue;
 
 		mode = get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes, o->mode,
@@ -4653,7 +4654,7 @@ int wpas_p2p_init(struct wpa_global *global, struct wpa_supplicant *wpa_s)
 	p2p.prov_disc_resp_cb = wpas_prov_disc_resp_cb;
 	p2p.p2ps_group_capability = p2ps_group_capability;
 	p2p.get_pref_freq_list = wpas_p2p_get_pref_freq_list;
-
+	p2p.p2p_6ghz_disable = wpa_s->conf->p2p_6ghz_disable;
 	os_memcpy(wpa_s->global->p2p_dev_addr, wpa_s->own_addr, ETH_ALEN);
 	os_memcpy(p2p.dev_addr, wpa_s->global->p2p_dev_addr, ETH_ALEN);
 	p2p.dev_name = wpa_s->conf->device_name;
@@ -4666,7 +4667,8 @@ int wpas_p2p_init(struct wpa_global *global, struct wpa_supplicant *wpa_s)
 		p2p.config_methods = wpa_s->wps->config_methods;
 	}
 
-	if (wpas_p2p_setup_channels(wpa_s, &p2p.channels, &p2p.cli_channels)) {
+	if (wpas_p2p_setup_channels(wpa_s, &p2p.channels, &p2p.cli_channels,
+				    p2p.p2p_6ghz_disable)) {
 		wpa_printf(MSG_ERROR,
 			   "P2P: Failed to configure supported channel list");
 		return -1;
@@ -7997,7 +7999,6 @@ void wpas_p2p_pbc_overlap_cb(void *eloop_ctx, void *timeout_ctx)
 	wpas_p2p_notif_pbc_overlap(wpa_s);
 }
 
-
 void wpas_p2p_update_channel_list(struct wpa_supplicant *wpa_s,
 				  enum wpas_p2p_channel_update_trig trig)
 {
@@ -8016,7 +8017,8 @@ void wpas_p2p_update_channel_list(struct wpa_supplicant *wpa_s,
 
 	os_memset(&chan, 0, sizeof(chan));
 	os_memset(&cli_chan, 0, sizeof(cli_chan));
-	if (wpas_p2p_setup_channels(wpa_s, &chan, &cli_chan)) {
+	if (wpas_p2p_setup_channels(wpa_s, &chan, &cli_chan,
+				    is_p2p_6ghz_disabled(wpa_s->global->p2p))) {
 		wpa_printf(MSG_ERROR, "P2P: Failed to update supported "
 			   "channel list");
 		return;
