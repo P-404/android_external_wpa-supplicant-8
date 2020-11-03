@@ -1064,8 +1064,6 @@ struct wpa_supplicant {
 
 	/* WLAN_STATUS_* status codes from (Re)Association Response frame. */
 	u16 assoc_status_code;
-	/* Indicates if the previous association request timed out. */
-	u8 assoc_timed_out;
 
 	struct ext_password_data *ext_pw;
 
@@ -1258,6 +1256,7 @@ struct wpa_supplicant {
 	struct wpa_radio_work *dpp_listen_work;
 	unsigned int dpp_pending_listen_freq;
 	unsigned int dpp_listen_freq;
+	struct os_reltime dpp_listen_end;
 	u8 dpp_allowed_roles;
 	int dpp_qr_mutual;
 	int dpp_netrole;
@@ -1285,6 +1284,7 @@ struct wpa_supplicant {
 #ifdef CONFIG_DPP2
 	struct dpp_pfs *dpp_pfs;
 	int dpp_pfs_fallback;
+	struct wpabuf *dpp_reconfig_announcement;
 	struct wpabuf *dpp_presence_announcement;
 	struct dpp_bootstrap_info *dpp_chirp_bi;
 	int dpp_chirp_freq;
@@ -1293,6 +1293,8 @@ struct wpa_supplicant {
 	int dpp_chirp_round;
 	int dpp_chirp_scan_done;
 	int dpp_chirp_listen;
+	struct wpa_ssid *dpp_reconfig_ssid;
+	int dpp_reconfig_ssid_id;
 #endif /* CONFIG_DPP2 */
 #ifdef CONFIG_TESTING_OPTIONS
 	char *dpp_config_obj_override;
