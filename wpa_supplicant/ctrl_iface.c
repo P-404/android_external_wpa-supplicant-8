@@ -8114,7 +8114,7 @@ static int wpas_ctrl_iface_signal_monitor(struct wpa_supplicant *wpa_s,
 int wpas_ctrl_iface_get_pref_freq_list_override(struct wpa_supplicant *wpa_s,
 						enum wpa_driver_if_type if_type,
 						unsigned int *num,
-						unsigned int *freq_list)
+						struct weighted_pcl *freq_list)
 {
 	char *pos = wpa_s->get_pref_freq_list_override;
 	char *end;
@@ -8138,7 +8138,8 @@ int wpas_ctrl_iface_get_pref_freq_list_override(struct wpa_supplicant *wpa_s,
 	pos++;
 	end = os_strchr(pos, ' ');
 	while (pos && (!end || pos < end) && count < *num) {
-		freq_list[count++] = atoi(pos);
+		freq_list[count].freq = atoi(pos);
+		freq_list[count++].flag = WEIGHTED_PCL_GO | WEIGHTED_PCL_CLI;
 		pos = os_strchr(pos, ',');
 		if (pos)
 			pos++;
@@ -8153,10 +8154,11 @@ int wpas_ctrl_iface_get_pref_freq_list_override(struct wpa_supplicant *wpa_s,
 static int wpas_ctrl_iface_get_pref_freq_list(
 	struct wpa_supplicant *wpa_s, char *cmd, char *buf, size_t buflen)
 {
-	unsigned int freq_list[100], num = 100, i;
+	unsigned int num = 100, i;
 	int ret;
 	enum wpa_driver_if_type iface_type;
 	char *pos, *end;
+	struct weighted_pcl freq_list[100];
 
 	pos = buf;
 	end = buf + buflen;
@@ -8187,7 +8189,7 @@ static int wpas_ctrl_iface_get_pref_freq_list(
 
 	for (i = 0; i < num; i++) {
 		ret = os_snprintf(pos, end - pos, "%s%u",
-				  i > 0 ? "," : "", freq_list[i]);
+				  i > 0 ? "," : "", freq_list[i].freq);
 		if (os_snprintf_error(end - pos, ret))
 			return -1;
 		pos += ret;
