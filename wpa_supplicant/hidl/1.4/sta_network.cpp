@@ -96,6 +96,9 @@ constexpr char kNetworkEapSimUmtsAuthResponse[] = "UMTS-AUTH";
 constexpr char kNetworkEapSimUmtsAutsResponse[] = "UMTS-AUTS";
 constexpr char kNetworkEapSimGsmAuthFailure[] = "GSM-FAIL";
 constexpr char kNetworkEapSimUmtsAuthFailure[] = "UMTS-FAIL";
+/* These constants refer definitions in wpa_supplicant/config.h */
+constexpr int SAE_PWE_H2E_ONLY_MODE = 1;
+constexpr int SAE_PWE_HP_H2E_BOTH = 2;
 
 #ifdef CONFIG_WAPI_INTERFACE
 std::string dummyWapiCertSuite;
@@ -110,6 +113,7 @@ namespace supplicant {
 namespace V1_4 {
 namespace implementation {
 using hidl_return_util::validateAndCall;
+using V1_0::SupplicantStatus;
 using V1_0::SupplicantStatusCode;
 
 StaNetwork::StaNetwork(
@@ -154,6 +158,15 @@ Return<void> StaNetwork::registerCallback(
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
 	    &StaNetwork::registerCallbackInternal, _hidl_cb, callback);
+}
+
+Return<void> StaNetwork::registerCallback_1_4(
+    const sp<V1_4::ISupplicantStaNetworkCallback> &callback,
+    registerCallback_1_4_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &StaNetwork::registerCallback_1_4Internal, _hidl_cb, callback);
 }
 
 Return<void> StaNetwork::setSsid(
@@ -415,7 +428,7 @@ Return<void> StaNetwork::setWapiCertSuite(
 Return<void> StaNetwork::setEdmg(bool enable, setEdmg_cb _hidl_cb)
 {
 	return validateAndCall(
-	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
 	    &StaNetwork::setEdmgInternal, _hidl_cb, enable);
 }
 
@@ -650,7 +663,7 @@ Return<void> StaNetwork::getWapiCertSuite(getWapiCertSuite_cb _hidl_cb)
 Return<void> StaNetwork::getEdmg(getEdmg_cb _hidl_cb)
 {
 	return validateAndCall(
-	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
 	    &StaNetwork::getEdmgInternal, _hidl_cb);
 }
 
@@ -949,14 +962,14 @@ Return<void> StaNetwork::setGroupCipher_1_4(
     uint32_t group_cipher_mask, setGroupCipher_1_4_cb _hidl_cb)
 {
 	return validateAndCall(
-	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
 	    &StaNetwork::setGroupCipher_1_4Internal, _hidl_cb, group_cipher_mask);
 }
 
 Return<void> StaNetwork::getGroupCipher_1_4(getGroupCipher_1_4_cb _hidl_cb)
 {
 	return validateAndCall(
-	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
 	    &StaNetwork::getGroupCipher_1_4Internal, _hidl_cb);
 }
 
@@ -964,7 +977,7 @@ Return<void> StaNetwork::setPairwiseCipher_1_4(
     uint32_t pairwise_cipher_mask, setPairwiseCipher_1_4_cb _hidl_cb)
 {
 	return validateAndCall(
-	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
 	    &StaNetwork::setPairwiseCipher_1_4Internal, _hidl_cb,
 	    pairwise_cipher_mask);
 }
@@ -973,8 +986,15 @@ Return<void> StaNetwork::getPairwiseCipher_1_4(
     getPairwiseCipher_1_4_cb _hidl_cb)
 {
 	return validateAndCall(
-	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
 	    &StaNetwork::getPairwiseCipher_1_4Internal, _hidl_cb);
+}
+
+Return<void> StaNetwork::enableSaeH2eOnlyMode(bool enable, enableSaeH2eOnlyMode_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &StaNetwork::enableSaeH2eOnlyModeInternal, _hidl_cb, enable);
 }
 
 std::pair<SupplicantStatus, uint32_t> StaNetwork::getIdInternal()
@@ -995,12 +1015,18 @@ std::pair<SupplicantStatus, IfaceType> StaNetwork::getTypeInternal()
 SupplicantStatus StaNetwork::registerCallbackInternal(
     const sp<ISupplicantStaNetworkCallback> &callback)
 {
+	return {SupplicantStatusCode::FAILURE_UNKNOWN, "deprecated"};
+}
+
+V1_4::SupplicantStatus StaNetwork::registerCallback_1_4Internal(
+    const sp<V1_4::ISupplicantStaNetworkCallback> &callback)
+{
 	HidlManager *hidl_manager = HidlManager::getInstance();
 	if (!hidl_manager || hidl_manager->addStaNetworkCallbackHidlObject(
 				 ifname_, network_id_, callback)) {
-		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+		return {V1_4::SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
-	return {SupplicantStatusCode::SUCCESS, ""};
+	return {V1_4::SupplicantStatusCode::SUCCESS, ""};
 }
 
 SupplicantStatus StaNetwork::setSsidInternal(const std::vector<uint8_t> &ssid)
@@ -1077,12 +1103,12 @@ SupplicantStatus StaNetwork::setAuthAlgInternal(uint32_t auth_alg_mask)
 	return {SupplicantStatusCode::SUCCESS, ""};
 }
 
-SupplicantStatus StaNetwork::setEdmgInternal(bool enable)
+V1_4::SupplicantStatus StaNetwork::setEdmgInternal(bool enable)
 {
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	wpa_ssid->enable_edmg = enable ? 1 : 0;
 	resetInternalStateAfterParamsUpdate();
-	return {SupplicantStatusCode::SUCCESS, ""};
+	return {V1_4::SupplicantStatusCode::SUCCESS, ""};
 }
 
 bool StaNetwork::isWigig()
@@ -1866,10 +1892,10 @@ std::pair<SupplicantStatus, std::string> StaNetwork::getIdStrInternal()
 	return {{SupplicantStatusCode::SUCCESS, ""}, {wpa_ssid->id_str}};
 }
 
-std::pair<SupplicantStatus, bool> StaNetwork::getEdmgInternal()
+std::pair<V1_4::SupplicantStatus, bool> StaNetwork::getEdmgInternal()
 {
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
-	return {{SupplicantStatusCode::SUCCESS, ""},
+	return {{V1_4::SupplicantStatusCode::SUCCESS, ""},
 		(wpa_ssid->enable_edmg == 1)};
 }
 
@@ -2312,33 +2338,33 @@ std::pair<SupplicantStatus, uint32_t> StaNetwork::getPairwiseCipher_1_3Internal(
 	return {{SupplicantStatusCode::FAILURE_UNKNOWN, "deprecated"}, 0};
 }
 
-SupplicantStatus StaNetwork::setGroupCipher_1_4Internal(uint32_t group_cipher_mask)
+V1_4::SupplicantStatus StaNetwork::setGroupCipher_1_4Internal(uint32_t group_cipher_mask)
 {
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	if (group_cipher_mask & ~kAllowedGroupCipherMask) {
-		return {SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
+		return {V1_4::SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
 	}
 	if (isWigig() && group_cipher_mask & ISupplicantStaNetwork::GroupCipherMask::GCMP_256)
 	    group_cipher_mask |= WPA_CIPHER_GCMP;
 	wpa_ssid->group_cipher = group_cipher_mask;
 	wpa_printf(MSG_MSGDUMP, "group_cipher: 0x%x", wpa_ssid->group_cipher);
 	resetInternalStateAfterParamsUpdate();
-	return {SupplicantStatusCode::SUCCESS, ""};
+	return {V1_4::SupplicantStatusCode::SUCCESS, ""};
 }
 
-std::pair<SupplicantStatus, uint32_t> StaNetwork::getGroupCipher_1_4Internal()
+std::pair<V1_4::SupplicantStatus, uint32_t> StaNetwork::getGroupCipher_1_4Internal()
 {
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
-	return {{SupplicantStatusCode::SUCCESS, ""},
+	return {{V1_4::SupplicantStatusCode::SUCCESS, ""},
 		wpa_ssid->group_cipher & kAllowedGroupCipherMask};
 }
 
-SupplicantStatus StaNetwork::setPairwiseCipher_1_4Internal(
+V1_4::SupplicantStatus StaNetwork::setPairwiseCipher_1_4Internal(
     uint32_t pairwise_cipher_mask)
 {
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	if (pairwise_cipher_mask & ~kAllowedPairwisewCipherMask) {
-		return {SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
+		return {V1_4::SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
 	}
 	if (isWigig() && pairwise_cipher_mask & ISupplicantStaNetwork::PairwiseCipherMask::GCMP_256)
 	    pairwise_cipher_mask |= WPA_CIPHER_GCMP;
@@ -2346,13 +2372,13 @@ SupplicantStatus StaNetwork::setPairwiseCipher_1_4Internal(
 	wpa_printf(
 	    MSG_MSGDUMP, "pairwise_cipher: 0x%x", wpa_ssid->pairwise_cipher);
 	resetInternalStateAfterParamsUpdate();
-	return {SupplicantStatusCode::SUCCESS, ""};
+	return {V1_4::SupplicantStatusCode::SUCCESS, ""};
 }
 
-std::pair<SupplicantStatus, uint32_t> StaNetwork::getPairwiseCipher_1_4Internal()
+std::pair<V1_4::SupplicantStatus, uint32_t> StaNetwork::getPairwiseCipher_1_4Internal()
 {
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
-	return {{SupplicantStatusCode::SUCCESS, ""},
+	return {{V1_4::SupplicantStatusCode::SUCCESS, ""},
 		wpa_ssid->pairwise_cipher & kAllowedPairwisewCipherMask};
 }
 
@@ -2639,6 +2665,14 @@ SupplicantStatus StaNetwork::setEapErpInternal(bool enable)
 #else /* CONFIG_FILS */
 	return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 #endif /* CONFIG_FILS */
+}
+
+V1_4::SupplicantStatus StaNetwork::enableSaeH2eOnlyModeInternal(bool enable)
+{
+	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+	wpa_s->conf->sae_pwe = enable ? SAE_PWE_H2E_ONLY_MODE : SAE_PWE_HP_H2E_BOTH;
+	resetInternalStateAfterParamsUpdate();
+	return {V1_4::SupplicantStatusCode::SUCCESS, ""};
 }
 
 }  // namespace implementation

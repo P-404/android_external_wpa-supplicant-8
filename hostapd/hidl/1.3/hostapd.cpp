@@ -20,7 +20,6 @@
 extern "C"
 {
 #include "common/wpa_ctrl.h"
-#include "utils/eloop.h"
 #include "ap/ap_drv_ops.h"
 }
 
@@ -244,6 +243,9 @@ std::string CreateHostapdConfig(
 	iface_params.V1_1.V1_0.channelParams.channel &= 0xFFFF;
 
 	// Encryption config string
+	uint32_t band = 0;
+	band |= iface_params.channelParams.bandMask;
+	bool is_6Ghz_band_only = band == static_cast<uint32_t>(IHostapd::BandMask::BAND_6_GHZ);
 	std::string encryption_config_as_string;
 	switch (nw_params.V1_2.encryptionType) {
 	case IHostapd::EncryptionType::NONE:
@@ -312,7 +314,9 @@ std::string CreateHostapdConfig(
 		    "wpa_key_mgmt=SAE\n"
 		    "ieee80211w=2\n"
 		    "sae_require_mfp=2\n"
+		    "sae_pwe=%d\n"
 		    "sae_password=%s",
+		    is_6Ghz_band_only ? 1 : 2,
 		    isWigig ? "GCMP" : "CCMP",
 		    nw_params.V1_2.passphrase.c_str());
 		break;
@@ -320,9 +324,6 @@ std::string CreateHostapdConfig(
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
 		return "";
 	}
-
-	unsigned int band = 0;
-	band |= iface_params.channelParams.bandMask;
 
 	std::string channel_config_as_string;
 	bool isFirst = true;
@@ -367,7 +368,7 @@ std::string CreateHostapdConfig(
 		if (((band & IHostapd::BandMask::BAND_5_GHZ) != 0)
 		    || ((band & IHostapd::BandMask::BAND_6_GHZ) != 0)) {
 			hw_mode_as_string = "hw_mode=any";
-			if (iface_params.V1_1.V1_0.channelParams.enableAcs) {
+			if (iface_params.V1_1.V1_0.hwModeParams.enable80211AC) {
 				ht_cap_vht_oper_chwidth_as_string =
 				    "ht_capab=[HT40+]\n"
 				    "vht_oper_chwidth=1";
@@ -379,7 +380,7 @@ std::string CreateHostapdConfig(
 		if (((band & IHostapd::BandMask::BAND_5_GHZ) != 0)
 		    || ((band & IHostapd::BandMask::BAND_6_GHZ) != 0)) {
 			hw_mode_as_string = "hw_mode=a";
-			if (iface_params.V1_1.V1_0.channelParams.enableAcs) {
+			if (iface_params.V1_1.V1_0.hwModeParams.enable80211AC) {
 				ht_cap_vht_oper_chwidth_as_string =
 				    "ht_capab=[HT40+]\n"
 				    "vht_oper_chwidth=1";
@@ -560,7 +561,8 @@ namespace implementation {
 using hidl_return_util::call;
 using namespace android::hardware::wifi::hostapd::V1_0;
 
-Hostapd::Hostapd(struct hapd_interfaces* interfaces) : interfaces_(interfaces)
+Hostapd::Hostapd(struct hapd_interfaces* interfaces)
+    : interfaces_(interfaces), death_notifier_(sp<DeathNotifier>::make())
 {}
 
 Return<void> Hostapd::addAccessPoint(
@@ -789,6 +791,13 @@ V1_0::HostapdStatus Hostapd::registerCallbackInternal(
 V1_2::HostapdStatus Hostapd::registerCallbackInternal_1_3(
     const sp<V1_3::IHostapdCallback>& callback)
 {
+	if (!callback->linkToDeath(death_notifier_, 0)) {
+		wpa_printf(
+		    MSG_ERROR,
+		    "Error registering for death notification for "
+		    "hostapd callback object");
+		return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN, ""};
+	}
 	callbacks_.push_back(callback);
 	return {V1_2::HostapdStatusCode::SUCCESS, ""};
 }

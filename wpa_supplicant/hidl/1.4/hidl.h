@@ -49,6 +49,8 @@ extern "C"
 	void wpas_hidl_notify_hs20_rx_deauth_imminent_notice(
 	    struct wpa_supplicant *wpa_s, u8 code, u16 reauth_delay,
 	    const char *url);
+	void wpas_hidl_notify_hs20_rx_terms_and_conditions_acceptance(
+			struct wpa_supplicant *wpa_s, const char *url);
 	void wpas_hidl_notify_disconnect_reason(struct wpa_supplicant *wpa_s);
 	void wpas_hidl_notify_assoc_reject(struct wpa_supplicant *wpa_s,
 	    const u8 *bssid, u8 timed_out);
@@ -122,6 +124,8 @@ extern "C"
 	void wpas_hidl_notify_pmk_cache_added(
 	    struct wpa_supplicant *wpas, struct rsn_pmksa_cache_entry *pmksa_entry);
 	void wpas_hidl_notify_bss_tm_status(struct wpa_supplicant *wpa_s);
+	void wpas_hidl_notify_transition_disable(
+	    struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid, u8 bitmap);
 
 //Vendor DPP Notifications
 	void wpas_hidl_notify_dpp_conf(
@@ -172,6 +176,9 @@ static void wpas_hidl_notify_hs20_rx_subscription_remediation(
 {}
 static void wpas_hidl_notify_hs20_rx_deauth_imminent_notice(
     struct wpa_supplicant *wpa_s, u8 code, u16 reauth_delay, const char *url)
+{}
+void wpas_hidl_notify_hs20_rx_terms_and_conditions_acceptance(
+		struct wpa_supplicant *wpa_s, const char *url)
 {}
 static void wpas_hidl_notify_disconnect_reason(struct wpa_supplicant *wpa_s) {}
 static void wpas_hidl_notify_assoc_reject(struct wpa_supplicant *wpa_s,
@@ -271,6 +278,10 @@ static void wpas_hidl_notify_pmk_cache_added(struct wpa_supplicant *wpas,
 					     struct rsn_pmksa_cache_entry *pmksa_entry)
 {}
 void wpas_hidl_notify_bss_tm_status(struct wpa_supplicant *wpa_s)
+{}
+static void wpas_hidl_notify_transition_disable(struct wpa_supplicant *wpa_s,
+					    struct wpa_ssid *ssid,
+					    u8 bitmap)
 {}
 
 //DPP Vendor Notifications

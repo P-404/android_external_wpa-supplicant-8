@@ -18,6 +18,7 @@
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantP2pNetworkCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaIfaceCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaNetworkCallback.h>
+#include <android/hardware/wifi/supplicant/1.4/ISupplicantStaNetworkCallback.h>
 
 #include "p2p_iface.h"
 #include "p2p_network.h"
@@ -40,6 +41,26 @@ extern "C"
 #include "wpa_supplicant_i.h"
 #include "driver_i.h"
 }
+
+class DeathNotifier : public android::hardware::hidl_death_recipient
+{
+public:
+	DeathNotifier(struct wpa_global *wpa_global)
+	    : wpa_global_(wpa_global)
+	{}
+
+	void serviceDied(
+	    uint64_t /*cookie*/,
+	    const android::wp<android::hidl::base::V1_0::IBase>
+		& /* who */) override
+	{
+		wpa_printf(MSG_ERROR, "Client died. Terminating...");
+		wpa_supplicant_terminate_proc(wpa_global_);
+	}
+
+private:
+	struct wpa_global *wpa_global_;
+};
 
 namespace android {
 namespace hardware {
@@ -92,7 +113,9 @@ public:
 	    struct wpa_supplicant *wpa_s, const char *url, u8 osu_method);
 	void notifyHs20RxDeauthImminentNotice(
 	    struct wpa_supplicant *wpa_s, u8 code, u16 reauth_delay,
-	    const char *url);
+		const char *url);
+	void notifyHs20RxTermsAndConditionsAcceptance(
+			struct wpa_supplicant *wpa_s, const char *url);
 	void notifyDisconnectReason(struct wpa_supplicant *wpa_s);
 	void notifyAssocReject(struct wpa_supplicant *wpa_s,
 	    const u8 *bssid, u8 timed_out);
@@ -158,6 +181,9 @@ public:
 	void notifyPmkCacheAdded(struct wpa_supplicant *wpa_s,
 			struct rsn_pmksa_cache_entry *pmksa_entry);
 	void notifyBssTmStatus(struct wpa_supplicant *wpa_s);
+	void notifyTransitionDisable(struct wpa_supplicant *wpa_s,
+			struct wpa_ssid *ssid,
+			u8 bitmap);
 
 	// Methods called from hidl objects.
 	void notifyExtRadioWorkStart(struct wpa_supplicant *wpa_s, uint32_t id);
@@ -267,6 +293,10 @@ private:
 	    const std::string &ifname,
 	    const std::function<android::hardware::Return<void>(
 	    android::sp<V1_3::ISupplicantStaIfaceCallback>)> &method);
+	void callWithEachStaIfaceCallback_1_4(
+	    const std::string &ifname,
+	    const std::function<android::hardware::Return<void>(
+	    android::sp<V1_4::ISupplicantStaIfaceCallback>)> &method);
 	template <class CallbackTypeDerived>
 	void callWithEachStaIfaceCallbackDerived(
 	    const std::string &ifname,
@@ -280,6 +310,11 @@ private:
 	    const std::string &ifname, int network_id,
 	    const std::function<android::hardware::Return<void>(
 		android::sp<ISupplicantStaNetworkCallback>)> &method);
+	template <class CallbackTypeDerived>
+	void callWithEachStaNetworkCallbackDerived(
+	    const std::string &ifname, int network_id,
+	    const std::function<
+		Return<void>(android::sp<CallbackTypeDerived>)> &method);
 #ifdef SUPPLICANT_VENDOR_HIDL
 	void removeVendorStaIfaceCallbackHidlObject(
 	    const std::string &ifname,
@@ -301,6 +336,10 @@ private:
 
 	// Singleton instance of this class.
 	static HidlManager *instance_;
+	// Raw pointer to the global structure maintained by the core.
+	struct wpa_global *wpa_global_;
+	// Death notifier.
+	android::sp<DeathNotifier> death_notifier_;
 	// The main hidl service object.
 	android::sp<Supplicant> supplicant_object_;
 	// Map of all the P2P interface specific hidl objects controlled by
@@ -387,40 +426,6 @@ private:
 	    const std::string,
 	    std::vector<android::sp<ISupplicantVendorP2PIfaceCallback>>>
 	    vendor_p2p_iface_callbacks_map_;
-#endif
-
-#if 0  // TODO(b/31632518): HIDL object death notifications.
-	/**
-	 * Helper class used to deregister the callback object reference from
-	 * our callback list on the death of the hidl object.
-	 * This class stores a reference of the callback hidl object and a
-	 * function to be called to indicate the death of the hidl object.
-	 */
-	template <class CallbackType>
-	class CallbackObjectDeathNotifier
-	    : public android::hardware::IBinder::DeathRecipient
-	{
-	public:
-		CallbackObjectDeathNotifier(
-		    const android::sp<CallbackType> &callback,
-		    const std::function<void(const android::sp<CallbackType> &)>
-			&on_hidl_died)
-		    : callback_(callback), on_hidl_died_(on_hidl_died)
-		{
-		}
-		void binderDied(const android::wp<android::hardware::IBinder>
-				    & /* who */) override
-		{
-			on_hidl_died_(callback_);
-		}
-
-	private:
-		// The callback hidl object reference.
-		const android::sp<CallbackType> callback_;
-		// Callback function to be called when the hidl dies.
-		const std::function<void(const android::sp<CallbackType> &)>
-		    on_hidl_died_;
-	};
 #endif
 };
 

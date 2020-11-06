@@ -35,6 +35,7 @@ constexpr size_t kGsmRandLenBytes = GSM_RAND_LEN;
 constexpr size_t kUmtsRandLenBytes = EAP_AKA_RAND_LEN;
 constexpr size_t kUmtsAutnLenBytes = EAP_AKA_AUTN_LEN;
 constexpr u8 kZeroBssid[6] = {0, 0, 0, 0, 0, 0};
+
 /**
  * Check if the provided |wpa_supplicant| structure represents a P2P iface or
  * not.
@@ -64,32 +65,17 @@ const std::string getNetworkObjectMapKey(
  */
 template <class CallbackType>
 int registerForDeathAndAddCallbackHidlObjectToList(
+    const android::sp<DeathNotifier> &death_notifier,
     const android::sp<CallbackType> &callback,
-    const std::function<void(const android::sp<CallbackType> &)>
-	&on_hidl_died_fctor,
     std::vector<android::sp<CallbackType>> &callback_list)
 {
-#if 0   // TODO(b/31632518): HIDL object death notifications.
-	auto death_notifier = new CallbackObjectDeathNotifier<CallbackType>(
-	    callback, on_hidl_died_fctor);
-	// Use the |callback.get()| as cookie so that we don't need to
-	// store a reference to this |CallbackObjectDeathNotifier| instance
-	// to use in |unlinkToDeath| later.
-	// NOTE: This may cause an immediate callback if the object is already
-	// dead, so add it to the list before we register for callback!
-	if (android::hardware::IInterface::asBinder(callback)->linkToDeath(
-		death_notifier, callback.get()) != android::OK) {
+	if (!callback->linkToDeath(death_notifier, 0)) {
 		wpa_printf(
 		    MSG_ERROR,
 		    "Error registering for death notification for "
 		    "supplicant callback object");
-		callback_list.erase(
-		    std::remove(
-			callback_list.begin(), callback_list.end(), callback),
-		    callback_list.end());
 		return 1;
 	}
-#endif  // TODO(b/31632518): HIDL object death notifications.
 	callback_list.push_back(callback);
 	return 0;
 }
@@ -124,9 +110,8 @@ int removeHidlObjectFromMap(
 
 template <class CallbackType>
 int addIfaceCallbackHidlObjectToMap(
+    const android::sp<DeathNotifier> &death_notifier,
     const std::string &ifname, const android::sp<CallbackType> &callback,
-    const std::function<void(const android::sp<CallbackType> &)>
-	&on_hidl_died_fctor,
     std::map<const std::string, std::vector<android::sp<CallbackType>>>
 	&callbacks_map)
 {
@@ -140,15 +125,14 @@ int addIfaceCallbackHidlObjectToMap(
 
 	// Register for death notification before we add it to our list.
 	return registerForDeathAndAddCallbackHidlObjectToList<CallbackType>(
-	    callback, on_hidl_died_fctor, iface_callback_list);
+	    death_notifier, callback, iface_callback_list);
 }
 
 template <class CallbackType>
 int addNetworkCallbackHidlObjectToMap(
+    const android::sp<DeathNotifier> &death_notifier,
     const std::string &ifname, int network_id,
     const android::sp<CallbackType> &callback,
-    const std::function<void(const android::sp<CallbackType> &)>
-	&on_hidl_died_fctor,
     std::map<const std::string, std::vector<android::sp<CallbackType>>>
 	&callbacks_map)
 {
@@ -165,11 +149,12 @@ int addNetworkCallbackHidlObjectToMap(
 
 	// Register for death notification before we add it to our list.
 	return registerForDeathAndAddCallbackHidlObjectToList<CallbackType>(
-	    callback, on_hidl_died_fctor, network_callback_list);
+	    death_notifier, callback, network_callback_list);
 }
 
 template <class CallbackType>
 int removeAllIfaceCallbackHidlObjectsFromMap(
+    const android::sp<DeathNotifier> &death_notifier,
     const std::string &ifname,
     std::map<const std::string, std::vector<android::sp<CallbackType>>>
 	&callbacks_map)
@@ -177,25 +162,22 @@ int removeAllIfaceCallbackHidlObjectsFromMap(
 	auto iface_callback_map_iter = callbacks_map.find(ifname);
 	if (iface_callback_map_iter == callbacks_map.end())
 		return 1;
-#if 0   // TODO(b/31632518): HIDL object death notifications.
 	const auto &iface_callback_list = iface_callback_map_iter->second;
 	for (const auto &callback : iface_callback_list) {
-		if (android::hardware::IInterface::asBinder(callback)
-			->unlinkToDeath(nullptr, callback.get()) !=
-		    android::OK) {
+		if (!callback->unlinkToDeath(death_notifier)) {
 			wpa_printf(
 			    MSG_ERROR,
 			    "Error deregistering for death notification for "
 			    "iface callback object");
 		}
 	}
-#endif  // TODO(b/31632518): HIDL object death notifications.
 	callbacks_map.erase(iface_callback_map_iter);
 	return 0;
 }
 
 template <class CallbackType>
 int removeAllNetworkCallbackHidlObjectsFromMap(
+    const android::sp<DeathNotifier> &death_notifier,
     const std::string &network_key,
     std::map<const std::string, std::vector<android::sp<CallbackType>>>
 	&callbacks_map)
@@ -203,12 +185,9 @@ int removeAllNetworkCallbackHidlObjectsFromMap(
 	auto network_callback_map_iter = callbacks_map.find(network_key);
 	if (network_callback_map_iter == callbacks_map.end())
 		return 1;
-#if 0   // TODO(b/31632518): HIDL object death notifications.
 	const auto &network_callback_list = network_callback_map_iter->second;
 	for (const auto &callback : network_callback_list) {
-		if (android::hardware::IInterface::asBinder(callback)
-			->unlinkToDeath(nullptr, callback.get()) !=
-		    android::OK) {
+		if (!callback->unlinkToDeath(death_notifier)) {
 			wpa_printf(
 			    MSG_ERROR,
 			    "Error deregistering for death "
@@ -216,7 +195,6 @@ int removeAllNetworkCallbackHidlObjectsFromMap(
 			    "network callback object");
 		}
 	}
-#endif  // TODO(b/31632518): HIDL object death notifications.
 	callbacks_map.erase(network_callback_map_iter);
 	return 0;
 }
@@ -347,6 +325,38 @@ void callWithEachNetworkCallback(
 	}
 }
 
+template <class CallbackTypeBase, class CallbackTypeDerived>
+void callWithEachNetworkCallbackDerived(
+    const std::string &ifname, int network_id,
+    const std::function<
+	android::hardware::Return<void>(android::sp<CallbackTypeDerived>)> &method,
+    const std::map<
+	const std::string, std::vector<android::sp<CallbackTypeBase>>>
+	&callbacks_map)
+{
+	if (ifname.empty())
+		return;
+
+	// Generate the key to be used to lookup the network.
+	const std::string network_key =
+	    getNetworkObjectMapKey(ifname, network_id);
+	auto network_callback_map_iter = callbacks_map.find(network_key);
+	if (network_callback_map_iter == callbacks_map.end())
+		return;
+	const auto &network_callback_list = network_callback_map_iter->second;
+	for (const auto &callback : network_callback_list) {
+		android::sp<CallbackTypeDerived> callback_derived =
+		    CallbackTypeDerived::castFrom(callback);
+		if (callback_derived == nullptr)
+			continue;
+		if (!method(callback_derived).isOk()) {
+			wpa_printf(
+			    MSG_ERROR,
+			    "Failed to invoke HIDL network callback");
+		}
+	}
+}
+
 int parseGsmAuthNetworkRequest(
     const std::string &params_str,
     std::vector<hidl_array<uint8_t, kGsmRandLenBytes>> *out_rands)
@@ -428,6 +438,8 @@ int HidlManager::registerHidlService(struct wpa_global *global)
 
 	// Create the main hidl service object and register it.
 	supplicant_object_ = new Supplicant(global);
+	wpa_global_ = global;
+	death_notifier_ = sp<DeathNotifier>::make(global);
 	if (global->params.hidl_service_name) {
 		wpa_printf(MSG_DEBUG, "hidl_register service name %s", global->params.hidl_service_name);
 		status = supplicant_object_->registerAsService(global->params.hidl_service_name);
@@ -566,7 +578,7 @@ int HidlManager::unregisterInterface(struct wpa_supplicant *wpa_s)
 	    !removeHidlObjectFromMap(wpa_s->ifname, p2p_iface_object_map_);
 	if (success) {  // assumed to be P2P
 		success = !removeAllIfaceCallbackHidlObjectsFromMap(
-		    wpa_s->ifname, p2p_iface_callbacks_map_);
+		    death_notifier_, wpa_s->ifname, p2p_iface_callbacks_map_);
 #ifdef SUPPLICANT_VENDOR_HIDL
 		wpa_printf(MSG_INFO,"Try to unregister vendor p2 interface");
 		if(removeHidlObjectFromMap(
@@ -585,7 +597,7 @@ int HidlManager::unregisterInterface(struct wpa_supplicant *wpa_s)
 		    wpa_s->ifname, sta_iface_object_map_);
 		if (success) {
 			success = !removeAllIfaceCallbackHidlObjectsFromMap(
-			    wpa_s->ifname, sta_iface_callbacks_map_);
+			    death_notifier_, wpa_s->ifname, sta_iface_callbacks_map_);
 		}
 #ifdef SUPPLICANT_VENDOR_HIDL
 		wpa_printf(MSG_INFO,"Try to unregister vendor interface");
@@ -725,7 +737,7 @@ int HidlManager::unregisterNetwork(
 			return 1;
 		}
 		if (removeAllNetworkCallbackHidlObjectsFromMap(
-			network_key, p2p_network_callbacks_map_))
+			death_notifier_, network_key, p2p_network_callbacks_map_))
 			return 1;
 
 		// Invoke the |onNetworkRemoved| method on all registered
@@ -758,7 +770,7 @@ int HidlManager::unregisterNetwork(
 		}
 #endif
 		if (removeAllNetworkCallbackHidlObjectsFromMap(
-			network_key, sta_network_callbacks_map_))
+			death_notifier_, network_key, sta_network_callbacks_map_))
 			return 1;
 
 		// Invoke the |onNetworkRemoved| method on all registered
@@ -1007,18 +1019,18 @@ void HidlManager::notifyHs20RxSubscriptionRemediation(
 }
 
 /**
- * Notify all listeners about the reception of HS20 immient deauth
+ * Notify all listeners about the reception of HS20 imminent deauth
  * notification from the server.
  *
  * @param wpa_s |wpa_supplicant| struct corresponding to the interface.
  * @param code Deauth reason code sent from server.
  * @param reauth_delay Reauthentication delay in seconds sent from server.
- * @param url URL of the server.
+ * @param url URL of the server containing the reason text.
  */
 void HidlManager::notifyHs20RxDeauthImminentNotice(
     struct wpa_supplicant *wpa_s, u8 code, u16 reauth_delay, const char *url)
 {
-	if (!wpa_s || !url)
+	if (!wpa_s)
 		return;
 
 	if (sta_iface_object_map_.find(wpa_s->ifname) ==
@@ -1030,6 +1042,30 @@ void HidlManager::notifyHs20RxDeauthImminentNotice(
 	    std::bind(
 		&ISupplicantStaIfaceCallback::onHs20DeauthImminentNotice,
 		std::placeholders::_1, wpa_s->bssid, code, reauth_delay, url));
+}
+
+/**
+ * Notify all listeners about the reception of HS20 terms and conditions
+ * acceptance notification from the server.
+ *
+ * @param wpa_s |wpa_supplicant| struct corresponding to the interface.
+ * @param url URL of the T&C server.
+ */
+void HidlManager::notifyHs20RxTermsAndConditionsAcceptance(
+    struct wpa_supplicant *wpa_s, const char *url)
+{
+	if (!wpa_s || !url)
+		return;
+
+	if (sta_iface_object_map_.find(wpa_s->ifname)
+			== sta_iface_object_map_.end())
+		return;
+
+	callWithEachStaIfaceCallback_1_4(wpa_s->ifname,
+			std::bind(
+					&V1_4::ISupplicantStaIfaceCallback
+					::onHs20TermsAndConditionsAcceptanceRequestedNotification,
+					std::placeholders::_1, wpa_s->bssid, url));
 }
 
 /**
@@ -1925,6 +1961,56 @@ void HidlManager::notifyBssTmStatus(struct wpa_supplicant *wpa_s)
 #endif
 }
 
+uint32_t setTransitionDisableFlagsMask(u8 bitmap)
+{
+	uint32_t flags = 0;
+
+	if (bitmap & TRANSITION_DISABLE_WPA3_PERSONAL) {
+		flags |= V1_4::ISupplicantStaNetworkCallback::
+			TransitionDisableIndication::
+			USE_WPA3_PERSONAL;
+		bitmap &= ~TRANSITION_DISABLE_WPA3_PERSONAL;
+	}
+	if (bitmap & TRANSITION_DISABLE_SAE_PK) {
+		flags |= V1_4::ISupplicantStaNetworkCallback::
+			TransitionDisableIndication::
+			USE_SAE_PK;
+		bitmap &= ~TRANSITION_DISABLE_SAE_PK;
+	}
+	if (bitmap & TRANSITION_DISABLE_WPA3_ENTERPRISE) {
+		flags |= V1_4::ISupplicantStaNetworkCallback::
+			TransitionDisableIndication::
+			USE_WPA3_ENTERPRISE;
+		bitmap &= ~TRANSITION_DISABLE_WPA3_ENTERPRISE;
+	}
+	if (bitmap & TRANSITION_DISABLE_ENHANCED_OPEN) {
+		flags |= V1_4::ISupplicantStaNetworkCallback::
+			TransitionDisableIndication::
+			USE_ENHANCED_OPEN;
+		bitmap &= ~TRANSITION_DISABLE_ENHANCED_OPEN;
+	}
+
+	if (bitmap != 0) {
+		wpa_printf(MSG_WARNING, "Unhandled transition disable bit: 0x%x", bitmap);
+	}
+
+	return flags;
+}
+
+void HidlManager::notifyTransitionDisable(struct wpa_supplicant *wpa_s,
+    struct wpa_ssid *ssid, u8 bitmap)
+{
+	uint32_t flag = setTransitionDisableFlagsMask(bitmap);
+	const std::function<
+	    Return<void>(android::sp<V1_4::ISupplicantStaNetworkCallback>)>
+	    func = std::bind(
+		&V1_4::ISupplicantStaNetworkCallback::onTransitionDisable,
+		std::placeholders::_1, flag);
+
+	callWithEachStaNetworkCallbackDerived(wpa_s->ifname, ssid->id, func);
+}
+
+
 /**
  * Retrieve the |ISupplicantP2pIface| hidl object reference using the provided
  * ifname.
@@ -2040,13 +2126,9 @@ int HidlManager::getStaNetworkHidlObjectByIfnameAndNetworkId(
 int HidlManager::addSupplicantCallbackHidlObject(
     const android::sp<ISupplicantCallback> &callback)
 {
-	// Register for death notification before we add it to our list.
-	auto on_hidl_died_fctor = std::bind(
-	    &HidlManager::removeSupplicantCallbackHidlObject, this,
-	    std::placeholders::_1);
 	return registerForDeathAndAddCallbackHidlObjectToList<
 	    ISupplicantCallback>(
-	    callback, on_hidl_died_fctor, supplicant_callbacks_);
+	    death_notifier_, callback, supplicant_callbacks_);
 }
 
 /**
@@ -2062,13 +2144,8 @@ int HidlManager::addP2pIfaceCallbackHidlObject(
     const std::string &ifname,
     const android::sp<ISupplicantP2pIfaceCallback> &callback)
 {
-	const std::function<void(
-	    const android::sp<ISupplicantP2pIfaceCallback> &)>
-	    on_hidl_died_fctor = std::bind(
-		&HidlManager::removeP2pIfaceCallbackHidlObject, this, ifname,
-		std::placeholders::_1);
 	return addIfaceCallbackHidlObjectToMap(
-	    ifname, callback, on_hidl_died_fctor, p2p_iface_callbacks_map_);
+	    death_notifier_, ifname, callback, p2p_iface_callbacks_map_);
 }
 
 /**
@@ -2084,13 +2161,8 @@ int HidlManager::addStaIfaceCallbackHidlObject(
     const std::string &ifname,
     const android::sp<ISupplicantStaIfaceCallback> &callback)
 {
-	const std::function<void(
-	    const android::sp<ISupplicantStaIfaceCallback> &)>
-	    on_hidl_died_fctor = std::bind(
-		&HidlManager::removeStaIfaceCallbackHidlObject, this, ifname,
-		std::placeholders::_1);
 	return addIfaceCallbackHidlObjectToMap(
-	    ifname, callback, on_hidl_died_fctor, sta_iface_callbacks_map_);
+	    death_notifier_, ifname, callback, sta_iface_callbacks_map_);
 }
 
 /**
@@ -2107,13 +2179,8 @@ int HidlManager::addP2pNetworkCallbackHidlObject(
     const std::string &ifname, int network_id,
     const android::sp<ISupplicantP2pNetworkCallback> &callback)
 {
-	const std::function<void(
-	    const android::sp<ISupplicantP2pNetworkCallback> &)>
-	    on_hidl_died_fctor = std::bind(
-		&HidlManager::removeP2pNetworkCallbackHidlObject, this, ifname,
-		network_id, std::placeholders::_1);
 	return addNetworkCallbackHidlObjectToMap(
-	    ifname, network_id, callback, on_hidl_died_fctor,
+	    death_notifier_, ifname, network_id, callback,
 	    p2p_network_callbacks_map_);
 }
 
@@ -2131,13 +2198,8 @@ int HidlManager::addStaNetworkCallbackHidlObject(
     const std::string &ifname, int network_id,
     const android::sp<ISupplicantStaNetworkCallback> &callback)
 {
-	const std::function<void(
-	    const android::sp<ISupplicantStaNetworkCallback> &)>
-	    on_hidl_died_fctor = std::bind(
-		&HidlManager::removeStaNetworkCallbackHidlObject, this, ifname,
-		network_id, std::placeholders::_1);
 	return addNetworkCallbackHidlObjectToMap(
-	    ifname, network_id, callback, on_hidl_died_fctor,
+	    death_notifier_, ifname, network_id, callback,
 	    sta_network_callbacks_map_);
 }
 
@@ -2335,6 +2397,23 @@ void HidlManager::callWithEachStaIfaceCallback_1_3(
 
 /**
  * Helper function to invoke the provided callback method on all the
+ * registered V1.4 interface callback hidl objects for the specified
+ * |ifname|.
+ *
+ * @param ifname Name of the corresponding interface.
+ * @param method Pointer to the required hidl method from
+ * |V1_4::ISupplicantIfaceCallback|.
+ */
+void HidlManager::callWithEachStaIfaceCallback_1_4(
+    const std::string &ifname,
+    const std::function<
+	Return<void>(android::sp<V1_4::ISupplicantStaIfaceCallback>)> &method)
+{
+	callWithEachIfaceCallbackDerived(ifname, method, sta_iface_callbacks_map_);
+}
+
+/**
+ * Helper function to invoke the provided callback method on all the
  * registered derived interface callback hidl objects for the specified
  * |ifname|.
  *
@@ -2404,6 +2483,24 @@ void HidlManager::callWithEachStaNetworkCallback(
 {
 	callWithEachNetworkCallback(
 	    ifname, network_id, method, sta_network_callbacks_map_);
+}
+
+/**
+ * Helper function to invoke the provided callback method on all the
+ * registered derived interface callback hidl objects for the specified
+ * |ifname|.
+ *
+ * @param ifname Name of the corresponding interface.
+ * @param method Pointer to the required hidl method from
+ * derived |V1_x::ISupplicantIfaceCallback|.
+ */
+template <class CallbackTypeDerived>
+void HidlManager::callWithEachStaNetworkCallbackDerived(
+    const std::string &ifname, int network_id,
+    const std::function<
+	Return<void>(android::sp<CallbackTypeDerived>)> &method)
+{
+	callWithEachNetworkCallbackDerived(ifname, network_id, method, sta_network_callbacks_map_);
 }
 
 #ifdef SUPPLICANT_VENDOR_HIDL

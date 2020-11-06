@@ -269,13 +269,13 @@ void wpas_hidl_notify_hs20_rx_subscription_remediation(
 void wpas_hidl_notify_hs20_rx_deauth_imminent_notice(
     struct wpa_supplicant *wpa_s, u8 code, u16 reauth_delay, const char *url)
 {
-	if (!wpa_s || !wpa_s->global->hidl || !url)
+	if (!wpa_s || !wpa_s->global->hidl)
 		return;
 
 	wpa_printf(
 	    MSG_DEBUG,
 	    "Notifying HS20 deauth imminent notice rx to hidl control: %s",
-	    url);
+	    url ? url : "<no URL>");
 
 	HidlManager *hidl_manager = HidlManager::getInstance();
 	if (!hidl_manager)
@@ -283,6 +283,23 @@ void wpas_hidl_notify_hs20_rx_deauth_imminent_notice(
 
 	hidl_manager->notifyHs20RxDeauthImminentNotice(
 	    wpa_s, code, reauth_delay, url);
+}
+
+void wpas_hidl_notify_hs20_rx_terms_and_conditions_acceptance(
+		struct wpa_supplicant *wpa_s, const char *url)
+{
+	if (!wpa_s || !wpa_s->global->hidl || !url)
+		return;
+
+	wpa_printf(MSG_DEBUG,
+			"Notifying HS20 terms and conditions acceptance rx to hidl control: %s",
+			url);
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	hidl_manager->notifyHs20RxTermsAndConditionsAcceptance(wpa_s, url);
 }
 
 void wpas_hidl_notify_disconnect_reason(struct wpa_supplicant *wpa_s)
@@ -907,6 +924,21 @@ void wpas_hidl_notify_bss_tm_status(struct wpa_supplicant *wpa_s)
 
 	hidl_manager->notifyBssTmStatus(wpa_s);
 }
+
+void wpas_hidl_notify_transition_disable(struct wpa_supplicant *wpa_s,
+					    struct wpa_ssid *ssid,
+					    u8 bitmap)
+{
+	if (!wpa_s || !ssid)
+		return;
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	hidl_manager->notifyTransitionDisable(wpa_s, ssid, bitmap);
+}
+
 //Vendor DPP Notifications
 void wpas_hidl_notify_dpp_conf(
     struct wpa_supplicant *wpa_s, u8 type, u8* ssid, u8 ssid_len,

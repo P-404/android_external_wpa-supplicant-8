@@ -252,6 +252,7 @@ struct sae_password_entry {
 	u8 peer_addr[ETH_ALEN];
 	int vlan_id;
 	struct sae_pt *pt;
+	struct sae_pk *pk;
 };
 
 struct dpp_controller_conf {
@@ -668,6 +669,9 @@ struct hostapd_bss_config {
 	u8 bss_load_test_set;
 	struct wpabuf *own_ie_override;
 	int sae_reflection_attack;
+	int sae_commit_status;
+	int sae_pk_omit;
+	int sae_pk_password_check_skip;
 	struct wpabuf *sae_commit_override;
 	struct wpabuf *rsne_override_eapol;
 	struct wpabuf *rsnxe_override_eapol;
@@ -678,6 +682,13 @@ struct hostapd_bss_config {
 	int no_beacon_rsnxe;
 	int skip_prune_assoc;
 	int ft_rsnxe_used;
+	unsigned int oci_freq_override_eapol_m3;
+	unsigned int oci_freq_override_eapol_g1;
+	unsigned int oci_freq_override_saquery_req;
+	unsigned int oci_freq_override_saquery_resp;
+	unsigned int oci_freq_override_ft_assoc;
+	unsigned int oci_freq_override_fils_assoc;
+	unsigned int oci_freq_override_wnm_sleep;
 #endif /* CONFIG_TESTING_OPTIONS */
 
 #define MESH_ENABLED BIT(0)
@@ -1131,6 +1142,8 @@ int hostapd_config_check(struct hostapd_config *conf, int full_config);
 void hostapd_set_security_params(struct hostapd_bss_config *bss,
 				 int full_config);
 int hostapd_sae_pw_id_in_use(struct hostapd_bss_config *conf);
+bool hostapd_sae_pk_in_use(struct hostapd_bss_config *conf);
+bool hostapd_sae_pk_exclusively(struct hostapd_bss_config *conf);
 int hostapd_setup_sae_pt(struct hostapd_bss_config *conf);
 
 #endif /* HOSTAPD_CONFIG_H */
