@@ -402,7 +402,7 @@ Return<void> StaIface::initiateTdlsTeardown(
 }
 Return<void> StaIface::initiateAnqpQuery(
     const hidl_array<uint8_t, 6> &mac_address,
-    const hidl_vec<ISupplicantStaIface::AnqpInfoId> &info_elements,
+    const hidl_vec<V1_0::ISupplicantStaIface::AnqpInfoId> &info_elements,
     const hidl_vec<ISupplicantStaIface::Hs20AnqpSubtypes> &sub_types,
     initiateAnqpQuery_cb _hidl_cb)
 {
@@ -410,6 +410,15 @@ Return<void> StaIface::initiateAnqpQuery(
 	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
 	    &StaIface::initiateAnqpQueryInternal, _hidl_cb, mac_address,
 	    info_elements, sub_types);
+}
+
+Return<void> StaIface::initiateVenueUrlAnqpQuery(
+    const hidl_array<uint8_t, 6> &mac_address,
+	initiateVenueUrlAnqpQuery_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, V1_4::SupplicantStatusCode::FAILURE_IFACE_INVALID,
+	    &StaIface::initiateVenueUrlAnqpQueryInternal, _hidl_cb, mac_address);
 }
 
 Return<void> StaIface::initiateHs20IconQuery(
@@ -681,6 +690,14 @@ Return<void> StaIface::getWpaDriverCapabilities(
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_UNKNOWN,
 	    &StaIface::getWpaDriverCapabilitiesInternal, _hidl_cb);
+}
+
+Return<void> StaIface::getWpaDriverCapabilities_1_4(
+		getWpaDriverCapabilities_1_4_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, V1_4::SupplicantStatusCode::FAILURE_UNKNOWN,
+	    &StaIface::getWpaDriverCapabilitiesInternal_1_4, _hidl_cb);
 }
 
 Return<void> StaIface::setMboCellularDataStatus(bool available,
@@ -976,6 +993,19 @@ SupplicantStatus StaIface::initiateAnqpQueryInternal(
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
+}
+
+V1_4::SupplicantStatus StaIface::initiateVenueUrlAnqpQueryInternal(
+    const std::array<uint8_t, 6> &mac_address)
+{
+	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+	uint16_t info_elems_buf[1] = {ANQP_VENUE_URL};
+
+	if (anqp_send_req(
+		wpa_s, mac_address.data(), 0, info_elems_buf, 1, 0, 0)) {
+		return {V1_4::SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+	}
+	return {V1_4::SupplicantStatusCode::SUCCESS, ""};
 }
 
 SupplicantStatus StaIface::initiateHs20IconQueryInternal(
@@ -1513,6 +1543,12 @@ StaIface::getConnectionCapabilitiesInternal_1_4()
 std::pair<SupplicantStatus, uint32_t>
 StaIface::getWpaDriverCapabilitiesInternal()
 {
+	return {{SupplicantStatusCode::FAILURE_UNKNOWN, "deprecated"}, 0};
+}
+
+std::pair<V1_4::SupplicantStatus, uint32_t>
+StaIface::getWpaDriverCapabilitiesInternal_1_4()
+{
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	uint32_t mask = 0;
 
@@ -1526,10 +1562,13 @@ StaIface::getWpaDriverCapabilitiesInternal()
 		mask |= V1_3::WpaDriverCapabilitiesMask::OCE;
 	}
 #endif
+#ifdef CONFIG_SAE_PK
+	mask |= V1_4::WpaDriverCapabilitiesMask::SAE_PK;
+#endif
 
 	wpa_printf(MSG_DEBUG, "Driver capability mask: 0x%x", mask);
 
-	return {{SupplicantStatusCode::SUCCESS, ""}, mask};
+	return {{V1_4::SupplicantStatusCode::SUCCESS, ""}, mask};
 }
 
 SupplicantStatus StaIface::setMboCellularDataStatusInternal(bool available)

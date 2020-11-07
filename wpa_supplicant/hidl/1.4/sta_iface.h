@@ -109,9 +109,12 @@ public:
 	    initiateTdlsTeardown_cb _hidl_cb) override;
 	Return<void> initiateAnqpQuery(
 	    const hidl_array<uint8_t, 6>& mac_address,
-	    const hidl_vec<ISupplicantStaIface::AnqpInfoId>& info_elements,
+	    const hidl_vec<V1_0::ISupplicantStaIface::AnqpInfoId>& info_elements,
 	    const hidl_vec<ISupplicantStaIface::Hs20AnqpSubtypes>& sub_types,
 	    initiateAnqpQuery_cb _hidl_cb) override;
+	Return<void> initiateVenueUrlAnqpQuery(
+	    const hidl_array<uint8_t, 6>& mac_address,
+		initiateVenueUrlAnqpQuery_cb _hidl_cb) override;
 	Return<void> initiateHs20IconQuery(
 	    const hidl_array<uint8_t, 6>& mac_address,
 	    const hidl_string& file_name,
@@ -200,6 +203,8 @@ public:
 	    setMboCellularDataStatus_cb _hidl_cb) override;
 	Return<void> getKeyMgmtCapabilities_1_3(
 	    getKeyMgmtCapabilities_1_3_cb _hidl_cb) override;
+	Return<void> getWpaDriverCapabilities_1_4(
+	    getWpaDriverCapabilities_1_4_cb _hidl_cb) override;
 
 private:
 	// Corresponding worker functions for the HIDL methods.
@@ -237,6 +242,8 @@ private:
 	    const std::vector<ISupplicantStaIface::AnqpInfoId>& info_elements,
 	    const std::vector<ISupplicantStaIface::Hs20AnqpSubtypes>&
 		sub_types);
+	V1_4::SupplicantStatus initiateVenueUrlAnqpQueryInternal(
+	    const std::array<uint8_t, 6>& mac_address);
 	SupplicantStatus initiateHs20IconQueryInternal(
 	    const std::array<uint8_t, 6>& mac_address,
 	    const std::string& file_name);
@@ -295,6 +302,7 @@ private:
 	std::pair<SupplicantStatus, uint32_t> getWpaDriverCapabilitiesInternal();
 	SupplicantStatus setMboCellularDataStatusInternal(bool available);
 	std::pair<SupplicantStatus, uint32_t> getKeyMgmtCapabilitiesInternal_1_3();
+	std::pair<V1_4::SupplicantStatus, uint32_t> getWpaDriverCapabilitiesInternal_1_4();
 
 	struct wpa_supplicant* retrieveIfacePtr();
 
