@@ -882,6 +882,20 @@ Return<void> P2pIface::setMacRandomization(bool enable, setMacRandomization_cb _
 	    &P2pIface::setMacRandomizationInternal, _hidl_cb, enable);
 }
 
+Return<void> P2pIface::setEdmg(bool enable, setEdmg_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &P2pIface::setEdmgInternal, _hidl_cb, enable);
+}
+
+Return<void> P2pIface::getEdmg(getEdmg_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, V1_4::SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &P2pIface::getEdmgInternal, _hidl_cb);
+}
+
 std::pair<SupplicantStatus, std::string> P2pIface::getNameInternal()
 {
 	return {{SupplicantStatusCode::SUCCESS, ""}, ifname_};
@@ -1787,14 +1801,6 @@ SupplicantStatus P2pIface::setMacRandomizationInternal(bool enable)
 	bool currentEnabledState = !!wpa_s->conf->p2p_device_random_mac_addr;
 	u8 *addr = NULL;
 
-	// A dedicated p2p device is not managed by supplicant,
-	// supplicant could not change its MAC address.
-	if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_DEDICATED_P2P_DEVICE) {
-		wpa_printf(MSG_ERROR,
-			"Dedicated P2P device don't support MAC randomization");
-		return {SupplicantStatusCode::FAILURE_ARGS_INVALID, "NotSupported"};
-	}
-
 	// The same state, no change is needed.
 	if (currentEnabledState == enable) {
 		wpa_printf(MSG_DEBUG, "The random MAC is %s already.",
@@ -1836,6 +1842,22 @@ SupplicantStatus P2pIface::setMacRandomizationInternal(bool enable)
 	os_memcpy(wpa_s->global->p2p->cfg->dev_addr, wpa_s->global->p2p_dev_addr, ETH_ALEN);
 
 	return {SupplicantStatusCode::SUCCESS, ""};
+}
+
+V1_4::SupplicantStatus P2pIface::setEdmgInternal(bool enable)
+{
+	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
+	wpa_printf(MSG_DEBUG, "set p2p_go_edmg to %d", enable);
+	wpa_s->conf->p2p_go_edmg = enable ? 1 : 0;
+	wpa_s->p2p_go_edmg = enable ? 1 : 0;
+	return {V1_4::SupplicantStatusCode::SUCCESS, ""};
+}
+
+std::pair<V1_4::SupplicantStatus, bool> P2pIface::getEdmgInternal()
+{
+	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
+	return {{V1_4::SupplicantStatusCode::SUCCESS, ""},
+		(wpa_s->p2p_go_edmg == 1)};
 }
 
 /**

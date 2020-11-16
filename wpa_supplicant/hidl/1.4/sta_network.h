@@ -62,6 +62,9 @@ public:
 	Return<void> registerCallback(
 	    const sp<ISupplicantStaNetworkCallback>& callback,
 	    registerCallback_cb _hidl_cb) override;
+	Return<void> registerCallback_1_4(
+	    const sp<V1_4::ISupplicantStaNetworkCallback>& callback,
+	    registerCallback_1_4_cb _hidl_cb) override;
 	Return<void> setSsid(
 	    const hidl_vec<uint8_t>& ssid, setSsid_cb _hidl_cb) override;
 	Return<void> setBssid(
@@ -268,6 +271,7 @@ public:
 	    setGroupCipher_1_4_cb _hidl_cb) override;
 	Return<void> getGroupCipher_1_4(
 	    getGroupCipher_1_4_cb _hidl_cb) override;
+	Return<void> enableSaeH2eOnlyMode(bool enable, enableSaeH2eOnlyMode_cb _hidl_cb) override;
 
 private:
 	// Corresponding worker functions for the HIDL methods.
@@ -276,6 +280,8 @@ private:
 	std::pair<SupplicantStatus, IfaceType> getTypeInternal();
 	SupplicantStatus registerCallbackInternal(
 	    const sp<ISupplicantStaNetworkCallback>& callback);
+	V1_4::SupplicantStatus registerCallback_1_4Internal(
+	    const sp<V1_4::ISupplicantStaNetworkCallback>& callback);
 	SupplicantStatus setSsidInternal(const std::vector<uint8_t>& ssid);
 	SupplicantStatus setBssidInternal(const std::array<uint8_t, 6>& bssid);
 	SupplicantStatus setScanSsidInternal(bool enable);
@@ -317,7 +323,7 @@ private:
 	SupplicantStatus setProactiveKeyCachingInternal(bool enable);
 	SupplicantStatus setIdStrInternal(const std::string& id_str);
 	SupplicantStatus setUpdateIdentifierInternal(uint32_t id);
-	SupplicantStatus setEdmgInternal(bool enable);
+	V1_4::SupplicantStatus setEdmgInternal(bool enable);
 	std::pair<SupplicantStatus, std::vector<uint8_t>> getSsidInternal();
 	std::pair<SupplicantStatus, std::array<uint8_t, 6>> getBssidInternal();
 	std::pair<SupplicantStatus, bool> getScanSsidInternal();
@@ -358,7 +364,7 @@ private:
 	std::pair<SupplicantStatus, std::string> getIdStrInternal();
 	std::pair<SupplicantStatus, std::vector<uint8_t>>
 	getWpsNfcConfigurationTokenInternal();
-	std::pair<SupplicantStatus, bool> getEdmgInternal();
+	std::pair<V1_4::SupplicantStatus, bool> getEdmgInternal();
 	SupplicantStatus enableInternal(bool no_connect);
 	SupplicantStatus disableInternal();
 	SupplicantStatus selectInternal();
@@ -402,11 +408,12 @@ private:
 	    uint32_t pairwise_cipher_mask);
 	SupplicantStatus setWapiPskInternal(const std::vector<uint8_t>& psk);
 	std::pair<SupplicantStatus, std::vector<uint8_t>> getWapiPskInternal();
-	std::pair<SupplicantStatus, uint32_t> getGroupCipher_1_4Internal();
-	SupplicantStatus setGroupCipher_1_4Internal(uint32_t group_cipher_mask);
-	std::pair<SupplicantStatus, uint32_t> getPairwiseCipher_1_4Internal();
-	SupplicantStatus setPairwiseCipher_1_4Internal(
+	std::pair<V1_4::SupplicantStatus, uint32_t> getGroupCipher_1_4Internal();
+	V1_4::SupplicantStatus setGroupCipher_1_4Internal(uint32_t group_cipher_mask);
+	std::pair<V1_4::SupplicantStatus, uint32_t> getPairwiseCipher_1_4Internal();
+	V1_4::SupplicantStatus setPairwiseCipher_1_4Internal(
 	    uint32_t pairwise_cipher_mask);
+	V1_4::SupplicantStatus enableSaeH2eOnlyModeInternal(bool enable);
 
 	struct wpa_ssid* retrieveNetworkPtr();
 	struct wpa_supplicant* retrieveIfacePtr();

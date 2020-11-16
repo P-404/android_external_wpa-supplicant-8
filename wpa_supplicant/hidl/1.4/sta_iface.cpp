@@ -231,6 +231,7 @@ namespace V1_4 {
 namespace implementation {
 using hidl_return_util::validateAndCall;
 using V1_0::ISupplicantStaIfaceCallback;
+using V1_0::SupplicantStatusCode;
 
 StaIface::StaIface(struct wpa_global *wpa_global, const char ifname[])
     : wpa_global_(wpa_global), ifname_(ifname), is_valid_(true)
@@ -339,6 +340,16 @@ Return<void> StaIface::registerCallback_1_3(
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
 	    &StaIface::registerCallbackInternal, _hidl_cb, callback_1_3);
+}
+
+Return<void> StaIface::registerCallback_1_4(
+    const sp<V1_4::ISupplicantStaIfaceCallback> &callback,
+    registerCallback_1_4_cb _hidl_cb)
+{
+	sp<V1_4::ISupplicantStaIfaceCallback> callback_1_4 = callback;
+	return validateAndCall(
+	    this, V1_4::SupplicantStatusCode::FAILURE_IFACE_INVALID,
+	    &StaIface::registerCallbackInternal_1_4, _hidl_cb, callback_1_4);
 }
 
 Return<void> StaIface::reassociate(reassociate_cb _hidl_cb)
@@ -773,7 +784,7 @@ Return<void> StaIface::getConnectionCapabilities_1_4(
     getConnectionCapabilities_1_4_cb _hidl_cb)
 {
 	return validateAndCall(
-	    this, SupplicantStatusCode::FAILURE_UNKNOWN,
+	    this, V1_4::SupplicantStatusCode::FAILURE_UNKNOWN,
 	    &StaIface::getConnectionCapabilitiesInternal_1_4, _hidl_cb);
 }
 
@@ -824,12 +835,18 @@ StaIface::listNetworksInternal()
 SupplicantStatus StaIface::registerCallbackInternal(
     const sp<ISupplicantStaIfaceCallback> &callback)
 {
+	return {SupplicantStatusCode::FAILURE_UNKNOWN, "deprecated"};
+}
+
+V1_4::SupplicantStatus StaIface::registerCallbackInternal_1_4(
+    const sp<V1_4::ISupplicantStaIfaceCallback> &callback)
+{
 	HidlManager *hidl_manager = HidlManager::getInstance();
 	if (!hidl_manager ||
 	    hidl_manager->addStaIfaceCallbackHidlObject(ifname_, callback)) {
-		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+		return {V1_4::SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
-	return {SupplicantStatusCode::SUCCESS, ""};
+	return {V1_4::SupplicantStatusCode::SUCCESS, ""};
 }
 
 SupplicantStatus StaIface::reassociateInternal()
@@ -955,9 +972,10 @@ SupplicantStatus StaIface::initiateAnqpQueryInternal(
 		    static_cast<std::underlying_type<
 			ISupplicantStaIface::Hs20AnqpSubtypes>::type>(type));
 	}
+
 	if (anqp_send_req(
-		wpa_s, mac_address.data(), info_elems_buf, num_info_elems,
-		sub_types_bitmask, false)) {
+		wpa_s, mac_address.data(), 0, info_elems_buf, num_info_elems,
+		sub_types_bitmask, 0)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
@@ -1442,7 +1460,7 @@ StaIface::getConnectionCapabilitiesInternal()
 	return {{SupplicantStatusCode::FAILURE_UNKNOWN, "deprecated"}, capa};
 }
 
-std::pair<SupplicantStatus, ConnectionCapabilities>
+std::pair<V1_4::SupplicantStatus, ConnectionCapabilities>
 StaIface::getConnectionCapabilitiesInternal_1_4()
 {
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
@@ -1494,7 +1512,7 @@ StaIface::getConnectionCapabilitiesInternal_1_4()
 		capa.V1_3.maxNumberRxSpatialStreams = 1;
 		capa.legacyMode = LegacyMode::UNKNOWN;
 	}
-	return {{SupplicantStatusCode::SUCCESS, ""}, capa};
+	return {{V1_4::SupplicantStatusCode::SUCCESS, ""}, capa};
 }
 
 std::pair<SupplicantStatus, uint32_t>

@@ -2573,6 +2573,7 @@ static const struct parse_data ssid_fields[] = {
 	{ STR_LEN(dpp_netaccesskey) },
 	{ INT(dpp_netaccesskey_expiry) },
 	{ STR_LEN(dpp_csign) },
+	{ STR_LEN(dpp_pp_key) },
 	{ INT_RANGE(dpp_pfs, 0, 2) },
 #endif /* CONFIG_DPP */
 	{ INT_RANGE(owe_group, 0, 65535) },
@@ -2582,6 +2583,7 @@ static const struct parse_data ssid_fields[] = {
 	{ INT_RANGE(ft_eap_pmksa_caching, 0, 1) },
 	{ INT_RANGE(beacon_prot, 0, 1) },
 	{ INT_RANGE(transition_disable, 0, 255) },
+	{ INT_RANGE(sae_pk, 0, 2) },
 };
 
 #undef OFFSET
@@ -2775,6 +2777,7 @@ void wpa_config_free_ssid(struct wpa_ssid *ssid)
 	os_free(ssid->dpp_connector);
 	bin_clear_free(ssid->dpp_netaccesskey, ssid->dpp_netaccesskey_len);
 	os_free(ssid->dpp_csign);
+	os_free(ssid->dpp_pp_key);
 	while ((psk = dl_list_first(&ssid->psk_list, struct psk_list_entry,
 				    list))) {
 		dl_list_del(&psk->list);
@@ -3035,6 +3038,8 @@ void wpa_config_set_network_defaults(struct wpa_ssid *ssid)
 	ssid->wpa_deny_ptk0_rekey = PTK0_REKEY_ALLOW_ALWAYS;
 	ssid->bg_scan_period = DEFAULT_BG_SCAN_PERIOD;
 	ssid->ht = 1;
+	ssid->vht = 1;
+	ssid->he = 1;
 #ifdef IEEE8021X_EAPOL
 	ssid->eapol_flags = DEFAULT_EAPOL_FLAGS;
 	ssid->eap_workaround = DEFAULT_EAP_WORKAROUND;
@@ -3141,6 +3146,7 @@ int wpa_config_set(struct wpa_ssid *ssid, const char *var, const char *value,
 		}
 		ret = -1;
 	}
+	ssid->was_recently_reconfigured = true;
 
 	return ret;
 }
@@ -4263,9 +4269,9 @@ struct wpa_config * wpa_config_alloc_empty(const char *ctrl_interface,
 	const struct hostapd_wmm_ac_params ac_be =
 		{ aCWmin, aCWmax, 3, 0, 0 }; /* best effort traffic */
 	const struct hostapd_wmm_ac_params ac_vi = /* video traffic */
-		{ aCWmin - 1, aCWmin, 2, 3000 / 32, 0 };
+		{ aCWmin - 1, aCWmin, 2, 3008 / 32, 0 };
 	const struct hostapd_wmm_ac_params ac_vo = /* voice traffic */
-		{ aCWmin - 2, aCWmin - 1, 2, 1500 / 32, 0 };
+		{ aCWmin - 2, aCWmin - 1, 2, 1504 / 32, 0 };
 	const struct hostapd_tx_queue_params txq_bk =
 		{ 7, ecw2cw(aCWmin), ecw2cw(aCWmax), 0 };
 	const struct hostapd_tx_queue_params txq_be =
@@ -4359,13 +4365,31 @@ void wpa_config_debug_dump_networks(struct wpa_config *config)
 #endif /* CONFIG_NO_STDOUT_DEBUG */
 
 
+/**
+ * Structure for global configuration parsing. This data is used to implement a
+ * generic parser for the global interface configuration. The table of variables
+ * is defined below in this file (global_fields[]).
+ */
 struct global_parse_data {
+	/* Configuration variable name */
 	char *name;
+
+	/* Parser function for this variable. The parser functions return 0 or 1
+	 * to indicate success. Value 0 indicates that the parameter value may
+	 * have changed while value 1 means that the value did not change.
+	 * Error cases (failure to parse the string) are indicated by returning
+	 * -1. */
 	int (*parser)(const struct global_parse_data *data,
 		      struct wpa_config *config, int line, const char *value);
+
+	/* Getter function to print the variable in text format to buf. */
 	int (*get)(const char *name, struct wpa_config *config, long offset,
 		   char *buf, size_t buflen, int pretty_print);
+
+	/* Variable specific parameters for the parser. */
 	void *param1, *param2, *param3;
+
+	/* Indicates which configuration variable has changed. */
 	unsigned int changed_flag;
 };
 
@@ -4376,6 +4400,7 @@ static int wpa_global_config_parse_int(const struct global_parse_data *data,
 {
 	int val, *dst;
 	char *end;
+	bool same;
 
 	dst = (int *) (((u8 *) config) + (long) data->param1);
 	val = strtol(pos, &end, 0);
@@ -4384,6 +4409,7 @@ static int wpa_global_config_parse_int(const struct global_parse_data *data,
 			   line, pos);
 		return -1;
 	}
+	same = *dst == val;
 	*dst = val;
 
 	wpa_printf(MSG_DEBUG, "%s=%d", data->name, *dst);
@@ -4404,7 +4430,7 @@ static int wpa_global_config_parse_int(const struct global_parse_data *data,
 		return -1;
 	}
 
-	return 0;
+	return same;
 }
 
 
@@ -4412,7 +4438,7 @@ static int wpa_global_config_parse_str(const struct global_parse_data *data,
 				       struct wpa_config *config, int line,
 				       const char *pos)
 {
-	size_t len;
+	size_t len, prev_len;
 	char **dst, *tmp;
 
 	len = os_strlen(pos);
@@ -4436,11 +4462,22 @@ static int wpa_global_config_parse_str(const struct global_parse_data *data,
 		return -1;
 	}
 
+	dst = (char **) (((u8 *) config) + (long) data->param1);
+	if (*dst)
+		prev_len = os_strlen(*dst);
+	else
+		prev_len = 0;
+
+	/* No change to the previously configured value */
+	if ((!(*dst) && !pos) ||
+	    (*dst && pos && prev_len == len &&
+	     os_memcmp(*dst, pos, len) == 0))
+		return 1;
+
 	tmp = os_strdup(pos);
 	if (tmp == NULL)
 		return -1;
 
-	dst = (char **) (((u8 *) config) + (long) data->param1);
 	os_free(*dst);
 	*dst = tmp;
 	wpa_printf(MSG_DEBUG, "%s='%s'", data->name, *dst);
@@ -4481,6 +4518,10 @@ static int wpa_global_config_parse_bin(const struct global_parse_data *data,
 		return -1;
 
 	dst = (struct wpabuf **) (((u8 *) config) + (long) data->param1);
+	if (wpabuf_cmp(*dst, tmp) == 0) {
+		wpabuf_free(tmp);
+		return 1;
+	}
 	wpabuf_free(*dst);
 	*dst = tmp;
 	wpa_printf(MSG_DEBUG, "%s", data->name);
@@ -4522,6 +4563,8 @@ static int wpa_global_config_parse_ipv4(const struct global_parse_data *data,
 		return -1;
 
 	dst = (u32 *) (((u8 *) config) + (long) data->param1);
+	if (os_memcmp(dst, &addr.u.v4.s_addr, 4) == 0)
+		return 1;
 	os_memcpy(dst, &addr.u.v4.s_addr, 4);
 	wpa_printf(MSG_DEBUG, "%s = 0x%x", data->name,
 		   WPA_GET_BE32((u8 *) dst));
@@ -4539,6 +4582,8 @@ static int wpa_config_process_country(const struct global_parse_data *data,
 		wpa_printf(MSG_DEBUG, "Invalid country set");
 		return -1;
 	}
+	if (pos[0] == config->country[0] && pos[1] == config->country[1])
+		return 1;
 	config->country[0] = pos[0];
 	config->country[1] = pos[1];
 	wpa_printf(MSG_DEBUG, "country='%c%c'",
@@ -4922,7 +4967,7 @@ static const struct global_parse_data global_fields[] = {
 	{ INT_RANGE(eapol_version, 1, 2), 0 },
 #endif /* CONFIG_MACSEC */
 	{ INT(ap_scan), 0 },
-	{ FUNC(bgscan), 0 },
+	{ FUNC(bgscan), CFG_CHANGED_BGSCAN },
 #ifdef CONFIG_MESH
 	{ INT(user_mpm), 0 },
 	{ INT_RANGE(max_peer_links, 0, 255), 0 },
@@ -4996,6 +5041,7 @@ static const struct global_parse_data global_fields[] = {
 	{ INT(p2p_device_random_mac_addr), 0 },
 	{ FUNC(p2p_device_persistent_mac_addr), 0 },
 	{ INT(p2p_interface_random_mac_addr), 0 },
+	{ INT(p2p_6ghz_disable), 0 },
 #endif /* CONFIG_P2P */
 	{ FUNC(country), CFG_CHANGED_COUNTRY },
 	{ INT(bss_max_count), 0 },
@@ -5157,6 +5203,19 @@ const char * wpa_config_get_global_field_name(unsigned int i, int *no_var)
 }
 
 
+/**
+ * wpa_config_process_global - Set a variable in global configuration
+ * @config: Pointer to global configuration data
+ * @pos: Name and value in the format "{name}={value}"
+ * @line: Line number in configuration file or 0 if not used
+ * Returns: 0 on success with a possible change in value, 1 on success with no
+ * change to previously configured value, or -1 on failure
+ *
+ * This function can be used to set global configuration variables based on
+ * both the configuration file and management interface input. The value
+ * parameter must be in the same format as the text-based configuration file is
+ * using. For example, strings are using double quotation marks.
+ */
 int wpa_config_process_global(struct wpa_config *config, char *pos, int line)
 {
 	size_t i;
@@ -5169,11 +5228,14 @@ int wpa_config_process_global(struct wpa_config *config, char *pos, int line)
 		    pos[flen] != '=')
 			continue;
 
-		if (field->parser(field, config, line, pos + flen + 1)) {
+		ret = field->parser(field, config, line, pos + flen + 1);
+		if (ret < 0) {
 			wpa_printf(MSG_ERROR, "Line %d: failed to "
 				   "parse '%s'.", line, pos);
 			ret = -1;
 		}
+		if (ret == 1)
+			break;
 		if (field->changed_flag == CFG_CHANGED_NFC_PASSWORD_TOKEN)
 			config->wps_nfc_pw_from_config = 1;
 		config->changed_parameters |= field->changed_flag;

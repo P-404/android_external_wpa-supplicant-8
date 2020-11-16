@@ -262,6 +262,10 @@ endif
 ifeq ($(CONFIG_SAE),y)
 L_CFLAGS += -DCONFIG_SAE
 OBJS += src/common/sae.c
+ifdef CONFIG_SAE_PK
+L_CFLAGS += -DCONFIG_SAE_PK
+OBJS += src/common/sae_pk.c
+endif
 NEED_ECC=y
 NEED_DH_GROUPS=y
 NEED_HMAC_SHA256_KDF=y
@@ -426,7 +430,7 @@ endif
 ifdef CONFIG_EAP_SIM_COMMON
 OBJS += src/eap_common/eap_sim_common.c
 # Example EAP-SIM/AKA interface for GSM/UMTS authentication. This can be
-# replaced with another file implementating the interface specified in
+# replaced with another file implementing the interface specified in
 # eap_sim_db.h.
 OBJS += src/eap_server/eap_sim_db.c
 NEED_FIPS186_2_PRF=y

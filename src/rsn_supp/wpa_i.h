@@ -95,6 +95,7 @@ struct wpa_sm {
 	int mfp; /* 0 = disabled, 1 = optional, 2 = mandatory */
 	int ocv; /* Operating Channel Validation */
 	int sae_pwe; /* SAE PWE generation options */
+	int sae_pk; /* whether SAE-PK is used */
 	int adaptive11r_key_mgmt;
 
 	u8 *assoc_wpa_ie; /* Own WPA/RSN IE from (Re)AssocReq */
@@ -155,6 +156,10 @@ struct wpa_sm {
 #ifdef CONFIG_TESTING_OPTIONS
 	struct wpabuf *test_assoc_ie;
 	int ft_rsnxe_used;
+	unsigned int oci_freq_override_eapol;
+	unsigned int oci_freq_override_eapol_g2;
+	unsigned int oci_freq_override_ft_assoc;
+	unsigned int oci_freq_override_fils_assoc;
 #endif /* CONFIG_TESTING_OPTIONS */
 
 #ifdef CONFIG_FILS
