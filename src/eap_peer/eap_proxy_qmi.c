@@ -40,6 +40,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "user_identity_module_v01.h"
 #include "eap_config.h"
 #include "common/wpa_ctrl.h"
+#include "eap_common/eap_sim_common.h"
 #if defined(ANDROID)
 #include <cutils/properties.h>
 #ifdef CONFIG_EAP_PROXY_MDM_DETECT
@@ -2273,6 +2274,18 @@ static bool eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, stru
                         wpa_printf(MSG_ERROR, "eap_proxy: EAP_IDENTITY_ANNONYMOUS selected user id "
                                 "%d, annonymous %d\n", eap_auth_start.user_id_len,
                                 eap_auth_start.eap_meta_identity_len);
+
+                        /* Is encrypted IMSI required? */
+                        if (eap_sim_anonymous_username(config->anonymous_identity,
+                                                       config->anonymous_identity_len)) {
+                            eap_auth_start.use_encrypted_imsi = 1;
+                            eap_auth_start.use_encrypted_imsi_valid = 1;
+                            wpa_printf(MSG_DEBUG, "eap_proxy: Using IMSI encryption for this connection.");
+
+                            /* IMSI encryption requires Real IMSI-Identitity */
+                            identity_format = EAP_IDENTITY_IMSI_3GPP_REALM;
+                            eap_auth_start.user_id_valid = 1;
+                        }
                 } else {
                         /* config file doesn't contain any identity
                                 generating IMSI@realm */
