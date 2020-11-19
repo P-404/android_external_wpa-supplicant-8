@@ -10,9 +10,14 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <net/if.h>
+#include <sys/socket.h>
+#include <linux/if_bridge.h>
+
 
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 
 #include "hostapd.h"
 #include "hidl_return_util.h"
@@ -20,6 +25,7 @@
 extern "C"
 {
 #include "common/wpa_ctrl.h"
+#include "drivers/linux_ioctl.h"
 #include "ap/ap_drv_ops.h"
 }
 
@@ -37,6 +43,46 @@ using android::base::WriteStringToFile;
 using android::hardware::wifi::hostapd::V1_3::IHostapd;
 using android::hardware::wifi::hostapd::V1_3::Generation;
 using android::hardware::wifi::hostapd::V1_3::Bandwidth;
+
+#define MAX_PORTS 1024
+bool GetInterfacesInBridge(std::string br_name,
+                           std::vector<std::string>* interfaces) {
+	android::base::unique_fd sock(socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0));
+	if (sock.get() < 0) {
+		wpa_printf(MSG_ERROR, "Failed to create sock (%s) in %s",
+			strerror(errno), __FUNCTION__);
+		return false;
+	}
+
+	struct ifreq request;
+	int i, ifindices[MAX_PORTS];
+	char if_name[IFNAMSIZ];
+	unsigned long args[3];
+
+	memset(ifindices, 0, MAX_PORTS * sizeof(int));
+
+	args[0] = BRCTL_GET_PORT_LIST;
+	args[1] = (unsigned long) ifindices;
+	args[2] = MAX_PORTS;
+
+	strlcpy(request.ifr_name, br_name.c_str(), IFNAMSIZ);
+	request.ifr_data = (char *)args;
+
+	if (ioctl(sock.get(), SIOCDEVPRIVATE, &request) < 0) {
+		wpa_printf(MSG_ERROR, "Failed to ioctl SIOCDEVPRIVATE in %s",
+			__FUNCTION__);
+		return false;
+	}
+
+	for (i = 0; i < MAX_PORTS; i ++) {
+		memset(if_name, 0, IFNAMSIZ);
+		if (ifindices[i] == 0 || !if_indextoname(ifindices[i], if_name)) {
+			continue;
+		}
+		interfaces->push_back(if_name);
+	}
+	return true;
+}
 
 std::string WriteHostapdConfig(
     const std::string& interface_name, const std::string& config)
@@ -218,8 +264,10 @@ bool validatePassphrase(int passphrase_len, int min_len, int max_len)
 }
 
 std::string CreateHostapdConfig(
-    const IHostapd::IfaceParams& v_iface_params,
-    const IHostapd::NetworkParams& nw_params)
+    const android::hardware::wifi::hostapd::V1_3::IHostapd::IfaceParams& iface_params,
+    const android::hardware::wifi::hostapd::V1_3::IHostapd::ChannelParams& channelParams,
+    const IHostapd::NetworkParams& nw_params,
+    const std::string br_name)
 {
 	if (nw_params.V1_2.V1_0.ssid.size() >
 	    static_cast<uint32_t>(
@@ -244,7 +292,7 @@ std::string CreateHostapdConfig(
 
 	// Encryption config string
 	uint32_t band = 0;
-	band |= iface_params.channelParams.bandMask;
+	band |= channelParams.V1_2.bandMask;
 	bool is_6Ghz_band_only = band == static_cast<uint32_t>(IHostapd::BandMask::BAND_6_GHZ);
 	std::string encryption_config_as_string;
 	switch (nw_params.V1_2.encryptionType) {
@@ -327,10 +375,10 @@ std::string CreateHostapdConfig(
 
 	std::string channel_config_as_string;
 	bool isFirst = true;
-	if (iface_params.V1_1.V1_0.channelParams.enableAcs) {
+	if (channelParams.enableAcs) {
 		std::string freqList_as_string;
 		for (const auto &range :
-		    iface_params.channelParams.acsChannelFreqRangesMhz) {
+		    channelParams.V1_2.acsChannelFreqRangesMhz) {
 			if (!isFirst) {
 				freqList_as_string += ",";
 			}
@@ -347,18 +395,18 @@ std::string CreateHostapdConfig(
 		    "channel=0\n"
 		    "acs_exclude_dfs=%d\n"
 		    "freqlist=%s",
-		    iface_params.V1_1.V1_0.channelParams.acsShouldExcludeDfs,
+		    iface_params.V1_2.V1_1.V1_0.channelParams.acsShouldExcludeDfs,
 		    freqList_as_string.c_str());
 	} else {
 		int op_class = getOpClassForChannel(
-		    iface_params.V1_1.V1_0.channelParams.channel,
+		    channelParams.channel,
 		    band,
-		    iface_params.V1_1.V1_0.hwModeParams.enable80211N,
-		    iface_params.V1_1.V1_0.hwModeParams.enable80211AC);
+		    iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211N,
+		    iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC);
 		channel_config_as_string = StringPrintf(
 		    "channel=%d\n"
 		    "op_class=%d",
-		    iface_params.V1_1.V1_0.channelParams.channel, op_class);
+		    channelParams.channel, op_class);
 	}
 
 	std::string hw_mode_as_string;
@@ -368,7 +416,7 @@ std::string CreateHostapdConfig(
 		if (((band & IHostapd::BandMask::BAND_5_GHZ) != 0)
 		    || ((band & IHostapd::BandMask::BAND_6_GHZ) != 0)) {
 			hw_mode_as_string = "hw_mode=any";
-			if (iface_params.V1_1.V1_0.hwModeParams.enable80211AC) {
+			if (iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC) {
 				ht_cap_vht_oper_chwidth_as_string =
 				    "ht_capab=[HT40+]\n"
 				    "vht_oper_chwidth=1";
@@ -380,7 +428,7 @@ std::string CreateHostapdConfig(
 		if (((band & IHostapd::BandMask::BAND_5_GHZ) != 0)
 		    || ((band & IHostapd::BandMask::BAND_6_GHZ) != 0)) {
 			hw_mode_as_string = "hw_mode=a";
-			if (iface_params.V1_1.V1_0.hwModeParams.enable80211AC) {
+			if (iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC) {
 				ht_cap_vht_oper_chwidth_as_string =
 				    "ht_capab=[HT40+]\n"
 				    "vht_oper_chwidth=1";
@@ -393,7 +441,7 @@ std::string CreateHostapdConfig(
 
 	std::string he_params_as_string;
 #ifdef CONFIG_IEEE80211AX
-	if (iface_params.hwModeParams.enable80211AX) {
+	if (iface_params.V1_2.hwModeParams.enable80211AX) {
 		int he_bss_color = os_random() % 63 + 1;
 		he_params_as_string = StringPrintf(
 		    "ieee80211ax=1\n"
@@ -403,10 +451,10 @@ std::string CreateHostapdConfig(
 		    "he_mu_beamformer=%d\n"
 		    "he_twt_required=%d\n",
 		    he_bss_color,
-		    iface_params.hwModeParams.enableHeSingleUserBeamformer ? 1 : 0,
-		    iface_params.hwModeParams.enableHeSingleUserBeamformee ? 1 : 0,
-		    iface_params.hwModeParams.enableHeMultiUserBeamformer ? 1 : 0,
-		    iface_params.hwModeParams.enableHeTargetWakeTime ? 1 : 0);
+		    iface_params.V1_2.hwModeParams.enableHeSingleUserBeamformer ? 1 : 0,
+		    iface_params.V1_2.hwModeParams.enableHeSingleUserBeamformee ? 1 : 0,
+		    iface_params.V1_2.hwModeParams.enableHeMultiUserBeamformer ? 1 : 0,
+		    iface_params.V1_2.hwModeParams.enableHeTargetWakeTime ? 1 : 0);
 	} else {
 		he_params_as_string = "ieee80211ax=0";
 	}
@@ -423,6 +471,11 @@ std::string CreateHostapdConfig(
 		    "interworking=0\n");
 	}
 #endif /* CONFIG_INTERWORKING */
+
+	std::string bridge_as_string;
+	if (!br_name.empty()) {
+		bridge_as_string = StringPrintf("bridge=%s", br_name.c_str());
+	}
 
 	return StringPrintf(
 	    "interface=%s\n"
@@ -443,18 +496,20 @@ std::string CreateHostapdConfig(
 #ifdef CONFIG_INTERWORKING
 	    "%s\n"
 #endif /* CONFIG_INTERWORKING */
+	    "%s\n"
 	    "%s\n",
-	    iface_params.V1_1.V1_0.ifaceName.c_str(), ssid_as_string.c_str(),
+	    iface_params.V1_2.V1_1.V1_0.ifaceName.c_str(), ssid_as_string.c_str(),
 	    channel_config_as_string.c_str(),
-	    iface_params.V1_1.V1_0.hwModeParams.enable80211N ? 1 : 0,
-	    iface_params.V1_1.V1_0.hwModeParams.enable80211AC ? 1 : 0,
+	    iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211N ? 1 : 0,
+	    iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC ? 1 : 0,
 	    he_params_as_string.c_str(),
 	    hw_mode_as_string.c_str(), ht_cap_vht_oper_chwidth_as_string.c_str(),
 	    nw_params.V1_2.V1_0.isHidden ? 1 : 0,
 #ifdef CONFIG_INTERWORKING
-            access_network_params_as_string.c_str(),
+	    access_network_params_as_string.c_str(),
 #endif /* CONFIG_INTERWORKING */
-            encryption_config_as_string.c_str());
+	    encryption_config_as_string.c_str(),
+	    bridge_as_string.c_str());
 }
 
 Generation getGeneration(hostapd_hw_modes *current_mode)
@@ -516,8 +571,10 @@ void onAsyncSetupCompleteCb(void* ctx)
 	if (on_setup_complete_internal_callback) {
 		on_setup_complete_internal_callback(iface_hapd);
 		// Invalidate this callback since we don't want this firing
-		// again.
-		on_setup_complete_internal_callback = nullptr;
+		// again in single AP mode.
+		if (strlen(iface_hapd->conf->bridge) > 0) {
+		    on_setup_complete_internal_callback = nullptr;
+		}
 	}
 }
 
@@ -668,28 +725,83 @@ V1_2::HostapdStatus Hostapd::addAccessPointInternal_1_2(
 }
 
 V1_2::HostapdStatus Hostapd::addAccessPointInternal_1_3(
-    const V1_2::IHostapd::IfaceParams& iface_params,
+    const V1_3::IHostapd::IfaceParams& iface_params,
     const V1_3::IHostapd::NetworkParams& nw_params)
 {
-	if (hostapd_get_iface(interfaces_, iface_params.V1_1.V1_0.ifaceName.c_str())) {
+	int channelParamsListSize = iface_params.channelParamsList.size();
+	if (channelParamsListSize == 1) {
+		// Single AP
+		wpa_printf(MSG_INFO, "AddSingleAccessPoint, iface=%s",
+		    iface_params.V1_2.V1_1.V1_0.ifaceName.c_str());
+		return addSingleAccessPoint(iface_params, iface_params.channelParamsList[0],
+		    nw_params, "");
+	} else if (channelParamsListSize == 2) {
+		// Concurrent APs
+		wpa_printf(MSG_INFO, "AddDualAccessPoint, iface=%s",
+		    iface_params.V1_2.V1_1.V1_0.ifaceName.c_str());
+		return addConcurrentAccessPoints(iface_params, nw_params);
+	}
+	return {V1_2::HostapdStatusCode::FAILURE_ARGS_INVALID, ""};
+}
+
+V1_2::HostapdStatus Hostapd::addConcurrentAccessPoints(
+    const V1_3::IHostapd::IfaceParams& iface_params, const V1_3::IHostapd::NetworkParams& nw_params)
+{
+	int channelParamsListSize = iface_params.channelParamsList.size();
+	// Get available interfaces in bridge
+	std::vector<std::string> managed_interfaces;
+	std::string br_name = StringPrintf(
+	    "%s", iface_params.V1_2.V1_1.V1_0.ifaceName.c_str());
+	if (!GetInterfacesInBridge(br_name, &managed_interfaces)) {
+		return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN,
+		    "Get interfaces in bridge failed."};
+	}
+	if (managed_interfaces.size() < channelParamsListSize) {
+		return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN,
+		    "Available interfaces less than requested bands"};
+	}
+	// start BSS on specified bands
+	for (std::size_t i = 0; i < channelParamsListSize; i ++) {
+		V1_3::IHostapd::IfaceParams iface_params_new = iface_params;
+		iface_params_new.V1_2.V1_1.V1_0.ifaceName = managed_interfaces[i];
+		V1_2::HostapdStatus status = addSingleAccessPoint(
+		    iface_params_new, iface_params.channelParamsList[i], nw_params, br_name);
+		if (status.code != V1_2::HostapdStatusCode::SUCCESS) {
+			wpa_printf(MSG_ERROR, "Failed to addAccessPoint %s",
+				   managed_interfaces[i].c_str());
+			return status;
+		}
+	}
+	// Save bridge interface info
+	br_interfaces_[br_name] = managed_interfaces;
+	return {V1_2::HostapdStatusCode::SUCCESS, ""};
+}
+
+V1_2::HostapdStatus Hostapd::addSingleAccessPoint(
+    const V1_3::IHostapd::IfaceParams& iface_params,
+    const V1_3::IHostapd::ChannelParams& channelParams,
+    const V1_3::IHostapd::NetworkParams& nw_params,
+    const std::string br_name)
+{
+	if (hostapd_get_iface(interfaces_, iface_params.V1_2.V1_1.V1_0.ifaceName.c_str())) {
 		wpa_printf(
 		    MSG_ERROR, "Interface %s already present",
-		    iface_params.V1_1.V1_0.ifaceName.c_str());
+		    iface_params.V1_2.V1_1.V1_0.ifaceName.c_str());
 		return {V1_2::HostapdStatusCode::FAILURE_IFACE_EXISTS, ""};
 	}
-	const auto conf_params = CreateHostapdConfig(iface_params, nw_params);
+	const auto conf_params = CreateHostapdConfig(iface_params, channelParams, nw_params, br_name);
 	if (conf_params.empty()) {
 		wpa_printf(MSG_ERROR, "Failed to create config params");
 		return {V1_2::HostapdStatusCode::FAILURE_ARGS_INVALID, ""};
 	}
 	const auto conf_file_path =
-	    WriteHostapdConfig(iface_params.V1_1.V1_0.ifaceName, conf_params);
+	    WriteHostapdConfig(iface_params.V1_2.V1_1.V1_0.ifaceName, conf_params);
 	if (conf_file_path.empty()) {
 		wpa_printf(MSG_ERROR, "Failed to write config file");
 		return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	std::string add_iface_param_str = StringPrintf(
-	    "%s config=%s", iface_params.V1_1.V1_0.ifaceName.c_str(),
+	    "%s config=%s", iface_params.V1_2.V1_1.V1_0.ifaceName.c_str(),
 	    conf_file_path.c_str());
 	std::vector<char> add_iface_param_vec(
 	    add_iface_param_str.begin(), add_iface_param_str.end() + 1);
@@ -700,13 +812,13 @@ V1_2::HostapdStatus Hostapd::addAccessPointInternal_1_3(
 		return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	struct hostapd_data* iface_hapd =
-	    hostapd_get_iface(interfaces_, iface_params.V1_1.V1_0.ifaceName.c_str());
+	    hostapd_get_iface(interfaces_, iface_params.V1_2.V1_1.V1_0.ifaceName.c_str());
 	WPA_ASSERT(iface_hapd != nullptr && iface_hapd->iface != nullptr);
 	// Register the setup complete callbacks
 	on_setup_complete_internal_callback =
 	    [this](struct hostapd_data* iface_hapd) {
 		    wpa_printf(
-			MSG_DEBUG, "AP interface setup completed - state %s",
+			MSG_INFO, "AP interface setup completed - state %s",
 			hostapd_state_text(iface_hapd->iface->state));
 		    if (iface_hapd->iface->state == HAPD_IFACE_DISABLED) {
 			    // Invoke the failure callback on all registered
@@ -725,11 +837,9 @@ V1_2::HostapdStatus Hostapd::addAccessPointInternal_1_3(
 		wpa_printf(MSG_DEBUG, "notify client " MACSTR " %s",
 			   MAC2STR(mac_addr),
 			   (authorized) ? "Connected" : "Disconnected");
-
 		for (const auto &callback : callbacks_) {
-		    // TODO: The iface need to separate to iface and ap instance
-		    // identify for AP+AP case.
-		    callback->onConnectedClientsChanged(iface_hapd->conf->iface,
+		    callback->onConnectedClientsChanged(strlen(iface_hapd->conf->bridge) > 0 ?
+			    iface_hapd->conf->bridge : iface_hapd->conf->iface,
 			    iface_hapd->conf->iface, mac_addr, authorized);
 		}
 	    };
@@ -744,8 +854,10 @@ V1_2::HostapdStatus Hostapd::addAccessPointInternal_1_3(
 			       strlen(WPA_EVENT_CHANNEL_SWITCH)) == 0) {
 		    for (const auto &callback : callbacks_) {
 			callback->onApInstanceInfoChanged(
-				iface_hapd->conf->iface, iface_hapd->conf->iface,
-				iface_hapd->iface->freq, getBandwidth(iface_hapd->iconf),
+				strlen(iface_hapd->conf->bridge) > 0 ?
+				iface_hapd->conf->bridge : iface_hapd->conf->iface,
+				iface_hapd->conf->iface, iface_hapd->iface->freq,
+				getBandwidth(iface_hapd->iconf),
 				getGeneration(iface_hapd->iface->current_mode),
 				iface_hapd->own_addr);
 		    }
@@ -762,7 +874,7 @@ V1_2::HostapdStatus Hostapd::addAccessPointInternal_1_3(
 	if (hostapd_enable_iface(iface_hapd->iface) < 0) {
 		wpa_printf(
 		    MSG_ERROR, "Enabling interface %s failed",
-		    iface_params.V1_1.V1_0.ifaceName.c_str());
+		    iface_params.V1_2.V1_1.V1_0.ifaceName.c_str());
 		return {V1_2::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {V1_2::HostapdStatusCode::SUCCESS, ""};
