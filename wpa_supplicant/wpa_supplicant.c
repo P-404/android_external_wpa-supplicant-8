@@ -4232,6 +4232,7 @@ void wpa_supplicant_select_network(struct wpa_supplicant *wpa_s,
 	} else {
 		wpa_s->connect_without_scan = NULL;
 	}
+	wpa_supplicant_update_scan_results(wpa_s);
 
 	wpa_s->disconnected = 0;
 	wpa_s->reassociate = 1;
