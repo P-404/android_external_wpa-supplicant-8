@@ -589,7 +589,8 @@ int HidlManager::unregisterInterface(struct wpa_supplicant *wpa_s)
 				   "with HIDL control: %s", wpa_s->ifname);
 		} else {
 			if(removeAllIfaceCallbackHidlObjectsFromMap(
-			    wpa_s->ifname, vendor_p2p_iface_callbacks_map_))
+			   death_notifier_, wpa_s->ifname,
+			   vendor_p2p_iface_callbacks_map_))
 			wpa_printf(MSG_ERROR,"Failed to remove VendorIface p2p callback");
 		}
 #endif
@@ -609,7 +610,8 @@ int HidlManager::unregisterInterface(struct wpa_supplicant *wpa_s)
 				   "with HIDL control: %s", wpa_s->ifname);
 		} else {
 			if(removeAllIfaceCallbackHidlObjectsFromMap(
-			    wpa_s->ifname, vendor_sta_iface_callbacks_map_))
+			   death_notifier_, wpa_s->ifname,
+			   vendor_sta_iface_callbacks_map_))
 			wpa_printf(MSG_ERROR,"Failed to remove VendorIface callback");
 		}
 #endif
@@ -2605,13 +2607,8 @@ int HidlManager::addVendorStaIfaceCallbackHidlObject(
     const std::string &ifname,
     const android::sp<ISupplicantVendorStaIfaceCallback> &callback)
 {
-	const std::function<void(
-	    const android::sp<ISupplicantVendorStaIfaceCallback> &)>
-	    on_hidl_died_fctor = std::bind(
-		&HidlManager::removeVendorStaIfaceCallbackHidlObject, this, ifname,
-		std::placeholders::_1);
-	return addIfaceCallbackHidlObjectToMap(
-	    ifname, callback, on_hidl_died_fctor, vendor_sta_iface_callbacks_map_);
+	return addIfaceCallbackHidlObjectToMap(death_notifier_,
+	    ifname, callback, vendor_sta_iface_callbacks_map_);
 }
 
 /**
@@ -2707,13 +2704,8 @@ int HidlManager::addVendorP2pIfaceCallbackHidlObject(
     const std::string &ifname,
     const android::sp<ISupplicantVendorP2PIfaceCallback> &callback)
 {
-	const std::function<void(
-	    const android::sp<ISupplicantVendorP2PIfaceCallback> &)>
-	    on_hidl_died_fctor = std::bind(
-		&HidlManager::removeVendorP2pIfaceCallbackHidlObject, this, ifname,
-		std::placeholders::_1);
-	return addIfaceCallbackHidlObjectToMap(
-	    ifname, callback, on_hidl_died_fctor, vendor_p2p_iface_callbacks_map_);
+	return addIfaceCallbackHidlObjectToMap(death_notifier_,
+	    ifname, callback, vendor_p2p_iface_callbacks_map_);
 }
 
 /**
