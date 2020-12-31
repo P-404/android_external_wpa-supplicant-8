@@ -1,6 +1,6 @@
 /*
  * WPA Supplicant / Control interface (shared code for all backends)
- * Copyright (c) 2004-2019, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2004-2020, Jouni Malinen <j@w1.fi>
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -706,6 +706,8 @@ static int wpa_supplicant_ctrl_iface_set(struct wpa_supplicant *wpa_s,
 			ret = -1;
 		else
 			dpp_nonce_override_len = hex_len / 2;
+	} else if (os_strcasecmp(cmd, "dpp_version_override") == 0) {
+		dpp_version_override = atoi(value);
 #endif /* CONFIG_TESTING_OPTIONS */
 #endif /* CONFIG_DPP */
 #ifdef CONFIG_TESTING_OPTIONS
@@ -901,6 +903,8 @@ static int wpa_supplicant_ctrl_iface_get(struct wpa_supplicant *wpa_s,
 
 	if (os_strcmp(cmd, "version") == 0) {
 		res = os_snprintf(buf, buflen, "%s", VERSION_STR);
+	} else if (os_strcasecmp(cmd, "max_command_len") == 0) {
+		res = os_snprintf(buf, buflen, "%u", CTRL_IFACE_MAX_LEN);
 	} else if (os_strcasecmp(cmd, "country") == 0) {
 		if (wpa_s->conf->country[0] && wpa_s->conf->country[1])
 			res = os_snprintf(buf, buflen, "%c%c",
@@ -3987,7 +3991,7 @@ static const struct cipher_info ciphers_group_mgmt[] = {
 };
 
 
-static int ctrl_iface_get_capability_pairwise(int res, char *strict,
+static int ctrl_iface_get_capability_pairwise(int res, bool strict,
 					      struct wpa_driver_capa *capa,
 					      char *buf, size_t buflen)
 {
@@ -4027,7 +4031,7 @@ static int ctrl_iface_get_capability_pairwise(int res, char *strict,
 }
 
 
-static int ctrl_iface_get_capability_group(int res, char *strict,
+static int ctrl_iface_get_capability_group(int res, bool strict,
 					   struct wpa_driver_capa *capa,
 					   char *buf, size_t buflen)
 {
@@ -4075,7 +4079,7 @@ static int ctrl_iface_get_capability_group(int res, char *strict,
 }
 
 
-static int ctrl_iface_get_capability_group_mgmt(int res, char *strict,
+static int ctrl_iface_get_capability_group_mgmt(int res, bool strict,
 						struct wpa_driver_capa *capa,
 						char *buf, size_t buflen)
 {
@@ -4140,7 +4144,7 @@ static int iftype_str_to_index(const char *iftype_str)
 }
 
 
-static int ctrl_iface_get_capability_key_mgmt(int res, char *strict,
+static int ctrl_iface_get_capability_key_mgmt(int res, bool strict,
 					      struct wpa_driver_capa *capa,
 					      const char *iftype_str,
 					      char *buf, size_t buflen)
@@ -4349,7 +4353,7 @@ static int ctrl_iface_get_capability_key_mgmt(int res, char *strict,
 }
 
 
-static int ctrl_iface_get_capability_proto(int res, char *strict,
+static int ctrl_iface_get_capability_proto(int res, bool strict,
 					   struct wpa_driver_capa *capa,
 					   char *buf, size_t buflen)
 {
@@ -4392,7 +4396,7 @@ static int ctrl_iface_get_capability_proto(int res, char *strict,
 
 
 static int ctrl_iface_get_capability_auth_alg(struct wpa_supplicant *wpa_s,
-					      int res, char *strict,
+					      int res, bool strict,
 					      struct wpa_driver_capa *capa,
 					      char *buf, size_t buflen)
 {
@@ -4470,7 +4474,7 @@ static int ctrl_iface_get_capability_auth_alg(struct wpa_supplicant *wpa_s,
 }
 
 
-static int ctrl_iface_get_capability_modes(int res, char *strict,
+static int ctrl_iface_get_capability_modes(int res, bool strict,
 					   struct wpa_driver_capa *capa,
 					   char *buf, size_t buflen)
 {
@@ -4633,7 +4637,8 @@ int wpa_supplicant_ctrl_iface_get_capability(
 {
 	struct wpa_driver_capa capa;
 	int res;
-	char *next_param, *curr_param, *iftype = NULL, *strict = NULL;
+	char *next_param, *curr_param, *iftype = NULL;
+	bool strict = false;
 	char field[50];
 	size_t len;
 
@@ -4652,7 +4657,7 @@ int wpa_supplicant_ctrl_iface_get_capability(
 			*next_param = '\0';
 
 		if (os_strcmp(curr_param, "strict") == 0)
-			strict = curr_param;
+			strict = true;
 		else if (os_strncmp(curr_param, "iftype=", 7) == 0)
 			iftype = curr_param + 7;
 		else
@@ -8306,6 +8311,11 @@ static void wpa_supplicant_ctrl_iface_flush(struct wpa_supplicant *wpa_s)
 	dpp_pkex_ephemeral_key_override_len = 0;
 	dpp_protocol_key_override_len = 0;
 	dpp_nonce_override_len = 0;
+#ifdef CONFIG_DPP2
+	dpp_version_override = 2;
+#else /* CONFIG_DPP2 */
+	dpp_version_override = 1;
+#endif /* CONFIG_DPP2 */
 #endif /* CONFIG_TESTING_OPTIONS */
 #endif /* CONFIG_DPP */
 
@@ -11152,6 +11162,12 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 			reply_len = -1;
 	} else if (os_strcmp(buf, "DPP_STOP_CHIRP") == 0) {
 		wpas_dpp_chirp_stop(wpa_s);
+	} else if (os_strncmp(buf, "DPP_RECONFIG ", 13) == 0) {
+		struct wpa_ssid *ssid;
+
+		ssid = wpa_config_get_network(wpa_s->conf, atoi(buf + 13));
+		if (!ssid || wpas_dpp_reconfig(wpa_s, ssid) < 0)
+			reply_len = -1;
 #endif /* CONFIG_DPP2 */
 #endif /* CONFIG_DPP */
 	} else {
