@@ -18,14 +18,6 @@ endif
 
 include $(LOCAL_PATH)/android.config
 
-ifeq ($(call is-board-platform-in-list,msm8998),true)
-  $(warning "Disabling SAE and OWE in wpa_supplicant for $(TARGET_BOARD_PLATFORM)")
-  CONFIG_OWE=n
-  CONFIG_SAE=n
-  # Enabling mesh support enables SAE, so make sure mesh supoort is disabled
-  CONFIG_MESH=n
-endif
-
 ifeq ($(call is-board-platform-in-list,msm8909 msm8937 msm8953 msm8996 msm8998 sdm660 sdm710 sdm845 $(MSMSTEPPE) $(TRINKET) msmnile lito atoll bengal kona),true)
   $(warning "Disabling OCV support in hostapd for $(TARGET_BOARD_PLATFORM)")
   CONFIG_OCV=n
