@@ -2162,6 +2162,7 @@ struct ieee80211_he_operation {
 	 * Max Co-Hosted BSSID Indicator subfield (1 octet), and/or 6 GHz
 	 * Operation Information subfield (5 octets). */
 } STRUCT_PACKED;
+#define IEEE80211_HE_CAPAB_MIN_LEN (6 + 11)
 
 /* IEEE P802.11ax/D6.0, Figure 9-787k - 6 GHz Operation Information field */
 struct ieee80211_he_6ghz_oper_info {
