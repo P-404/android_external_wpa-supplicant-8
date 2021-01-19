@@ -727,8 +727,7 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 	dpp_global_deinit(wpa_s->dpp);
 	wpa_s->dpp = NULL;
 #endif /* CONFIG_DPP */
-	free_up_scs_desc(&wpa_s->scs_robust_av_req);
-	wpa_s->scs_dialog_token = 0;
+	wpas_scs_deinit(wpa_s);
 }
 
 
@@ -3944,8 +3943,7 @@ static void wpa_supplicant_clear_connection(struct wpa_supplicant *wpa_s,
 	if (old_ssid != wpa_s->current_ssid)
 		wpas_notify_network_changed(wpa_s);
 
-	free_up_scs_desc(&wpa_s->scs_robust_av_req);
-	wpa_s->scs_dialog_token = 0;
+	wpas_scs_deinit(wpa_s);
 	eloop_cancel_timeout(wpa_supplicant_timeout, wpa_s, NULL);
 }
 
@@ -5034,6 +5032,7 @@ wpa_supplicant_alloc(struct wpa_supplicant *parent)
 #ifdef CONFIG_TESTING_OPTIONS
 	dl_list_init(&wpa_s->drv_signal_override);
 #endif /* CONFIG_TESTING_OPTIONS */
+	dl_list_init(&wpa_s->active_scs_ids);
 
 	return wpa_s;
 }
