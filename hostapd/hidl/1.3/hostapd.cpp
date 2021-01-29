@@ -980,8 +980,8 @@ V1_2::HostapdStatus Hostapd::forceClientDisconnectInternal(const std::string& if
 {
 	struct hostapd_data *hapd = hostapd_get_iface(interfaces_, iface_name.c_str());
 
-  bool bcast = true;
-  for (const uint8_t& addrb : client_address) {
+	bool bcast = true;
+	for (const uint8_t& addrb : client_address) {
 		if (addrb != 0xff) {
 			bcast = false;
 			break;
@@ -1016,8 +1016,20 @@ V1_2::HostapdStatus Hostapd::forceClientDisconnectInternal(const std::string& if
 		wpa_printf(MSG_ERROR, "Interface %s doesn't exist", iface_name.c_str());
 		return {V1_2::HostapdStatusCode::FAILURE_IFACE_UNKNOWN, ""};
 	}
+	if (result) {
+		return {V1_2::HostapdStatusCode::SUCCESS, ""};
+	}
+	return {V1_2::HostapdStatusCode::FAILURE_CLIENT_UNKNOWN, ""};
+}
+
+V1_2::HostapdStatus Hostapd::setDebugParamsInternal(V1_2::DebugLevel level)
+{
+	wpa_debug_level = static_cast<uint32_t>(level);
+	return {V1_2::HostapdStatusCode::SUCCESS, ""};
+}
 
 }  // namespace implementation
+}  // namespace V1_3
 }  // namespace hostapd
 }  // namespace wifi
 }  // namespace hardware
