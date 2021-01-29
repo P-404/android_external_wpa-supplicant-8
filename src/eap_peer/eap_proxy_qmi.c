@@ -208,8 +208,8 @@ static int validate_qmi_cb_data(struct qmi_cb_data *cb_data) {
 
 static struct qmi_cb_data* eap_proxy_prepare_qmi_cb_data(
                  qmi_client_type user_handle, unsigned int msg_id,
-                 void *ind_buf_ptr, unsigned int ind_buf_len,
-                 void *ind_cb_data) {
+                 void *ind_buf_ptr, unsigned int ind_buf_len, void *ind_cb_data,
+                 eloop_timeout_handler handler) {
 
         struct qmi_cb_data *cb_data;
 
@@ -233,6 +233,7 @@ static struct qmi_cb_data* eap_proxy_prepare_qmi_cb_data(
         cb_data->msg_id = msg_id;
         cb_data->buflen = ind_buf_len;
         cb_data->userdata = ind_cb_data;
+        cb_data->handler = handler;
 
         return cb_data;
 }
@@ -336,14 +337,15 @@ static void wpa_qmi_client_indication_cb
         pthread_mutex_lock(&eloop_lock);       // Lock
         wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
         cb_data = eap_proxy_prepare_qmi_cb_data(user_handle, msg_id, ind_buf_ptr,
-                                                ind_buf_len, ind_cb_data);
+                                                ind_buf_len, ind_cb_data,
+                                                __wpa_qmi_client_indication_cb);
         if (cb_data == NULL) {
                 pthread_mutex_unlock(&eloop_lock);      // Unlock
                 return;
         }
 
         dl_list_add(&eap_proxy->callback, &cb_data->list);
-        eloop_register_timeout(0, 0, __wpa_qmi_client_indication_cb, cb_data, NULL);
+        eloop_register_timeout(0, 0, cb_data->handler, cb_data, NULL);
         pthread_mutex_unlock(&eloop_lock);      // Unlock
 
 }
@@ -844,7 +846,8 @@ void eap_proxy_notifier_cb
             wpa_printf(MSG_DEBUG, "eap_proxy: %s Handle QMI_CLIENT_SERVICE_COUNT_INC event",
                        __func__);
             pthread_mutex_lock(&eloop_lock);       // Lock
-            cb_data = eap_proxy_prepare_qmi_cb_data(user_handle, 0, notify_cb_data, 0, NULL);
+            cb_data = eap_proxy_prepare_qmi_cb_data(user_handle, 0, notify_cb_data, 0, NULL,
+                                                    __eap_proxy_notifier_cb);
 
             if (cb_data == NULL) {
                     wpa_printf(MSG_ERROR, "eap_proxy: failed to allocate memory");
@@ -853,7 +856,7 @@ void eap_proxy_notifier_cb
             }
 
             dl_list_add(&eap_proxy->callback, &cb_data->list);
-            eloop_register_timeout(0, 0, __eap_proxy_notifier_cb, cb_data, NULL);
+            eloop_register_timeout(0, 0, cb_data->handler, cb_data, NULL);
             pthread_mutex_unlock(&eloop_lock);      // Unlock
             break;
 
@@ -1275,6 +1278,7 @@ static void eap_proxy_clear_callbacks(struct eap_proxy_sm *eap_proxy)
         struct qmi_cb_data *tmp, *prev;
         dl_list_for_each_safe(tmp, prev, &eap_proxy->callback,
                               struct qmi_cb_data, list) {
+                eloop_cancel_timeout(tmp->handler, tmp, NULL);
                 eap_proxy_clear_qmi_cb_data(tmp);
         }
 }
@@ -1388,7 +1392,8 @@ static void handle_qmi_eap_ind(qmi_client_type user_handle,
         wpa_printf(MSG_ERROR, "eap_proxy: %s eap_proxy=%p", __func__, eap_proxy);
 
         cb_data = eap_proxy_prepare_qmi_cb_data(user_handle, msg_id, ind_buf,
-                                                ind_buf_len, ind_cb_data);
+                                                ind_buf_len, ind_cb_data,
+                                                __handle_qmi_eap_ind);
         if (cb_data == NULL) {
                 pthread_mutex_unlock(&eloop_lock);      // Unlock
                 return;
@@ -1400,7 +1405,7 @@ static void handle_qmi_eap_ind(qmi_client_type user_handle,
         if (eap_proxy != NULL && eap_proxy->qmi_state == QMI_STATE_RESP_PENDING)
              __handle_qmi_eap_ind(cb_data, NULL);
         else
-            eloop_register_timeout(0, 0, __handle_qmi_eap_ind, cb_data, NULL);
+            eloop_register_timeout(0, 0, cb_data->handler, cb_data, NULL);
 
         pthread_mutex_unlock(&eloop_lock);      // Unlock
 }
