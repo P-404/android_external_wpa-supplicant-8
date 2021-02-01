@@ -380,8 +380,8 @@ std::string CreateHostapdConfig(
 		    "sae_password=%s",
 		    is_60Ghz_band_only ? "GCMP" : "CCMP",
 		    is_6Ghz_band_only ? 1 : 2,
-		    isWigig ? "GCMP" : "CCMP",
-		    nw_params.V1_2.passphrase.c_str());
+                    // KEYSTONE(c4e49eaa8d51e8469ae9e9a0cfe8d3f8ef18f2c3,b/179078056)
+		    isWigig ? "GCMP" : "CCMP");
 		break;
 	default:
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
