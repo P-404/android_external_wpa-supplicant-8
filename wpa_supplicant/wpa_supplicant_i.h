@@ -1413,6 +1413,9 @@ struct wpa_supplicant {
 	bool mscs_setup_done;
 	struct scs_robust_av_data scs_robust_av_req;
 	u8 scs_dialog_token;
+#ifdef CONFIG_TESTING_OPTIONS
+	unsigned int disable_scs_support:1;
+#endif /* CONFIG_TESTING_OPTIONS */
 };
 
 
