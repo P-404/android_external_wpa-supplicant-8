@@ -126,6 +126,7 @@ extern "C"
 	void wpas_hidl_notify_bss_tm_status(struct wpa_supplicant *wpa_s);
 	void wpas_hidl_notify_transition_disable(
 	    struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid, u8 bitmap);
+	void wpas_hidl_notify_network_not_found(struct wpa_supplicant *wpa_s);
 
 //Vendor DPP Notifications
 	void wpas_hidl_notify_dpp_conf(
@@ -282,6 +283,8 @@ void wpas_hidl_notify_bss_tm_status(struct wpa_supplicant *wpa_s)
 static void wpas_hidl_notify_transition_disable(struct wpa_supplicant *wpa_s,
 					    struct wpa_ssid *ssid,
 					    u8 bitmap)
+{}
+static void wpas_hidl_notify_network_not_found(struct wpa_supplicant *wpa_s)
 {}
 
 //DPP Vendor Notifications
