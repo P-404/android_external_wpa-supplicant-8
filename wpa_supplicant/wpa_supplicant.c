@@ -4140,6 +4140,9 @@ int wpa_supplicant_remove_network(struct wpa_supplicant *wpa_s, int id)
 	if (wpa_config_remove_network(wpa_s->conf, id) < 0)
 		return -2;
 
+	if (wpa_s->current_ssid == ssid)
+		wpa_s->current_ssid = NULL;
+
 	if (!was_disabled && wpa_s->sched_scanning) {
 		wpa_printf(MSG_DEBUG,
 			   "Stop ongoing sched_scan to remove network from filters");
