@@ -200,6 +200,7 @@ void wpas_notify_pmk_cache_added(struct wpa_supplicant *wpa_s,
 void wpas_notify_transition_disable(struct wpa_supplicant *wpa_s,
 				    struct wpa_ssid *ssid,
 				    u8 bitmap);
+void wpas_notify_network_not_found(struct wpa_supplicant *wpa_s);
 
 //Vendor dpp notification
 void wpas_notify_dpp_conf(void *msg_ctx, u8 type, u8* ssid,

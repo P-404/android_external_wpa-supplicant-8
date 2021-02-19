@@ -82,7 +82,10 @@ struct wpas_hidl_priv *wpas_hidl_init(struct wpa_global *global)
 	hidl_manager = HidlManager::getInstance();
 	if (!hidl_manager)
 		goto err;
-	hidl_manager->registerHidlService(global);
+
+	if (hidl_manager->registerHidlService(global)) {
+		goto err;
+	}
 #ifdef SUPPLICANT_VENDOR_HIDL
 	hidl_manager->registerVendorHidlService(global);
 #endif
@@ -937,6 +940,20 @@ void wpas_hidl_notify_transition_disable(struct wpa_supplicant *wpa_s,
 		return;
 
 	hidl_manager->notifyTransitionDisable(wpa_s, ssid, bitmap);
+}
+
+void wpas_hidl_notify_network_not_found(struct wpa_supplicant *wpa_s)
+{
+	if (!wpa_s)
+		return;
+
+	HidlManager *hidl_manager = HidlManager::getInstance();
+	if (!hidl_manager)
+		return;
+
+	wpa_printf(MSG_DEBUG, "Notify network not found");
+
+	hidl_manager->notifyNetworkNotFound(wpa_s);
 }
 
 //Vendor DPP Notifications
