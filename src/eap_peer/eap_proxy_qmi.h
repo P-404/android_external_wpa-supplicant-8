@@ -112,6 +112,7 @@ struct qmi_cb_data {
         void *buf;
         unsigned int buflen;
         void *userdata;
+        eloop_timeout_handler handler;
 
         /* additional data for eap_reply */
         qmi_client_error_type err_code;
