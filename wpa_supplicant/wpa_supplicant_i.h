@@ -524,6 +524,7 @@ struct ipv4_params {
 	u16 dst_port;
 	u8 dscp;
 	u8 protocol;
+	u8 param_mask;
 };
 
 
@@ -535,6 +536,7 @@ struct ipv6_params {
 	u8 dscp;
 	u8 next_header;
 	u8 flow_label[3];
+	u8 param_mask;
 };
 
 
@@ -1432,6 +1434,7 @@ struct wpa_supplicant {
 #endif /* CONFIG_TESTING_OPTIONS */
 	struct dl_list active_scs_ids;
 	bool ongoing_scs_req;
+	u8 dscp_req_dialog_token;
 	unsigned int enable_dscp_policy_capa:1;
 };
 
@@ -1769,5 +1772,9 @@ void wpas_handle_robust_av_scs_recv_action(struct wpa_supplicant *wpa_s,
 					   const u8 *src, const u8 *buf,
 					   size_t len);
 void wpas_scs_deinit(struct wpa_supplicant *wpa_s);
+void wpas_handle_qos_mgmt_recv_action(struct wpa_supplicant *wpa_s,
+				      const u8 *src,
+				      const u8 *buf, size_t len);
+void wpas_dscp_deinit(struct wpa_supplicant *wpa_s);
 
 #endif /* WPA_SUPPLICANT_I_H */
