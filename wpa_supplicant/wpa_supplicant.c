@@ -739,6 +739,7 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 	wpas_pasn_auth_stop(wpa_s);
 #endif /* CONFIG_PASN */
 	wpas_scs_deinit(wpa_s);
+	wpas_dscp_deinit(wpa_s);
 }
 
 
@@ -4019,6 +4020,7 @@ static void wpa_supplicant_clear_connection(struct wpa_supplicant *wpa_s,
 		wpas_notify_network_changed(wpa_s);
 
 	wpas_scs_deinit(wpa_s);
+	wpas_dscp_deinit(wpa_s);
 	eloop_cancel_timeout(wpa_supplicant_timeout, wpa_s, NULL);
 }
 
