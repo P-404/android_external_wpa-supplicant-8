@@ -711,7 +711,9 @@ static int wpas_dpp_auth_init_next(struct wpa_supplicant *wpa_s)
 	freq = auth->freq[auth->freq_idx++];
 	auth->curr_freq = freq;
 
-	if (is_zero_ether_addr(auth->peer_bi->mac_addr))
+	if (!is_zero_ether_addr(auth->peer_mac_addr))
+		dst = auth->peer_mac_addr;
+	else if (is_zero_ether_addr(auth->peer_bi->mac_addr))
 		dst = broadcast;
 	else
 		dst = auth->peer_bi->mac_addr;
@@ -1446,6 +1448,8 @@ static int wpas_dpp_handle_config_obj(struct wpa_supplicant *wpa_s,
 				      struct dpp_config_obj *conf)
 {
 	wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_RECEIVED);
+	wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONFOBJ_AKM "%s",
+		dpp_akm_str(conf->akm));
 	if (conf->ssid_len)
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONFOBJ_SSID "%s",
 			wpa_ssid_txt(conf->ssid, conf->ssid_len));
@@ -1460,6 +1464,21 @@ static int wpas_dpp_handle_config_obj(struct wpa_supplicant *wpa_s,
 		 * message. */
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONNECTOR "%s",
 			conf->connector);
+	}
+	if (conf->passphrase[0]) {
+		char hex[64 * 2 + 1];
+
+		wpa_snprintf_hex(hex, sizeof(hex),
+				 (const u8 *) conf->passphrase,
+				 os_strlen(conf->passphrase));
+		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONFOBJ_PASS "%s",
+			hex);
+	} else if (conf->psk_set) {
+		char hex[PMK_LEN * 2 + 1];
+
+		wpa_snprintf_hex(hex, sizeof(hex), conf->psk, PMK_LEN);
+		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONFOBJ_PSK "%s",
+			hex);
 	}
 	if (conf->c_sign_key) {
 		char *hex;
@@ -1918,9 +1937,22 @@ static void wpas_dpp_rx_conf_result(struct wpa_supplicant *wpa_s, const u8 *src,
 		   MAC2STR(src));
 
 	if (!auth || !auth->waiting_conf_result) {
-		wpa_printf(MSG_DEBUG,
-			   "DPP: No DPP Configuration waiting for result - drop");
-		return;
+		if (auth &&
+		    os_memcmp(src, auth->peer_mac_addr, ETH_ALEN) == 0 &&
+		    gas_server_response_sent(wpa_s->gas_server,
+					     auth->gas_server_ctx)) {
+			/* This could happen if the TX status event gets delayed
+			 * long enough for the Enrollee to have time to send
+			 * the next frame before the TX status gets processed
+			 * locally. */
+			wpa_printf(MSG_DEBUG,
+				   "DPP: GAS response was sent but TX status not yet received - assume it was ACKed since the Enrollee sent the next frame in the sequence");
+			auth->waiting_conf_result = 1;
+		} else {
+			wpa_printf(MSG_DEBUG,
+				   "DPP: No DPP Configuration waiting for result - drop");
+			return;
+		}
 	}
 
 	if (os_memcmp(src, auth->peer_mac_addr, ETH_ALEN) != 0) {
@@ -2082,8 +2114,9 @@ wpas_dpp_rx_presence_announcement(struct wpa_supplicant *wpa_s, const u8 *src,
 
 	auth->neg_freq = freq;
 
-	if (!is_zero_ether_addr(peer_bi->mac_addr))
-		os_memcpy(auth->peer_mac_addr, peer_bi->mac_addr, ETH_ALEN);
+	/* The source address of the Presence Announcement frame overrides any
+	 * MAC address information from the bootstrapping information. */
+	os_memcpy(auth->peer_mac_addr, src, ETH_ALEN);
 
 	wpa_s->dpp_auth = auth;
 	if (wpas_dpp_auth_init_next(wpa_s) < 0) {
@@ -2979,6 +3012,7 @@ wpas_dpp_gas_req_handler(void *ctx, void *resp_ctx, const u8 *sa,
 				     NULL, 0, NULL);
 	}
 	auth->conf_resp = resp;
+	auth->gas_server_ctx = resp_ctx;
 	return resp;
 }
 
@@ -3016,7 +3050,8 @@ wpas_dpp_gas_status_handler(void *ctx, struct wpabuf *resp, int ok)
 	eloop_cancel_timeout(wpas_dpp_auth_resp_retry_timeout, wpa_s, NULL);
 #ifdef CONFIG_DPP2
 	if (ok && auth->peer_version >= 2 &&
-	    auth->conf_resp_status == DPP_STATUS_OK) {
+	    auth->conf_resp_status == DPP_STATUS_OK &&
+	    !auth->waiting_conf_result) {
 		wpa_printf(MSG_DEBUG, "DPP: Wait for Configuration Result");
 		wpas_notify_dpp_config_sent_wait_response(wpa_s);
 		auth->waiting_conf_result = 1;
@@ -3576,7 +3611,7 @@ static void wpas_dpp_chirp_scan_res_handler(struct wpa_supplicant *wpa_s,
 
 	/* Preferred chirping channels */
 	mode = get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes,
-			HOSTAPD_MODE_IEEE80211G, 0);
+			HOSTAPD_MODE_IEEE80211G, false);
 	chan6 = mode == NULL;
 	if (mode) {
 		for (c = 0; c < mode->num_channels; c++) {
@@ -3593,7 +3628,7 @@ static void wpas_dpp_chirp_scan_res_handler(struct wpa_supplicant *wpa_s,
 		int_array_add_unique(&wpa_s->dpp_chirp_freqs, 2437);
 
 	mode = get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes,
-			HOSTAPD_MODE_IEEE80211A, 0);
+			HOSTAPD_MODE_IEEE80211A, false);
 	if (mode) {
 		int chan44 = 0, chan149 = 0;
 
@@ -3615,7 +3650,7 @@ static void wpas_dpp_chirp_scan_res_handler(struct wpa_supplicant *wpa_s,
 	}
 
 	mode = get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes,
-			HOSTAPD_MODE_IEEE80211AD, 0);
+			HOSTAPD_MODE_IEEE80211AD, false);
 	if (mode) {
 		for (c = 0; c < mode->num_channels; c++) {
 			struct hostapd_channel_data *chan = &mode->channels[c];
@@ -3654,6 +3689,17 @@ static void wpas_dpp_chirp_next(void *eloop_ctx, void *timeout_ctx)
 	if (wpa_s->dpp_chirp_freq == 0) {
 		if (wpa_s->dpp_chirp_round % 4 == 0 &&
 		    !wpa_s->dpp_chirp_scan_done) {
+			if (wpas_scan_scheduled(wpa_s)) {
+				wpa_printf(MSG_DEBUG,
+					   "DPP: Deferring chirp scan because another scan is planned already");
+				if (eloop_register_timeout(1, 0,
+							   wpas_dpp_chirp_next,
+							   wpa_s, NULL) < 0) {
+					wpas_dpp_chirp_stop(wpa_s);
+					return;
+				}
+				return;
+			}
 			wpa_printf(MSG_DEBUG,
 				   "DPP: Update channel list for chirping");
 			wpa_s->scan_req = MANUAL_SCAN_REQ;

@@ -668,6 +668,8 @@ static void p2p_update_peer_vendor_elems(struct p2p_device *dev, const u8 *ies,
 		if (wpabuf_resize(&dev->info.vendor_elems, 2 + len) < 0)
 			break;
 		wpabuf_put_data(dev->info.vendor_elems, pos - 2, 2 + len);
+		if (wpabuf_size(dev->info.vendor_elems) > 2000)
+			break;
 	}
 }
 
@@ -2922,12 +2924,13 @@ void p2p_group_formation_failed(struct p2p_data *p2p)
 	p2p_clear_go_neg(p2p);
 }
 
-int is_p2p_6ghz_disabled(struct p2p_data *p2p)
+bool is_p2p_6ghz_disabled(struct p2p_data *p2p)
 {
 	if (p2p)
 		return p2p->cfg->p2p_6ghz_disable;
-	return 0;
+	return false;
 }
+
 
 struct p2p_data * p2p_init(const struct p2p_config *cfg)
 {
@@ -3518,12 +3521,17 @@ int p2p_scan_res_handler(struct p2p_data *p2p, const u8 *bssid, int freq,
 }
 
 
-void p2p_scan_res_handled(struct p2p_data *p2p)
+void p2p_scan_res_handled(struct p2p_data *p2p, unsigned int delay)
 {
 	if (!p2p->p2p_scan_running) {
 		p2p_dbg(p2p, "p2p_scan was not running, but scan results received");
 	}
 	p2p->p2p_scan_running = 0;
+
+	/* Use this delay only when p2p_find doesn't set it */
+	if (!p2p->search_delay)
+		p2p->search_delay = delay;
+
 	eloop_cancel_timeout(p2p_scan_timeout, p2p, NULL);
 
 	if (p2p_run_after_scan(p2p))
