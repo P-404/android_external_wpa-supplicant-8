@@ -179,6 +179,9 @@ struct wpa_driver_nl80211_data {
 	unsigned int control_port_ap:1;
 	unsigned int multicast_registrations:1;
 	unsigned int no_rrm:1;
+	unsigned int get_sta_info_vendor_cmd_avail:1;
+	unsigned int fils_discovery:1;
+	unsigned int unsol_bcast_probe_resp:1;
 
 	u64 vendor_scan_cookie;
 	u64 remain_on_chan_cookie;
@@ -213,6 +216,8 @@ struct wpa_driver_nl80211_data {
 	int auth_alg;
 	u8 *auth_ie;
 	size_t auth_ie_len;
+	u8 *auth_data;
+	size_t auth_data_len;
 	u8 auth_wep_key[4][16];
 	size_t auth_wep_key_len[4];
 	int auth_wep_tx_keyidx;
@@ -228,7 +233,6 @@ struct wpa_driver_nl80211_data {
 #ifdef CONFIG_DRIVER_NL80211_BRCM
 	unsigned int vendor_set_pmk:1; /* for legacy set_pmk method before NL80211_CMD_SET_PMK */
 #endif /* CONFIG_DRIVER_NL80211_BRCM */
-
 #ifdef CONFIG_DRIVER_NL80211_QCA
 	bool roam_indication_done;
 	u8 *pending_roam_data;
