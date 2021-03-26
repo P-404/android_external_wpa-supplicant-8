@@ -129,8 +129,7 @@ public:
 	void notifyP2pDeviceFound(
 	    struct wpa_supplicant *wpa_s, const u8 *addr,
 	    const struct p2p_peer_info *info, const u8 *peer_wfd_device_info,
-	    u8 peer_wfd_device_info_len, const u8 *peer_wfd_r2_device_info,
-            u8 peer_wfd_r2_device_info_len);
+	    u8 peer_wfd_device_info_len);
 	void notifyP2pDeviceLost(
 	    struct wpa_supplicant *wpa_s, const u8 *p2p_device_addr);
 	void notifyP2pFindStopped(struct wpa_supplicant *wpa_s);

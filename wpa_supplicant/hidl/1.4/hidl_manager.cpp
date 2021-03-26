@@ -23,9 +23,6 @@ namespace {
 using android::hardware::hidl_array;
 
 constexpr uint8_t kWfdDeviceInfoLen = 6;
-#ifdef SUPPLICANT_VENDOR_HIDL
-constexpr uint8_t kWfdR2DeviceInfoLen = 2;
-#endif
 // GSM-AUTH:<RAND1>:<RAND2>[:<RAND3>]
 constexpr char kGsmAuthRegex2[] = "GSM-AUTH:([0-9a-f]+):([0-9a-f]+)";
 constexpr char kGsmAuthRegex3[] =
@@ -1258,8 +1255,7 @@ void HidlManager::notifyWpsEventPbcOverlap(struct wpa_supplicant *wpa_s)
 void HidlManager::notifyP2pDeviceFound(
     struct wpa_supplicant *wpa_s, const u8 *addr,
     const struct p2p_peer_info *info, const u8 *peer_wfd_device_info,
-    u8 peer_wfd_device_info_len, const u8 *peer_wfd_r2_device_info,
-    u8 peer_wfd_r2_device_info_len)
+    u8 peer_wfd_device_info_len)
 {
 	if (!wpa_s || !addr || !info)
 		return;
@@ -1269,79 +1265,25 @@ void HidlManager::notifyP2pDeviceFound(
 		return;
 
         std::array<uint8_t, kWfdDeviceInfoLen> hidl_peer_wfd_device_info{};
-        if (peer_wfd_device_info) {
-                if (peer_wfd_device_info_len != kWfdDeviceInfoLen) {
-                        wpa_printf(
-                            MSG_ERROR, "Unexpected WFD device info len: %d",
-                            peer_wfd_device_info_len);
-                } else {
-                        os_memcpy(
-                            hidl_peer_wfd_device_info.data(),
-                            peer_wfd_device_info, kWfdDeviceInfoLen);
-                }
-        }
-
-#ifdef SUPPLICANT_VENDOR_HIDL
-        std::array<uint8_t, kWfdR2DeviceInfoLen> hidl_peer_wfd_r2_device_info{};
-        if (peer_wfd_r2_device_info) {
-                if (peer_wfd_r2_device_info_len != kWfdR2DeviceInfoLen) {
-                        wpa_printf(
-                            MSG_ERROR, "Unexpected WFD R2 device info len: %d",
-                            peer_wfd_r2_device_info_len);
-                } else {
-                        os_memcpy(
-                            hidl_peer_wfd_r2_device_info.data(),
-                            peer_wfd_r2_device_info, kWfdR2DeviceInfoLen);
-                }
-        }
-        for (int i=0 ;i < P2P_MAX_WPS_VENDOR_EXT;i++) {
-            if(info->wps_vendor_ext[i] != NULL &&
-               WPA_GET_BE24(info->wps_vendor_ext[i]->buf) == 311) {
-                 /* Miracast WSC IE Extension */
-               if(checkForVendorP2pIfaceCallback(wpa_s->ifname) == true) {
-                   size_t infosize = info->wps_vendor_ext[i]->used;
-                   std::vector<uint8_t> data (info->p2p_device_addr,info->p2p_device_addr+6);
-                   std::vector<uint8_t> infobuf(info->wps_vendor_ext[i]->buf,
-                                               info->wps_vendor_ext[i]->buf+infosize);
-                   std::vector<uint8_t>::iterator it;
-                   uint8_t type = (uint8_t) ISupplicantVendorP2PIfaceCallback::InfoElementType::WSC_VENDOR;
-                   it = data.begin();
-                   data.insert(it+6,infobuf.begin(),infobuf.end());
-                   callWithEachVendorP2pIfaceCallback(
-                        wpa_s->ifname,
-                        std::bind(
-                                  &ISupplicantVendorP2PIfaceCallback::onVendorExtensionFound,
-                                  std::placeholders::_1,
-                                  data,
-                                  type));
-
-               }
-               break;
-            }
-        }
-        if (checkForVendorP2pIfaceCallback(wpa_s->ifname) == true &&
-                peer_wfd_r2_device_info_len == kWfdR2DeviceInfoLen) {
-                callWithEachVendorP2pIfaceCallback(
-                        wpa_s->ifname,
-                        std::bind(
-                        &ISupplicantVendorP2PIfaceCallback::onR2DeviceFound,
-                        std::placeholders::_1,
-                        addr, info->p2p_device_addr,
-                        info->pri_dev_type, info->device_name, info->config_methods,
-                        info->dev_capab, info->group_capab, hidl_peer_wfd_device_info,
-                        hidl_peer_wfd_r2_device_info));
-        } else {
-#endif
-	        callWithEachP2pIfaceCallback(
-	                wpa_s->ifname,
-	                std::bind(
-		        &ISupplicantP2pIfaceCallback::onDeviceFound,
-		        std::placeholders::_1, addr, info->p2p_device_addr,
-		        info->pri_dev_type, info->device_name, info->config_methods,
-		        info->dev_capab, info->group_capab, hidl_peer_wfd_device_info));
-#ifdef SUPPLICANT_VENDOR_HIDL
+	if (peer_wfd_device_info) {
+		if (peer_wfd_device_info_len != kWfdDeviceInfoLen) {
+		        wpa_printf(
+			    MSG_ERROR, "Unexpected WFD device info len: %d",
+			    peer_wfd_device_info_len);
+		} else {
+			os_memcpy(
+			    hidl_peer_wfd_device_info.data(),
+			    peer_wfd_device_info, kWfdDeviceInfoLen);
+		}
 	}
-#endif
+
+	callWithEachP2pIfaceCallback(
+	    wpa_s->ifname,
+	    std::bind(
+		&ISupplicantP2pIfaceCallback::onDeviceFound,
+		std::placeholders::_1, addr, info->p2p_device_addr,
+		info->pri_dev_type, info->device_name, info->config_methods,
+		info->dev_capab, info->group_capab, hidl_peer_wfd_device_info));
 }
 
 void HidlManager::notifyP2pDeviceLost(
@@ -2378,8 +2320,8 @@ void HidlManager::callWithEachP2pIfaceCallback(
 }
 
 /**
- * Helper fucntion to invoke the provided callback method on all the
- * registered V1.1 iface callback hidl objects for the specified
+ * Helper function to invoke the provided callback method on all the
+ * registered V1.1 interface callback hidl objects for the specified
  * |ifname|.
  *
  * @param ifname Name of the corresponding interface.
