@@ -2502,6 +2502,7 @@ static void wpas_dev_found(void *ctx, const u8 *addr,
 	char devtype[WPS_DEV_TYPE_BUFSIZE];
 	char *wfd_dev_info_hex = NULL;
 	char *wfd_r2_dev_info_hex = NULL;
+
 #ifdef CONFIG_WIFI_DISPLAY
 	wfd_dev_info_hex = wifi_display_subelem_hex(info->wfd_subelems,
 						    WFD_SUBELEM_DEVICE_INFO);
@@ -2591,7 +2592,7 @@ done:
 
 	wpas_notify_p2p_device_found(ctx, addr, info, wfd_dev_info,
 				     wfd_dev_info_len, wfd_r2_dev_info,
-				wfd_r2_dev_info_len, new_device);
+				     wfd_r2_dev_info_len, new_device);
 	os_free(wfd_dev_info);
 }
 
