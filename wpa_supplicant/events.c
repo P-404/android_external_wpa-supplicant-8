@@ -1769,7 +1769,7 @@ wpas_get_est_throughput_from_bss_snr(const struct wpa_supplicant *wpa_s,
 	const u8 *ies = (const void *) (bss + 1);
 	size_t ie_len = bss->ie_len ? bss->ie_len : bss->beacon_ie_len;
 
-	return wpas_get_est_tpt(wpa_s, ies, ie_len, rate, snr);
+	return wpas_get_est_tpt(wpa_s, ies, ie_len, rate, snr, bss->freq);
 }
 
 #endif /* CONFIG_NO_ROAMING */
