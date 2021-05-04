@@ -392,7 +392,7 @@ int joinGroup(
 
 	if (wpas_p2p_group_add_persistent(
 		wpa_s, wpa_network, 0, 0, 0, 0, ht40, vht,
-		CHANWIDTH_USE_HT, he, edmg, NULL, 0, 0)) {
+		CHANWIDTH_USE_HT, he, edmg, NULL, 0, 0, 0)) {
 		ret = -1;
 	}
 
@@ -1152,7 +1152,7 @@ std::pair<SupplicantStatus, std::string> P2pIface::connectInternal(
 	int new_pin = wpas_p2p_connect(
 	    wpa_s, peer_address.data(), pin, wps_method, persistent, auto_join,
 	    join_existing_group, false, go_intent_signed, 0, 0, -1, false, ht40,
-	    vht, CHANWIDTH_USE_HT, he, edmg, nullptr, 0);
+	    vht, CHANWIDTH_USE_HT, he, edmg, nullptr, 0, 0);
 	if (new_pin < 0) {
 		return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, {}};
 	}
@@ -1217,7 +1217,7 @@ SupplicantStatus P2pIface::addGroupInternal(
 	if (ssid == NULL) {
 		if (wpas_p2p_group_add(
 			wpa_s, persistent, 0, 0, ht40, vht,
-			CHANWIDTH_USE_HT, he, edmg)) {
+			CHANWIDTH_USE_HT, he, edmg, 0)) {
 			return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 		} else {
 			return {SupplicantStatusCode::SUCCESS, ""};
@@ -1225,7 +1225,7 @@ SupplicantStatus P2pIface::addGroupInternal(
 	} else if (ssid->disabled == 2) {
 		if (wpas_p2p_group_add_persistent(
 			wpa_s, ssid, 0, 0, 0, 0, ht40, vht,
-			CHANWIDTH_USE_HT, he, edmg, NULL, 0, 0)) {
+			CHANWIDTH_USE_HT, he, edmg, NULL, 0, 0, 0)) {
 			return {SupplicantStatusCode::FAILURE_NETWORK_UNKNOWN,
 				""};
 		} else {
@@ -1270,7 +1270,7 @@ SupplicantStatus P2pIface::inviteInternal(
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
 	if (wpas_p2p_invite_group(
 		wpa_s, group_ifname.c_str(), peer_address.data(),
-		go_device_address.data())) {
+		go_device_address.data(), 0)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
@@ -1292,7 +1292,7 @@ SupplicantStatus P2pIface::reinvokeInternal(
 	}
 	if (wpas_p2p_invite(
 		wpa_s, peer_address.data(), ssid, NULL, 0, 0, ht40, vht,
-		CHANWIDTH_USE_HT, 0, he, edmg)) {
+		CHANWIDTH_USE_HT, 0, he, edmg, 0)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
@@ -1750,7 +1750,7 @@ SupplicantStatus P2pIface::addGroup_1_2Internal(
 
 		if (wpas_p2p_group_add(
 		    wpa_s, persistent, freq, 0, ht40, vht,
-		    CHANWIDTH_USE_HT, he, edmg)) {
+		    CHANWIDTH_USE_HT, he, edmg, 0)) {
 			return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 		}
 		return {SupplicantStatusCode::SUCCESS, ""};
