@@ -3226,7 +3226,7 @@ static void wpas_invitation_received(void *ctx, const u8 *sa, const u8 *bssid,
 				wpa_s->conf->p2p_go_he,
 				wpa_s->conf->p2p_go_edmg, NULL,
 				go ? P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE : 0,
-				1);
+				1, is_p2p_allow_6ghz(wpa_s->global->p2p));
 		} else if (bssid) {
 			wpa_s->user_initiated_pd = 0;
 			wpa_msg_global(wpa_s, MSG_INFO,
@@ -3455,7 +3455,8 @@ static void wpas_invitation_result(void *ctx, int status, const u8 *bssid,
 				      channels,
 				      ssid->mode == WPAS_MODE_P2P_GO ?
 				      P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE :
-				      0, 1);
+				      0, 1,
+				      is_p2p_allow_6ghz(wpa_s->global->p2p));
 }
 
 
@@ -4471,10 +4472,10 @@ static void wpas_p2ps_prov_complete(void *ctx, u8 status, const u8 *dev,
 					persistent_go->mode ==
 					WPAS_MODE_P2P_GO ?
 					P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE :
-					0, 0);
+					0, 0, false);
 			} else if (response_done) {
 				wpas_p2p_group_add(wpa_s, 1, freq,
-						   0, 0, 0, 0, 0, 0);
+						   0, 0, 0, 0, 0, 0, false);
 			}
 
 			if (passwd_id == DEV_PW_P2PS_DEFAULT) {
@@ -4593,9 +4594,11 @@ static int wpas_prov_disc_resp_cb(void *ctx)
 			wpa_s, persistent_go, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 			NULL,
 			persistent_go->mode == WPAS_MODE_P2P_GO ?
-			P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE : 0, 0);
+			P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE : 0, 0,
+			is_p2p_allow_6ghz(wpa_s->global->p2p));
 	} else {
-		wpas_p2p_group_add(wpa_s, 1, freq, 0, 0, 0, 0, 0, 0);
+		wpas_p2p_group_add(wpa_s, 1, freq, 0, 0, 0, 0, 0, 0,
+				   is_p2p_allow_6ghz(wpa_s->global->p2p));
 	}
 
 	return 1;
@@ -5181,7 +5184,8 @@ static void wpas_p2p_scan_res_join(struct wpa_supplicant *wpa_s,
 					 wpa_s->p2p_go_max_oper_chwidth,
 					 wpa_s->p2p_go_he,
 					 wpa_s->p2p_go_edmg,
-					 NULL, 0);
+					 NULL, 0,
+					 is_p2p_allow_6ghz(wpa_s->global->p2p));
 			return;
 		}
 
@@ -5729,6 +5733,7 @@ exit_free:
  *	(CHANWIDTH_*).
  * @group_ssid: Specific Group SSID for join or %NULL if not set
  * @group_ssid_len: Length of @group_ssid in octets
+ * @allow_6ghz: Allow P2P connection on 6 GHz channels
  * Returns: 0 or new PIN (if pin was %NULL) on success, -1 on unspecified
  *	failure, -2 on failure due to channel not currently available,
  *	-3 if forced channel is not supported
@@ -5739,7 +5744,8 @@ int wpas_p2p_connect(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
 		     int go_intent, int freq, unsigned int vht_center_freq2,
 		     int persistent_id, int pd, int ht40, int vht,
 		     unsigned int vht_chwidth, int he, int edmg,
-		     const u8 *group_ssid, size_t group_ssid_len)
+		     const u8 *group_ssid, size_t group_ssid_len,
+		     bool allow_6ghz)
 {
 	int force_freq = 0, pref_freq = 0;
 	int ret = 0, res;
@@ -6650,6 +6656,7 @@ wpas_p2p_get_group_iface(struct wpa_supplicant *wpa_s, int addr_allocated,
  * @vht:  Start GO with VHT support
  * @vht_chwidth: channel bandwidth for GO operating with VHT support
  * @edmg: Start GO with EDMG support
+ * @allow_6ghz: Allow P2P group creation on a 6 GHz channel
  * Returns: 0 on success, -1 on failure
  *
  * This function creates a new P2P group with the local end as the Group Owner,
@@ -6657,7 +6664,8 @@ wpas_p2p_get_group_iface(struct wpa_supplicant *wpa_s, int addr_allocated,
  */
 int wpas_p2p_group_add(struct wpa_supplicant *wpa_s, int persistent_group,
 		       int freq, int vht_center_freq2, int ht40, int vht,
-		       int max_oper_chwidth, int he, int edmg)
+		       int max_oper_chwidth, int he, int edmg,
+		       bool allow_6ghz)
 {
 	struct p2p_go_neg_results params;
 
@@ -6761,7 +6769,8 @@ int wpas_p2p_group_add_persistent(struct wpa_supplicant *wpa_s,
 				  int vht, int max_oper_chwidth, int he,
 				  int edmg,
 				  const struct p2p_channels *channels,
-				  int connection_timeout, int force_scan)
+				  int connection_timeout, int force_scan,
+				  bool allow_6ghz)
 {
 	struct p2p_go_neg_results params;
 	int go = 0, freq;
@@ -7390,7 +7399,7 @@ int wpas_p2p_reject(struct wpa_supplicant *wpa_s, const u8 *addr)
 int wpas_p2p_invite(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
 		    struct wpa_ssid *ssid, const u8 *go_dev_addr, int freq,
 		    int vht_center_freq2, int ht40, int vht, int max_chwidth,
-		    int pref_freq, int he, int edmg)
+		    int pref_freq, int he, int edmg, bool allow_6ghz)
 {
 	enum p2p_invite_role role;
 	u8 *bssid = NULL;
@@ -7473,7 +7482,8 @@ int wpas_p2p_invite(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
 
 /* Invite to join an active group */
 int wpas_p2p_invite_group(struct wpa_supplicant *wpa_s, const char *ifname,
-			  const u8 *peer_addr, const u8 *go_dev_addr)
+			  const u8 *peer_addr, const u8 *go_dev_addr,
+			  bool allow_6ghz)
 {
 	struct wpa_global *global = wpa_s->global;
 	enum p2p_invite_role role;
@@ -8437,7 +8447,7 @@ static int wpas_p2p_fallback_to_go_neg(struct wpa_supplicant *wpa_s,
 			 wpa_s->p2p_go_max_oper_chwidth,
 			 wpa_s->p2p_go_he,
 			 wpa_s->p2p_go_edmg,
-			 NULL, 0);
+			 NULL, 0, is_p2p_allow_6ghz(wpa_s->global->p2p));
 	return ret;
 }
 
@@ -8975,7 +8985,7 @@ static int wpas_p2p_nfc_join_group(struct wpa_supplicant *wpa_s,
 				-1, 0, 1, 1, wpa_s->p2p_go_max_oper_chwidth,
 				wpa_s->p2p_go_he, wpa_s->p2p_go_edmg,
 				params->go_ssid_len ? params->go_ssid : NULL,
-				params->go_ssid_len);
+				params->go_ssid_len, false);
 }
 
 
@@ -9054,7 +9064,7 @@ static int wpas_p2p_nfc_init_go_neg(struct wpa_supplicant *wpa_s,
 				forced_freq, wpa_s->p2p_go_vht_center_freq2,
 				-1, 0, 1, 1, wpa_s->p2p_go_max_oper_chwidth,
 				wpa_s->p2p_go_he, wpa_s->p2p_go_edmg,
-				NULL, 0);
+				NULL, 0, false);
 }
 
 
@@ -9071,7 +9081,7 @@ static int wpas_p2p_nfc_resp_go_neg(struct wpa_supplicant *wpa_s,
 			       forced_freq, wpa_s->p2p_go_vht_center_freq2,
 			       -1, 0, 1, 1, wpa_s->p2p_go_max_oper_chwidth,
 			       wpa_s->p2p_go_he, wpa_s->p2p_go_edmg,
-			       NULL, 0);
+			       NULL, 0, false);
 	if (res)
 		return res;
 
