@@ -13,7 +13,7 @@
 #include <net/if.h>
 #include <sys/socket.h>
 #include <linux/if_bridge.h>
-
+#include <cutils/properties.h>
 
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
@@ -36,6 +36,7 @@ extern "C"
 // TOOD(b/71872409): Add unit tests for this.
 namespace {
 constexpr char kConfFileNameFmt[] = "/data/vendor/wifi/hostapd/hostapd_%s.conf";
+constexpr char kApBw160Property[] = "wifi.dbg.sap.bw160";
 
 using android::base::RemoveFileIfExists;
 using android::base::StringPrintf;
@@ -302,6 +303,7 @@ std::string CreateHostapdConfig(
 
 	const int wigigOpClass = (180 << 16);
 	bool isWigig = ((iface_params.V1_2.V1_1.V1_0.channelParams.channel & 0xFF0000) == wigigOpClass);
+	bool useBw160 = (property_get_int32(kApBw160Property, 0) != 0);
 
 	// Encryption config string
 	uint32_t band = 0;
@@ -417,11 +419,17 @@ std::string CreateHostapdConfig(
 		    (band & IHostapd::BandMask::BAND_6_GHZ) ? "op_class=134" : "");
 
 	} else {
+		bool support11ac = iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC;
+#ifdef CONFIG_IEEE80211AX
+		if (!support11ac) {
+			support11ac = iface_params.V1_2.hwModeParams.enable80211AX;
+		}
+#endif
 		int op_class = getOpClassForChannel(
 		    channelParams.channel,
 		    band,
 		    iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211N,
-		    iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC);
+		    support11ac);
 		channel_config_as_string = StringPrintf(
 		    "channel=%d\n"
 		    "op_class=%d",
@@ -447,10 +455,17 @@ std::string CreateHostapdConfig(
 		if (((band & IHostapd::BandMask::BAND_5_GHZ) != 0)
 		    || ((band & IHostapd::BandMask::BAND_6_GHZ) != 0)) {
 			hw_mode_as_string = "hw_mode=any";
-			if (iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC) {
-				ht_cap_vht_oper_chwidth_as_string =
+			if (iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC
+#ifdef CONFIG_IEEE80211AX
+			    || iface_params.V1_2.hwModeParams.enable80211AX
+#endif
+			) {
+				ht_cap_vht_oper_chwidth_as_string = StringPrintf(
 				    "ht_capab=[HT40+]\n"
-				    "vht_oper_chwidth=1";
+				    "vht_oper_chwidth=%d\n"
+				    "he_oper_chwidth=%d",
+				    useBw160 ? 2: 1,
+				    useBw160 ? 2: 1);
 			}
 		} else {
 			hw_mode_as_string = "hw_mode=g";
@@ -458,10 +473,17 @@ std::string CreateHostapdConfig(
 	} else if (((band & IHostapd::BandMask::BAND_5_GHZ) != 0)
 		    || ((band & IHostapd::BandMask::BAND_6_GHZ) != 0)) {
 			hw_mode_as_string = "hw_mode=a";
-		if (iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC) {
-			ht_cap_vht_oper_chwidth_as_string =
+		if (iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211AC
+#ifdef CONFIG_IEEE80211AX
+		    || iface_params.V1_2.hwModeParams.enable80211AX
+#endif
+		) {
+			ht_cap_vht_oper_chwidth_as_string = StringPrintf(
 			    "ht_capab=[HT40+]\n"
-			    "vht_oper_chwidth=1";
+			    "vht_oper_chwidth=%d\n"
+			    "he_oper_chwidth=%d",
+			    useBw160 ? 2: 1,
+			    useBw160 ? 2: 1);
 		}
 	} else {
 		wpa_printf(MSG_ERROR, "Invalid band");
