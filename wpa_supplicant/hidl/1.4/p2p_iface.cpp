@@ -14,6 +14,7 @@
 #include "misc_utils.h"
 #include "p2p_iface.h"
 #include "sta_network.h"
+#include <cutils/properties.h>
 
 extern "C"
 {
@@ -41,6 +42,7 @@ constexpr char kSetMiracastMode[] = "MIRACAST ";
 constexpr uint8_t kWfdDeviceInfoSubelemId = 0;
 constexpr uint8_t kWfdR2DeviceInfoSubelemId = 11;
 constexpr char kWfdDeviceInfoSubelemLenHexStr[] = "0006";
+constexpr char kAgoBw160Property[] = "wifi.dbg.ago.bw160";
 
 std::function<void()> pending_join_scan_callback = NULL;
 std::function<void()> pending_scan_res_join_callback = NULL;
@@ -1232,18 +1234,23 @@ SupplicantStatus P2pIface::addGroupInternal(
 	int edmg = wpa_s->conf->p2p_go_edmg;
 	struct wpa_ssid* ssid =
 	    wpa_config_get_network(wpa_s->conf, persistent_network_id);
+	int max_oper_chwidth = CHANWIDTH_USE_HT;
+	uint32_t freq = 0;
+
+	prepareMaxOperChwidth(freq, ht40, vht, he, max_oper_chwidth);
+
 	if (ssid == NULL) {
 		if (wpas_p2p_group_add(
-			wpa_s, persistent, 0, 0, ht40, vht,
-			CHANWIDTH_USE_HT, he, edmg, 0)) {
+			wpa_s, persistent, freq, 0, ht40, vht,
+			max_oper_chwidth, he, edmg, 0)) {
 			return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 		} else {
 			return {SupplicantStatusCode::SUCCESS, ""};
 		}
 	} else if (ssid->disabled == 2) {
 		if (wpas_p2p_group_add_persistent(
-			wpa_s, ssid, 0, 0, 0, 0, ht40, vht,
-			CHANWIDTH_USE_HT, he, edmg, NULL, 0, 0, 0)) {
+			wpa_s, ssid, 0, freq, 0, 0, ht40, vht,
+			max_oper_chwidth, he, edmg, NULL, 0, 0, 0)) {
 			return {SupplicantStatusCode::FAILURE_NETWORK_UNKNOWN,
 				""};
 		} else {
@@ -1758,6 +1765,10 @@ SupplicantStatus P2pIface::addGroup_1_2Internal(
 
 	if (!joinExistingGroup) {
 		struct p2p_data *p2p = wpa_s->global->p2p;
+		int max_oper_chwidth = CHANWIDTH_USE_HT;
+
+		prepareMaxOperChwidth(freq, ht40, vht, he, max_oper_chwidth);
+
 		os_memcpy(p2p->ssid, ssid.data(), ssid.size());
 		p2p->ssid_len = ssid.size();
 		p2p->ssid_set = 1;
@@ -1768,7 +1779,7 @@ SupplicantStatus P2pIface::addGroup_1_2Internal(
 
 		if (wpas_p2p_group_add(
 		    wpa_s, persistent, freq, 0, ht40, vht,
-		    CHANWIDTH_USE_HT, he, edmg, 0)) {
+		    max_oper_chwidth, he, edmg, 0)) {
 			return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 		}
 		return {SupplicantStatusCode::SUCCESS, ""};
@@ -1980,6 +1991,36 @@ wpa_supplicant* P2pIface::retrieveIfacePtr()
 wpa_supplicant* P2pIface::retrieveGroupIfacePtr(const std::string& group_ifname)
 {
 	return wpa_supplicant_get_iface(wpa_global_, group_ifname.c_str());
+}
+
+void P2pIface::prepareMaxOperChwidth(uint32_t &freq, int &ht40, int &vht, int &he, int &max_oper_chwidth) {
+	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
+	bool useBw160 = (property_get_int32(kAgoBw160Property, 0) != 0);
+
+	if ((wpa_s->drv_flags & WPA_DRIVER_FLAGS_DFS_OFFLOAD) && useBw160) {
+#ifdef CONFIG_ACS
+		wpa_printf(MSG_DEBUG, "P2P: AGO parameters, freq=acs");
+		freq = 0;
+		wpa_s->p2p_go_acs_band = HOSTAPD_MODE_IEEE80211A;
+		wpa_s->p2p_go_do_acs = 1;
+#else
+		wpa_printf(MSG_DEBUG, "P2P: AGO parameters, freq=%u", freq);
+		// driver allows bw160 range for P2P Ago is:
+		// [range 1] start=5490 end=5730
+		// [range 2] start=5945 end=7125
+		if (freq < 5490)
+			freq = 5500;
+#endif
+		max_oper_chwidth = CHANWIDTH_160MHZ;
+		wpa_s->p2p_go_allow_dfs = 1;
+	} else {
+		max_oper_chwidth = CHANWIDTH_80MHZ;
+		wpa_s->p2p_go_allow_dfs = 0;
+	}
+
+	ht40 = 1;
+	vht = 1;
+	he = 1;
 }
 
 }  // namespace implementation
