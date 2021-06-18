@@ -471,6 +471,7 @@ std::string CreateHostapdConfig(
 		he_params_as_string = StringPrintf(
 		    "ieee80211ax=1\n"
 		    "he_bss_color=%d\n"
+		    "he_oper_chwidth=1\n"
 		    "he_su_beamformer=%d\n"
 		    "he_su_beamformee=%d\n"
 		    "he_mu_beamformer=%d\n"
