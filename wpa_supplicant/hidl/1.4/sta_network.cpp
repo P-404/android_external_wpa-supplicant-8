@@ -1971,6 +1971,11 @@ SupplicantStatus StaNetwork::selectInternal()
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+#ifdef CONFIG_OCV
+	wpa_ssid->ocv = 1;
+#endif
+	if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION)
+		wpa_ssid->beacon_prot = 1;
 	wpa_s->scan_min_time.sec = 0;
 	wpa_s->scan_min_time.usec = 0;
 	wpa_supplicant_select_network(wpa_s, wpa_ssid);

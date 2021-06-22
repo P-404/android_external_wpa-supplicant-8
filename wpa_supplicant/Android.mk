@@ -18,11 +18,6 @@ endif
 
 include $(LOCAL_PATH)/android.config
 
-ifeq ($(call is-board-platform-in-list,msm8998 msm8953 msm8937 sdm710 sdm845),true)
-  $(warning "Disabling SuiteB-192 support in wpa_supplicant for $(TARGET_BOARD_PLATFORM)")
-  CONFIG_SUITEB192=n
-endif
-
 # To ignore possible wrong network configurations
 L_CFLAGS = -DWPA_IGNORE_CONFIG_ERRORS
 

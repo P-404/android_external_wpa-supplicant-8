@@ -341,7 +341,8 @@ std::string CreateHostapdConfig(
 		encryption_config_as_string = StringPrintf(
 		    "wpa=2\n"
 		    "rsn_pairwise=%s\n"
-		    "wpa_passphrase=%s",
+		    "wpa_passphrase=%s\n"
+		    "ieee80211w=1",
 		    is_60Ghz_band_only ? "GCMP" : "CCMP",
 		    nw_params.V1_2.passphrase.c_str());
 		break;
@@ -525,7 +526,9 @@ std::string CreateHostapdConfig(
 	    "%s\n"
 	    "%s\n"
 	    "%s\n"
-	    "%s\n",
+	    "%s\n"
+	    "ocv=1\n"
+	    "beacon_prot=1\n",
 	    iface_params.V1_2.V1_1.V1_0.ifaceName.c_str(), ssid_as_string.c_str(),
 	    channel_config_as_string.c_str(),
 	    iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211N ? 1 : 0,
