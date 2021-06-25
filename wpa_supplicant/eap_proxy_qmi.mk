@@ -10,12 +10,10 @@ L_CFLAGS += -DCONFIG_EAP_PROXY_DUAL_SIM
 endif
 
 LIB_SHARED_EAP_PROXY := libqmi_cci libqmiservices libidl
-INCLUDES += $(TARGET_OUT_HEADERS)/qmi-framework/inc
-INCLUDES += $(TARGET_OUT_HEADERS)/qmi/inc
-INCLUDES += $(TARGET_OUT_HEADERS)/qmi/platform
-INCLUDES += $(TARGET_OUT_HEADERS)/qmi/core/lib/inc
 
-LIB_HEADER_EAP_PROXY := libril-qc-qmi-services-headers
+LIB_HEADER_EAP_PROXY := libqmi_common_headers
+LIB_HEADER_EAP_PROXY += libril-qc-qmi-services-headers
+LIB_HEADER_EAP_PROXY += libdataqmiservices_headers_ext
 
 ifdef CONFIG_EAP_PROXY_MDM_DETECT
 L_CFLAGS += -DCONFIG_EAP_PROXY_MDM_DETECT
