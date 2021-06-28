@@ -635,12 +635,17 @@ void wpa_debug_setup_stdout(void)
 
 #ifndef CONFIG_NO_WPA_MSG
 static wpa_msg_cb_func wpa_msg_cb = NULL;
+static wpa_msg_cb_func wpa_msg_hidl_cb = NULL;
 
 void wpa_msg_register_cb(wpa_msg_cb_func func)
 {
 	wpa_msg_cb = func;
 }
 
+void wpa_msg_register_hidl_cb(wpa_msg_cb_func func)
+{
+	wpa_msg_hidl_cb = func;
+}
 
 static wpa_msg_get_ifname_func wpa_msg_ifname_cb = NULL;
 
@@ -684,6 +689,8 @@ void wpa_msg(void *ctx, int level, const char *fmt, ...)
 	wpa_printf(level, "%s%s", prefix, buf);
 	if (wpa_msg_cb)
 		wpa_msg_cb(ctx, level, WPA_MSG_PER_INTERFACE, buf, len);
+	if (wpa_msg_hidl_cb)
+		wpa_msg_hidl_cb(ctx, level, WPA_MSG_PER_INTERFACE, buf, len);
 	bin_clear_free(buf, buflen);
 }
 
@@ -695,7 +702,7 @@ void wpa_msg_ctrl(void *ctx, int level, const char *fmt, ...)
 	int buflen;
 	int len;
 
-	if (!wpa_msg_cb)
+	if (!wpa_msg_cb && !wpa_msg_hidl_cb)
 		return;
 
 	va_start(ap, fmt);
@@ -711,7 +718,10 @@ void wpa_msg_ctrl(void *ctx, int level, const char *fmt, ...)
 	va_start(ap, fmt);
 	len = vsnprintf(buf, buflen, fmt, ap);
 	va_end(ap);
-	wpa_msg_cb(ctx, level, WPA_MSG_PER_INTERFACE, buf, len);
+	if (wpa_msg_cb)
+		wpa_msg_cb(ctx, level, WPA_MSG_PER_INTERFACE, buf, len);
+	if (wpa_msg_hidl_cb)
+		wpa_msg_hidl_cb(ctx, level, WPA_MSG_PER_INTERFACE, buf, len);
 	bin_clear_free(buf, buflen);
 }
 
@@ -739,6 +749,8 @@ void wpa_msg_global(void *ctx, int level, const char *fmt, ...)
 	wpa_printf(level, "%s", buf);
 	if (wpa_msg_cb)
 		wpa_msg_cb(ctx, level, WPA_MSG_GLOBAL, buf, len);
+	if (wpa_msg_hidl_cb)
+		wpa_msg_hidl_cb(ctx, level, WPA_MSG_GLOBAL, buf, len);
 	bin_clear_free(buf, buflen);
 }
 
@@ -750,7 +762,7 @@ void wpa_msg_global_ctrl(void *ctx, int level, const char *fmt, ...)
 	int buflen;
 	int len;
 
-	if (!wpa_msg_cb)
+	if (!wpa_msg_cb && !wpa_msg_hidl_cb)
 		return;
 
 	va_start(ap, fmt);
@@ -766,7 +778,10 @@ void wpa_msg_global_ctrl(void *ctx, int level, const char *fmt, ...)
 	va_start(ap, fmt);
 	len = vsnprintf(buf, buflen, fmt, ap);
 	va_end(ap);
-	wpa_msg_cb(ctx, level, WPA_MSG_GLOBAL, buf, len);
+	if (wpa_msg_cb)
+		wpa_msg_cb(ctx, level, WPA_MSG_GLOBAL, buf, len);
+	if (wpa_msg_hidl_cb)
+		wpa_msg_hidl_cb(ctx, level, WPA_MSG_GLOBAL, buf, len);
 	bin_clear_free(buf, buflen);
 }
 
@@ -794,6 +809,9 @@ void wpa_msg_no_global(void *ctx, int level, const char *fmt, ...)
 	wpa_printf(level, "%s", buf);
 	if (wpa_msg_cb)
 		wpa_msg_cb(ctx, level, WPA_MSG_NO_GLOBAL, buf, len);
+	if (wpa_msg_hidl_cb)
+		wpa_msg_hidl_cb(ctx, level, WPA_MSG_NO_GLOBAL, buf, len);
+
 	bin_clear_free(buf, buflen);
 }
 
@@ -821,6 +839,8 @@ void wpa_msg_global_only(void *ctx, int level, const char *fmt, ...)
 	wpa_printf(level, "%s", buf);
 	if (wpa_msg_cb)
 		wpa_msg_cb(ctx, level, WPA_MSG_ONLY_GLOBAL, buf, len);
+	if (wpa_msg_hidl_cb)
+		wpa_msg_hidl_cb(ctx, level, WPA_MSG_ONLY_GLOBAL, buf, len);
 	os_free(buf);
 }
 

@@ -937,7 +937,7 @@ V1_2::HostapdStatus Hostapd::addSingleAccessPoint(
 	iface_hapd->setup_complete_cb_ctx = iface_hapd;
 	iface_hapd->sta_authorized_cb = onAsyncStaAuthorizedCb;
 	iface_hapd->sta_authorized_cb_ctx = iface_hapd;
-	wpa_msg_register_cb(onAsyncWpaEventCb);
+	wpa_msg_register_hidl_cb(onAsyncWpaEventCb);
 
 	if (hostapd_enable_iface(iface_hapd->iface) < 0) {
 		wpa_printf(
