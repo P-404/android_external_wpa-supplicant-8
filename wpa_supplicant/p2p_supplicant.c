@@ -5383,7 +5383,8 @@ static void wpas_p2p_join_scan_req(struct wpa_supplicant *wpa_s, int freq,
 	if (freq > 0) {
 		freqs[0] = freq;
 		params.freqs = freqs;
-	} else if (wpa_s->conf->p2p_6ghz_disable) {
+	} else if (wpa_s->conf->p2p_6ghz_disable ||
+		   !is_p2p_allow_6ghz(wpa_s->global->p2p)) {
 		wpa_printf(MSG_DEBUG,
 			   "P2P: 6 GHz disabled - update the scan frequency list");
 		wpa_add_scan_freqs_list(wpa_s, HOSTAPD_MODE_IEEE80211G, &params,
@@ -5420,7 +5421,7 @@ static void wpas_p2p_join_scan_req(struct wpa_supplicant *wpa_s, int freq,
 	 * the new scan results become available.
 	 */
 	ret = wpa_drv_scan(wpa_s, &params);
-	if (wpa_s->conf->p2p_6ghz_disable && params.freqs != freqs)
+	if (params.freqs != freqs)
 		os_free(params.freqs);
 	if (!ret) {
 		os_get_reltime(&wpa_s->scan_trigger_time);
@@ -5650,6 +5651,10 @@ static int wpas_p2p_setup_freqs(struct wpa_supplicant *wpa_s, int freq,
 		res = wpa_drv_get_pref_freq_list(wpa_s, iface_type,
 						 &max_pref_freq,
 						 pref_freq_list);
+		if (!is_p2p_allow_6ghz(wpa_s->global->p2p))
+			max_pref_freq = p2p_remove_6ghz_channels(pref_freq_list,
+								 max_pref_freq);
+
 		if (!res && max_pref_freq > 0) {
 			*num_pref_freq = max_pref_freq;
 			i = 0;
@@ -5709,6 +5714,40 @@ exit_free:
 }
 
 
+static bool is_p2p_6ghz_supported(struct wpa_supplicant *wpa_s,
+				  const u8 *peer_addr)
+{
+	if (wpa_s->conf->p2p_6ghz_disable ||
+	    !get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes,
+		      HOSTAPD_MODE_IEEE80211A, true))
+		return false;
+
+	if (!p2p_wfd_enabled(wpa_s->global->p2p))
+		return false;
+	if (peer_addr && !p2p_peer_wfd_enabled(wpa_s->global->p2p, peer_addr))
+		return false;
+
+	return true;
+}
+
+
+static int wpas_p2p_check_6ghz(struct wpa_supplicant *wpa_s,
+			       const u8 *peer_addr, bool allow_6ghz, int freq)
+{
+	if (allow_6ghz && is_p2p_6ghz_supported(wpa_s, peer_addr)) {
+		wpa_printf(MSG_DEBUG,
+			   "P2P: Allow connection on 6 GHz channels");
+		p2p_set_6ghz_dev_capab(wpa_s->global->p2p, true);
+	} else {
+		if (is_6ghz_freq(freq))
+			return -2;
+		p2p_set_6ghz_dev_capab(wpa_s->global->p2p, false);
+	}
+
+	return 0;
+}
+
+
 /**
  * wpas_p2p_connect - Request P2P Group Formation to be started
  * @wpa_s: Pointer to wpa_supplicant data from wpa_supplicant_add_iface()
@@ -5764,7 +5803,7 @@ int wpas_p2p_connect(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
 			return -1;
 	}
 
-	if (is_6ghz_freq(freq) && wpa_s->conf->p2p_6ghz_disable)
+	if (wpas_p2p_check_6ghz(wpa_s, peer_addr, allow_6ghz, freq))
 		return -2;
 
 	os_free(wpa_s->global->add_psk);
@@ -6042,6 +6081,9 @@ static int wpas_p2p_select_go_freq(struct wpa_supplicant *wpa_s, int freq)
 
 		res = wpa_drv_get_pref_freq_list(wpa_s, WPA_IF_P2P_GO,
 						 &size, pref_freq_list);
+		if (!is_p2p_allow_6ghz(wpa_s->global->p2p))
+			size = p2p_remove_6ghz_channels(pref_freq_list, size);
+
 		if (!res && size > 0) {
 			i = 0;
 			while (i < size &&
@@ -6670,6 +6712,8 @@ int wpas_p2p_group_add(struct wpa_supplicant *wpa_s, int persistent_group,
 	struct p2p_go_neg_results params;
 
 	if (wpa_s->global->p2p_disabled || wpa_s->global->p2p == NULL)
+		return -1;
+	if (wpas_p2p_check_6ghz(wpa_s, NULL, allow_6ghz, freq))
 		return -1;
 
 	os_free(wpa_s->global->add_psk);
@@ -7408,6 +7452,9 @@ int wpas_p2p_invite(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
 	int no_pref_freq_given = pref_freq == 0;
 	unsigned int pref_freq_list[P2P_MAX_PREF_CHANNELS], size;
 
+	if (wpas_p2p_check_6ghz(wpa_s, NULL, allow_6ghz, freq))
+		return -1;
+
 	wpa_s->global->p2p_invite_group = NULL;
 	if (peer_addr)
 		os_memcpy(wpa_s->p2p_auth_invite, peer_addr, ETH_ALEN);
@@ -7545,6 +7592,8 @@ int wpas_p2p_invite_group(struct wpa_supplicant *wpa_s, const char *ifname,
 	wpa_s->p2pdev->pending_invite_ssid_id = -1;
 
 	if (wpa_s->global->p2p_disabled || wpa_s->global->p2p == NULL)
+		return -1;
+	if (wpas_p2p_check_6ghz(wpa_s, peer_addr, allow_6ghz, freq))
 		return -1;
 
 	size = P2P_MAX_PREF_CHANNELS;
