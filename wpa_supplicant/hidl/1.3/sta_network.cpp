@@ -2190,6 +2190,7 @@ SupplicantStatus StaNetwork::setPmkCacheInternal(const std::vector<uint8_t>& ser
 	ss.write((char *) serializedEntry.data(), std::streamsize(serializedEntry.size()));
 	misc_utils::deserializePmkCacheEntry(ss, new_entry);
 	new_entry->network_ctx = wpa_ssid;
+	new_entry->external = true;
 	wpa_sm_pmksa_cache_add_entry(wpa_s->wpa, new_entry);
 
 	return {SupplicantStatusCode::SUCCESS, ""};
