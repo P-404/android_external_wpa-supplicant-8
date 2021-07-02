@@ -1178,7 +1178,7 @@ eap_proxy_init(void *eapol_ctx, const struct eapol_callbacks *eapol_cb,
         eap_proxy->qmi_thread_joined = false;
 
         ret = pthread_create(&eap_proxy->thread_id, NULL, eap_proxy_post_init, eap_proxy);
-        if(ret < 0) {
+        if(ret != 0) {
                wpa_printf(MSG_ERROR, "eap_proxy: starting thread is failed %d\n", ret);
                goto fail;
         }
