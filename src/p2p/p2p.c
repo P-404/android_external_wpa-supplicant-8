@@ -1036,7 +1036,7 @@ static void p2p_search(struct p2p_data *p2p)
 
 	res = p2p->cfg->p2p_scan(p2p->cfg->cb_ctx, type, freq,
 				 p2p->num_req_dev_types, p2p->req_dev_types,
-				 p2p->find_dev_id, pw_id);
+				 p2p->find_dev_id, pw_id, p2p->include_6ghz);
 	if (res < 0) {
 		p2p_dbg(p2p, "Scan request schedule failed");
 		p2p_continue_find(p2p);
@@ -1160,7 +1160,7 @@ int p2p_find(struct p2p_data *p2p, unsigned int timeout,
 	     enum p2p_discovery_type type,
 	     unsigned int num_req_dev_types, const u8 *req_dev_types,
 	     const u8 *dev_id, unsigned int search_delay,
-	     u8 seek_count, const char **seek, int freq)
+	     u8 seek_count, const char **seek, int freq, bool include_6ghz)
 {
 	int res;
 	struct os_reltime start;
@@ -1185,7 +1185,7 @@ int p2p_find(struct p2p_data *p2p, unsigned int timeout,
 		p2p->find_dev_id = p2p->find_dev_id_buf;
 	} else
 		p2p->find_dev_id = NULL;
-
+	p2p->include_6ghz = p2p_wfd_enabled(p2p) && include_6ghz;
 	if (seek_count == 0 || !seek) {
 		/* Not an ASP search */
 		p2p->p2ps_seek = 0;
@@ -1261,7 +1261,8 @@ int p2p_find(struct p2p_data *p2p, unsigned int timeout,
 						 P2P_SCAN_SPECIFIC, freq,
 						 p2p->num_req_dev_types,
 						 p2p->req_dev_types, dev_id,
-						 DEV_PW_DEFAULT);
+						 DEV_PW_DEFAULT,
+						 p2p->include_6ghz);
 			break;
 		}
 		/* fall through */
@@ -1269,13 +1270,13 @@ int p2p_find(struct p2p_data *p2p, unsigned int timeout,
 		res = p2p->cfg->p2p_scan(p2p->cfg->cb_ctx, P2P_SCAN_FULL, 0,
 					 p2p->num_req_dev_types,
 					 p2p->req_dev_types, dev_id,
-					 DEV_PW_DEFAULT);
+					 DEV_PW_DEFAULT, p2p->include_6ghz);
 		break;
 	case P2P_FIND_ONLY_SOCIAL:
 		res = p2p->cfg->p2p_scan(p2p->cfg->cb_ctx, P2P_SCAN_SOCIAL, 0,
 					 p2p->num_req_dev_types,
 					 p2p->req_dev_types, dev_id,
-					 DEV_PW_DEFAULT);
+					 DEV_PW_DEFAULT, p2p->include_6ghz);
 		break;
 	default:
 		return -1;
@@ -5605,4 +5606,27 @@ void p2p_set_6ghz_dev_capab(struct p2p_data *p2p, bool allow_6ghz)
 bool is_p2p_6ghz_capable(struct p2p_data *p2p)
 {
 	return p2p->p2p_6ghz_capable;
+}
+
+
+bool p2p_wfd_enabled(struct p2p_data *p2p)
+{
+#ifdef CONFIG_WIFI_DISPLAY
+	return p2p->wfd_ie_probe_req != NULL;
+#else /* CONFIG_WIFI_DISPLAY */
+	return false;
+#endif /* CONFIG_WIFI_DISPLAY */
+}
+
+
+bool p2p_peer_wfd_enabled(struct p2p_data *p2p, const u8 *peer_addr)
+{
+#ifdef CONFIG_WIFI_DISPLAY
+	struct p2p_device *dev;
+
+	dev = p2p_get_device(p2p, peer_addr);
+	return dev && dev->info.wfd_subelems != NULL;
+#else /* CONFIG_WIFI_DISPLAY */
+	return false;
+#endif /* CONFIG_WIFI_DISPLAY */
 }

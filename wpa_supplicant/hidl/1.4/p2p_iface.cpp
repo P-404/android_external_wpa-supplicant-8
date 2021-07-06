@@ -1084,7 +1084,7 @@ SupplicantStatus P2pIface::findInternal(uint32_t timeout_in_sec)
 	uint32_t search_delay = wpas_p2p_search_delay(wpa_s);
 	if (wpas_p2p_find(
 		wpa_s, timeout_in_sec, P2P_FIND_START_WITH_FULL, 0, nullptr,
-		nullptr, search_delay, 0, nullptr, 0)) {
+		nullptr, search_delay, 0, nullptr, 0, 0)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
