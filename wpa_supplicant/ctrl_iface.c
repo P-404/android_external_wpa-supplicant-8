@@ -6028,6 +6028,7 @@ static int p2p_ctrl_connect(struct wpa_supplicant *wpa_s, char *cmd,
 	u8 _group_ssid[SSID_MAX_LEN], *group_ssid = NULL;
 	size_t group_ssid_len = 0;
 	int he;
+	bool allow_6ghz;
 
 	if (!wpa_s->global->p2p_init_wpa_s)
 		return -1;
@@ -6065,6 +6066,7 @@ static int p2p_ctrl_connect(struct wpa_supplicant *wpa_s, char *cmd,
 		}
 	}
 	join = os_strstr(pos, " join") != NULL;
+	allow_6ghz = os_strstr(pos, " allow_6ghz") != NULL;
 	auth = os_strstr(pos, " auth") != NULL;
 	automatic = os_strstr(pos, " auto") != NULL;
 	pd = os_strstr(pos, " provdisc") != NULL;
@@ -6144,7 +6146,7 @@ static int p2p_ctrl_connect(struct wpa_supplicant *wpa_s, char *cmd,
 				   persistent_group, automatic, join,
 				   auth, go_intent, freq, freq2, persistent_id,
 				   pd, ht40, vht, max_oper_chwidth, he, edmg,
-				   group_ssid, group_ssid_len);
+				   group_ssid, group_ssid_len, allow_6ghz);
 	if (new_pin == -2) {
 		os_memcpy(buf, "FAIL-CHANNEL-UNAVAILABLE\n", 25);
 		return 25;
@@ -6701,6 +6703,7 @@ static int p2p_ctrl_invite_persistent(struct wpa_supplicant *wpa_s, char *cmd)
 	int freq = 0, pref_freq = 0;
 	int ht40, vht, he, max_oper_chwidth, chwidth = 0, freq2 = 0;
 	int edmg;
+	bool allow_6ghz;
 
 	id = atoi(cmd);
 	pos = os_strstr(cmd, " peer=");
@@ -6752,8 +6755,11 @@ static int p2p_ctrl_invite_persistent(struct wpa_supplicant *wpa_s, char *cmd)
 	if (max_oper_chwidth < 0)
 		return -1;
 
+	allow_6ghz = os_strstr(cmd, " allow_6ghz") != NULL;
+
 	return wpas_p2p_invite(wpa_s, _peer, ssid, NULL, freq, freq2, ht40, vht,
-			       max_oper_chwidth, pref_freq, he, edmg);
+			       max_oper_chwidth, pref_freq, he, edmg,
+			       allow_6ghz);
 }
 
 
@@ -6761,6 +6767,7 @@ static int p2p_ctrl_invite_group(struct wpa_supplicant *wpa_s, char *cmd)
 {
 	char *pos;
 	u8 peer[ETH_ALEN], go_dev_addr[ETH_ALEN], *go_dev = NULL;
+	bool allow_6ghz;
 
 	pos = os_strstr(cmd, " peer=");
 	if (!pos)
@@ -6773,6 +6780,8 @@ static int p2p_ctrl_invite_group(struct wpa_supplicant *wpa_s, char *cmd)
 		return -1;
 	}
 
+	allow_6ghz = os_strstr(pos, " allow_6ghz") != NULL;
+
 	pos = os_strstr(pos, " go_dev_addr=");
 	if (pos) {
 		pos += 13;
@@ -6784,7 +6793,7 @@ static int p2p_ctrl_invite_group(struct wpa_supplicant *wpa_s, char *cmd)
 		go_dev = go_dev_addr;
 	}
 
-	return wpas_p2p_invite_group(wpa_s, cmd, peer, go_dev);
+	return wpas_p2p_invite_group(wpa_s, cmd, peer, go_dev, allow_6ghz);
 }
 
 
@@ -6802,7 +6811,7 @@ static int p2p_ctrl_invite(struct wpa_supplicant *wpa_s, char *cmd)
 static int p2p_ctrl_group_add_persistent(struct wpa_supplicant *wpa_s,
 					 int id, int freq, int vht_center_freq2,
 					 int ht40, int vht, int vht_chwidth,
-					 int he, int edmg)
+					 int he, int edmg, bool allow_6ghz)
 {
 	struct wpa_ssid *ssid;
 
@@ -6817,13 +6826,14 @@ static int p2p_ctrl_group_add_persistent(struct wpa_supplicant *wpa_s,
 	return wpas_p2p_group_add_persistent(wpa_s, ssid, 0, freq,
 					     vht_center_freq2, 0, ht40, vht,
 					     vht_chwidth, he, edmg,
-					     NULL, 0, 0);
+					     NULL, 0, 0, allow_6ghz);
 }
 
 
 static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 {
 	int freq = 0, persistent = 0, group_id = -1;
+	bool allow_6ghz = false;
 	int vht = wpa_s->conf->p2p_go_vht;
 	int ht40 = wpa_s->conf->p2p_go_ht40 || vht;
 	int he = wpa_s->conf->p2p_go_he;
@@ -6856,6 +6866,8 @@ static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 			edmg = 1;
 		} else if (os_strcmp(token, "persistent") == 0) {
 			persistent = 1;
+		} else if (os_strcmp(token, "allow_6ghz") == 0) {
+			allow_6ghz = true;
 		} else {
 			wpa_printf(MSG_DEBUG,
 				   "CTRL: Invalid P2P_GROUP_ADD parameter: '%s'",
@@ -6892,10 +6904,10 @@ static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 		return p2p_ctrl_group_add_persistent(wpa_s, group_id,
 						     freq, freq2, ht40, vht,
 						     max_oper_chwidth, he,
-						     edmg);
+						     edmg, allow_6ghz);
 
 	return wpas_p2p_group_add(wpa_s, persistent, freq, freq2, ht40, vht,
-				  max_oper_chwidth, he, edmg);
+				  max_oper_chwidth, he, edmg, allow_6ghz);
 }
 
 
