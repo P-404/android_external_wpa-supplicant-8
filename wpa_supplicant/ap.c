@@ -203,12 +203,8 @@ int wpa_supplicant_conf_ap_ht(struct wpa_supplicant *wpa_s,
 			   "Determining HT/VHT options based on driver capabilities (freq=%u chan=%u)",
 			   ssid->frequency, conf->channel);
 
-		for (i = 0; i < wpa_s->hw.num_modes; i++) {
-			if (wpa_s->hw.modes[i].mode == conf->hw_mode) {
-				mode = &wpa_s->hw.modes[i];
-				break;
-			}
-		}
+		mode = get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes,
+				conf->hw_mode, is_6ghz_freq(ssid->frequency));
 
 #ifdef CONFIG_HT_OVERRIDES
 		if (ssid->disable_ht)
