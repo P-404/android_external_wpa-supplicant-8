@@ -26,9 +26,6 @@ L_CFLAGS += -DANDROID_LOG_NAME=\"hostapd\"
 
 L_CFLAGS += -Wall -Werror
 
-# TODO: move off readdir_r upstream, pull fix back (http://b/72326431).
-L_CFLAGS += -Wno-error-deprecated-declarations
-
 # Disable unused parameter warnings
 L_CFLAGS += -Wno-unused-parameter
 
@@ -1139,7 +1136,7 @@ L_CFLAGS += -DCONFIG_CTRL_IFACE_HIDL
 ifdef HOSTAPD_USE_VENDOR_HIDL
 L_CFLAGS += -DCONFIG_USE_VENDOR_HIDL
 endif
-L_CPPFLAGS = -Wall -Werror
+L_CPPFLAGS = -Wall -Werror -Wno-unused-variable
 endif
 endif
 
