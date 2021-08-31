@@ -510,6 +510,18 @@ struct robust_av_data {
 	bool valid_config;
 };
 
+struct dscp_policy_status {
+	u8 id;
+	u8 status;
+};
+
+struct dscp_resp_data {
+	bool more;
+	bool reset;
+	bool solicited;
+	struct dscp_policy_status *policy;
+	int num_policies;
+};
 
 enum ip_version {
 	IPV4 = 4,
@@ -1776,5 +1788,7 @@ void wpas_handle_qos_mgmt_recv_action(struct wpa_supplicant *wpa_s,
 				      const u8 *src,
 				      const u8 *buf, size_t len);
 void wpas_dscp_deinit(struct wpa_supplicant *wpa_s);
+int wpas_send_dscp_response(struct wpa_supplicant *wpa_s,
+			    struct dscp_resp_data *resp_data);
 
 #endif /* WPA_SUPPLICANT_I_H */
