@@ -887,6 +887,8 @@ static int wpa_supplicant_ctrl_iface_set(struct wpa_supplicant *wpa_s,
 			return -1;
 		wnm_set_coloc_intf_elems(wpa_s, elems);
 #endif /* CONFIG_WNM */
+	} else if (os_strcasecmp(cmd, "enable_dscp_policy_capa") == 0) {
+		wpa_s->enable_dscp_policy_capa = !!atoi(value);
 	} else {
 		value[-1] = '=';
 		ret = wpa_config_process_global(wpa_s->conf, cmd, -1);
@@ -8425,6 +8427,7 @@ static void wpa_supplicant_ctrl_iface_flush(struct wpa_supplicant *wpa_s)
 	wpas_clear_driver_signal_override(wpa_s);
 	wpa_s->disable_scs_support = 0;
 	wpa_s->disable_mscs_support = 0;
+	wpa_s->enable_dscp_policy_capa = 0;
 #ifdef CONFIG_DPP
 	os_free(wpa_s->dpp_config_obj_override);
 	wpa_s->dpp_config_obj_override = NULL;
