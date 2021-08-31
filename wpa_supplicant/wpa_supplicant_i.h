@@ -1513,6 +1513,7 @@ struct wpa_supplicant {
 #endif /* CONFIG_TESTING_OPTIONS */
 	struct dl_list active_scs_ids;
 	bool ongoing_scs_req;
+	unsigned int enable_dscp_policy_capa:1;
 };
 
 
