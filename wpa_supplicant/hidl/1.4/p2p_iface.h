@@ -325,6 +325,8 @@ private:
 	struct wpa_supplicant* retrieveIfacePtr();
 	struct wpa_supplicant* retrieveGroupIfacePtr(
 	    const std::string& group_ifname);
+	void prepareMaxOperChwidth(uint32_t &freq, int &ht40, int &vht,
+	    int &he, int &max_oper_chwidth);
 
 	// Reference to the global wpa_struct. This is assumed to be valid for
 	// the lifetime of the process.
