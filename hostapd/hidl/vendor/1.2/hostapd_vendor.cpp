@@ -497,7 +497,7 @@ std::string CreateHostapdConfig(
 	    "ignore_broadcast_ssid=%d\n"
 	    "wowlan_triggers=any\n"
 	    "%s\n"
-	    "ocv=1\n"
+	    "ocv=2\n"
 	    "beacon_prot=1\n",
 	    iface_params.ifaceName.c_str(), ssid_as_string.c_str(),
 	    channel_config_as_string.c_str(),

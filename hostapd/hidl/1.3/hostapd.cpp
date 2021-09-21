@@ -552,7 +552,7 @@ std::string CreateHostapdConfig(
 	    "%s\n"
 	    "%s\n"
 	    "%s\n"
-	    "ocv=1\n"
+	    "ocv=2\n"
 	    "beacon_prot=1\n",
 	    iface_params.V1_2.V1_1.V1_0.ifaceName.c_str(), ssid_as_string.c_str(),
 	    channel_config_as_string.c_str(),
