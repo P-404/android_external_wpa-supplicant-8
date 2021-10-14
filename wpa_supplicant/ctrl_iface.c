@@ -10186,6 +10186,8 @@ static int wpas_ctrl_iface_pmksa_add(struct wpa_supplicant *wpa_s,
 	if (sscanf(pos, "%d %d %d %d", &reauth_time, &expiration,
 		   &entry->akmp, &entry->opportunistic) != 4)
 		goto fail;
+	if (reauth_time > expiration)
+		goto fail;
 	for (i = 0; i < 4; i++) {
 		pos = os_strchr(pos, ' ');
 		if (!pos) {
