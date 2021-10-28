@@ -19,11 +19,14 @@ endif
 include $(LOCAL_PATH)/android.config
 
 ifeq ($(call is-board-platform-in-list,msm8909 msm8937 msm8953 msm8996 msm8998 sdm660 sdm710 sdm845 $(MSMSTEPPE) $(TRINKET) msmnile lito atoll bengal kona),true)
-  $(warning "Disabling OCV support in hostapd for $(TARGET_BOARD_PLATFORM)")
+  $(warning "Disabling OCV support in wpa_supplicant for $(TARGET_BOARD_PLATFORM)")
   CONFIG_OCV=n
-  CONFIG_SAE_LOOP_AND_H2E=n
 endif
 
+ifeq ($(call is-board-platform-in-list,msm8909 msm8937 msm8953 msm8996 msm8998 sdm660 sdm710 sdm845 $(MSMSTEPPE) $(TRINKET) msmnile atoll),true)
+  $(warning "Disabling H2E support in wpa_supplicant for $(TARGET_BOARD_PLATFORM)")
+  CONFIG_SAE_LOOP_AND_H2E=n
+endif
 
 ifeq ($(call is-board-platform-in-list,msm8998 msm8953 msm8937 sdm710 sdm845),true)
   $(warning "Disabling SuiteB-192 support in wpa_supplicant for $(TARGET_BOARD_PLATFORM)")
