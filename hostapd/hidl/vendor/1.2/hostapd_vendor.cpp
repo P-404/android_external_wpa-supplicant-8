@@ -267,6 +267,15 @@ std::string CreateHostapdConfig(
 	bool isWigig = ((channelParams.channel & 0xFF0000) == wigigOpClass);
 	channelParams.channel &= 0xFFFF;
 
+	unsigned int band = 0;
+	band |= v_iface_params.channelParams.bandMask;
+
+	int sae_pwe = 0;
+#ifdef CONFIG_SAE_LOOP_AND_H2E
+	bool is_6Ghz_band_only = (band  == static_cast<uint32_t>(IHostapdVendor::BandMask::BAND_6_GHZ));
+	sae_pwe = is_6Ghz_band_only ? 1 : 2;
+#endif
+
 	// Encryption config string
 	std::string encryption_config_as_string;
 	switch (v_nw_params.vendorEncryptionType) {
@@ -336,10 +345,12 @@ std::string CreateHostapdConfig(
 		    "ieee80211w=1\n"
 		    "sae_require_mfp=1\n"
 		    "wpa_passphrase=%s\n"
-		    "sae_password=%s",
+		    "sae_password=%s\n"
+		    "sae_pwe=%d",
 		    isWigig ? "GCMP" : "CCMP",
 		    v_nw_params.passphrase.c_str(),
-		    v_nw_params.passphrase.c_str());
+		    v_nw_params.passphrase.c_str(),
+		    sae_pwe);
 		break;
 	case IHostapdVendor::VendorEncryptionType::SAE:
 		if (!validatePassphrase(v_nw_params.passphrase.size(), 1, -1)) {
@@ -351,9 +362,11 @@ std::string CreateHostapdConfig(
 		    "wpa_key_mgmt=SAE\n"
 		    "ieee80211w=2\n"
 		    "sae_require_mfp=2\n"
-		    "sae_password=%s",
+		    "sae_password=%s\n"
+		    "sae_pwe=%d",
 		    isWigig ? "GCMP" : "CCMP",
-		    v_nw_params.passphrase.c_str());
+		    v_nw_params.passphrase.c_str(),
+		    sae_pwe);
 		break;
 #endif /* CONFIG_SAE */
 #ifdef CONFIG_OWE
@@ -378,9 +391,6 @@ std::string CreateHostapdConfig(
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
 		return "";
 	}
-
-	unsigned int band = 0;
-	band |= v_iface_params.channelParams.bandMask;
 
 	std::string channel_config_as_string;
 	bool isFirst = true;
