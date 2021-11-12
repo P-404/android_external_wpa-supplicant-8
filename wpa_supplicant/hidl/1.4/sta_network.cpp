@@ -1972,14 +1972,9 @@ SupplicantStatus StaNetwork::selectInternal()
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
-#ifdef CONFIG_OCV
-	wpa_ssid->ocv = 1;
-#endif
-	if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION)
-		wpa_ssid->beacon_prot = 1;
 	wpa_s->scan_min_time.sec = 0;
 	wpa_s->scan_min_time.usec = 0;
-        wpa_supplicant_update_scan_results(wpa_s);
+	wpa_supplicant_update_scan_results(wpa_s);
 	wpa_supplicant_select_network(wpa_s, wpa_ssid);
 	return {SupplicantStatusCode::SUCCESS, ""};
 }
@@ -2294,7 +2289,13 @@ SupplicantStatus StaNetwork::setKeyMgmt_1_3Internal(uint32_t key_mgmt_mask)
 		return {SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
 	}
 	setFastTransitionKeyMgmt(key_mgmt_mask);
-
+	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+#ifdef CONFIG_OCV
+	if (!(key_mgmt_mask & WPA_KEY_MGMT_NONE))
+		wpa_ssid->ocv = 1;
+#endif
+	if (!(key_mgmt_mask & WPA_KEY_MGMT_NONE))
+		wpa_ssid->beacon_prot = 1;
 	if (key_mgmt_mask & WPA_KEY_MGMT_OWE) {
 		// Do not allow to connect to Open network when OWE is selected
 		wpa_ssid->owe_only = 1;
