@@ -16,8 +16,16 @@ ifeq ($(WPA_BUILD_HOSTAPD),true)
 
 include $(LOCAL_PATH)/android.config
 
+ifeq ($(TARGET_BOARD_PLATFORM), lahaina)
+  CONFIG_SAE_LOOP_AND_H2E=y
+endif
+
 # To ignore possible wrong network configurations
 L_CFLAGS = -DWPA_IGNORE_CONFIG_ERRORS
+
+ifeq ($(CONFIG_SAE_LOOP_AND_H2E),y)
+L_CFLAGS += -DCONFIG_SAE_LOOP_AND_H2E
+endif
 
 L_CFLAGS += -DVERSION_STR_POSTFIX=\"-$(PLATFORM_VERSION)\"
 
