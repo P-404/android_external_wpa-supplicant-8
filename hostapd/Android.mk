@@ -1190,7 +1190,7 @@ LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.hostapd@1.0 \
 endif
 endif
 ifeq ($(HOSTAPD_USE_AIDL), y)
-LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd-V1-ndk_platform
+LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd-V1-ndk
 LOCAL_SHARED_LIBRARIES += libbase libutils
 LOCAL_SHARED_LIBRARIES += libbinder_ndk
 LOCAL_STATIC_LIBRARIES += libhostapd_aidl
@@ -1248,7 +1248,7 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.hostapd@1.1 \
     android.hardware.wifi.hostapd@1.2 \
     android.hardware.wifi.hostapd@1.3 \
-    android.hardware.wifi.hostapd-V1-ndk_platform \
+    android.hardware.wifi.hostapd-V1-ndk \
     libbinder_ndk \
     libbase \
     libutils \
