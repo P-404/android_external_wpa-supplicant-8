@@ -364,10 +364,12 @@ std::string CreateHostapdConfig(
 		    "ieee80211w=1\n"
 		    "sae_require_mfp=1\n"
 		    "wpa_passphrase=%s\n"
-		    "sae_password=%s",
+		    "sae_password=%s\n"
+		    "sae_pwe=%d",
 		    is_60Ghz_band_only ? "GCMP" : "CCMP",
 		    nw_params.V1_2.passphrase.c_str(),
-		    nw_params.V1_2.passphrase.c_str());
+		    nw_params.V1_2.passphrase.c_str(),
+		    is_6Ghz_band_only ? 1 : 2);
 		break;
 	case IHostapd::EncryptionType::WPA3_SAE:
 		if (!validatePassphrase(nw_params.V1_2.passphrase.size(), 1, -1)) {
