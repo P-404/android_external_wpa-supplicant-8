@@ -117,13 +117,17 @@ void hostapd_hidl_deinit(struct hapd_interfaces *interfaces)
 {
 	wpa_printf(MSG_INFO, "Deiniting hidl control");
 	// Before hidl init, make sure call terminate to clear callback_
-	service->terminate();
+	if (service)
+		service->terminate();
 	eloop_unregister_read_sock(hidl_fd);
 	IPCThreadState::shutdown();
 	hidl_fd = -1;
-	service.clear();
-	os_free(interfaces->hidl_service_name);
-	interfaces->hidl_service_name = NULL;
+	if (service)
+		service.clear();
+	if (interfaces && interfaces->hidl_service_name) {
+		os_free(interfaces->hidl_service_name);
+		interfaces->hidl_service_name = NULL;
+	}
 #ifdef CONFIG_USE_VENDOR_HIDL
 	if (vendor_service) {
 		vendor_service->invalidate();
