@@ -1427,7 +1427,7 @@ static void handle_qmi_eap_reply(
         wpa_printf(MSG_ERROR, "eap_proxy: %s started\n", __func__);
         if (!valid_eap_proxy(eap_proxy)) {
                 wpa_printf(MSG_ERROR, "eap_proxy: eap_proxy is not initialized");
-                goto done;
+                return;
         }
         if (QMI_STATE_RESP_PENDING == eap_proxy->qmi_state) {
 
@@ -1440,19 +1440,19 @@ static void handle_qmi_eap_reply(
                                         " the request: sysErrorCode=%d\n",
                                         sysErrCode);
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-                        goto done;
+                        return;
                 }
 
                 if (NULL == rspData) {
                         wpa_printf(MSG_ERROR, "eap_proxy: Response data is NULL\n");
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-                        goto done;
+                        return;
                 }
                 if (QMI_AUTH_SEND_EAP_PACKET_EXT_REQ_V01 != msg_id)
                 {
                         wpa_printf(MSG_ERROR, "eap_proxy: Invalid msgId =%d\n", msg_id);
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-                        goto done;
+                        return;
                 }
 
                 /* ensure the reply packet exists  */
@@ -1462,7 +1462,7 @@ static void handle_qmi_eap_reply(
                                 " error %d result %d\n", rspData->eap_response_pkt_len,
                                 rspData->resp.error, rspData->resp.result);
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-                        goto done;
+                        return;
                 }
 
                 length = rspData->eap_response_pkt_len;
@@ -1478,7 +1478,7 @@ static void handle_qmi_eap_reply(
                         wpa_printf(MSG_ERROR, "eap_proxy: Unable to allocate memory for"
                                         " reply packet\n");
                         eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
-                        goto done;
+                        return;
                 }
 
                 /* copy the response data to the allocated buffer */
@@ -1491,7 +1491,7 @@ static void handle_qmi_eap_reply(
                 dump_buff(resp_data, length);
         }
 
-done:
+        /* Free rspData here in successful case, eap_proxy_process will free it in failure cases */
         if (rspData != NULL) {
                 os_free(rspData);
                 rspData = NULL;
