@@ -152,7 +152,8 @@ public:
 		const std::string& in_ssid, const std::vector<uint8_t>& in_privEcKey) override;
 	::ndk::ScopedAStatus setQosPolicyFeatureEnabled(bool in_enable) override;
 	::ndk::ScopedAStatus sendQosPolicyResponse(
-		bool in_morePolicies, const std::vector<QosPolicyStatus>& in_qosPolicyStatusList) override;
+		int32_t in_qosPolicyRequestId, bool in_morePolicies,
+		const std::vector<QosPolicyStatus>& in_qosPolicyStatusList) override;
 	::ndk::ScopedAStatus removeAllQosPolicies() override;
 
 private:
@@ -254,7 +255,8 @@ private:
 		const std::string& ssid, const std::vector<uint8_t> &privEcKey);
 	ndk::ScopedAStatus setQosPolicyFeatureEnabledInternal(bool enable);
 	ndk::ScopedAStatus sendQosPolicyResponseInternal(
-		bool more_policies, const std::vector<QosPolicyStatus>& qos_policy_status_list);
+		int32_t qos_policy_request_id, bool more_policies,
+		const std::vector<QosPolicyStatus>& qos_policy_status_list);
 	ndk::ScopedAStatus removeAllQosPoliciesInternal();
 
 	struct wpa_supplicant* retrieveIfacePtr();
