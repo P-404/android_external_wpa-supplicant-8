@@ -24,6 +24,7 @@
 #include "sme.h"
 #include "notify.h"
 #include "common/dpp.h"
+#include "aidl/aidl.h"
 #ifdef CONFIG_HIDL
 #include "hidl.h"
 #endif
@@ -500,6 +501,10 @@ void wpas_notify_bss_freq_changed(struct wpa_supplicant *wpa_s,
 		return;
 
 	wpas_dbus_bss_signal_prop_changed(wpa_s, WPAS_DBUS_BSS_PROP_FREQ, id);
+
+#ifdef CONFIG_AIDL
+	wpas_aidl_notify_bss_freq_changed(wpa_s);
+#endif
 }
 
 
@@ -693,11 +698,13 @@ void wpas_notify_p2p_device_found(struct wpa_supplicant *wpa_s,
 	/* Notify a new peer has been detected*/
 	wpas_dbus_signal_peer_device_found(wpa_s, info->p2p_device_addr);
 
+#ifdef CONFIG_HIDL
 	wpas_hidl_notify_p2p_device_found(wpa_s, addr, info,
 					  peer_wfd_device_info,
 					  peer_wfd_device_info_len,
 					  peer_wfd_r2_device_info,
 					  peer_wfd_r2_device_info_len);
+#endif
 }
 
 
@@ -964,6 +971,10 @@ void wpas_notify_certification(struct wpa_supplicant *wpa_s,
 		wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_EAP_PEER_ALT
 			"depth=%d %s", cert->depth, cert->altsubject[i]);
 
+	wpas_aidl_notify_ceritification(wpa_s, cert->depth, cert->subject,
+				       cert->altsubject, cert->num_altsubject,
+				       cert_hash, cert->cert);
+
 	/* notify the new DBus API */
 	wpas_dbus_signal_certification(wpa_s, cert->depth, cert->subject,
 				       cert->altsubject, cert->num_altsubject,
@@ -1099,7 +1110,9 @@ void wpas_notify_hs20_rx_terms_and_conditions_acceptance(
 	if (!wpa_s || !url)
 		return;
 
+#ifdef CONFIG_HIDL
 	wpas_hidl_notify_hs20_rx_terms_and_conditions_acceptance(wpa_s, url);
+#endif
 #endif /* CONFIG_HS20 */
 }
 
