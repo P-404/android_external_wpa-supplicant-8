@@ -1813,7 +1813,7 @@ endif
 LOCAL_SHARED_LIBRARIES += libhidlbase libutils libbase
 LOCAL_STATIC_LIBRARIES += libwpa_hidl
 LOCAL_VINTF_FRAGMENTS := hidl/$(HIDL_INTERFACE_VERSION)/android.hardware.wifi.supplicant.xml
-ifeq ($(WIFI_HAL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY), true)
+ifeq ($(WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY), true)
 LOCAL_INIT_RC=hidl/$(HIDL_INTERFACE_VERSION)/android.hardware.wifi.supplicant-service.rc
 endif
 endif
