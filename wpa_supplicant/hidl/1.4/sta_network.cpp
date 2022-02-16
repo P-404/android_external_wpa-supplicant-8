@@ -2289,7 +2289,6 @@ SupplicantStatus StaNetwork::setKeyMgmt_1_3Internal(uint32_t key_mgmt_mask)
 		return {SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
 	}
 	setFastTransitionKeyMgmt(key_mgmt_mask);
-	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 #ifdef CONFIG_OCV
 	if (!(key_mgmt_mask & WPA_KEY_MGMT_NONE))
 		wpa_ssid->ocv = 1;
