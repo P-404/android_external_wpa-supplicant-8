@@ -6821,6 +6821,7 @@ static int wpa_supplicant_init_iface(struct wpa_supplicant *wpa_s,
 		wpa_s->num_multichan_concurrent =
 			capa.num_multichan_concurrent;
 		wpa_s->wmm_ac_supported = capa.wmm_ac_supported;
+		wpa_s->max_num_akms = capa.max_num_akms;
 
 		if (capa.mac_addr_rand_scan_supported)
 			wpa_s->mac_addr_rand_supported |= MAC_ADDR_RAND_SCAN;
