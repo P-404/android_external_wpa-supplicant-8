@@ -694,13 +694,14 @@ bool StaIface::isValid()
 	int32_t in_peerBootstrapId, int32_t in_ownBootstrapId,
 	const std::string& in_ssid, const std::string& in_password,
 	const std::string& in_psk, DppNetRole in_netRole,
-	DppAkm in_securityAkm)
+	DppAkm in_securityAkm, const std::vector<uint8_t>& in_privEcKey,
+	std::vector<uint8_t>* _aidl_return)
 {
 	return validateAndCall(
 		this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
-		&StaIface::startDppConfiguratorInitiatorInternal,
+		&StaIface::startDppConfiguratorInitiatorInternal, _aidl_return,
 		in_peerBootstrapId,in_ownBootstrapId, in_ssid, in_password,
-		in_psk, in_netRole, in_securityAkm);
+		in_psk, in_netRole, in_securityAkm, in_privEcKey);
 }
 
 ::ndk::ScopedAStatus StaIface::startDppEnrolleeInitiator(
@@ -754,6 +755,14 @@ bool StaIface::isValid()
 		&StaIface::stopDppResponderInternal, in_ownBootstrapId);
 }
 
+::ndk::ScopedAStatus StaIface::generateSelfDppConfiguration(
+	const std::string& in_ssid, const std::vector<uint8_t>& in_privEcKey)
+{
+	return validateAndCall(
+		this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
+		&StaIface::generateSelfDppConfigurationInternal, in_ssid, in_privEcKey);
+}
+
 ::ndk::ScopedAStatus StaIface::getWpaDriverCapabilities(
 	WpaDriverCapabilitiesMask* _aidl_return)
 {
@@ -779,13 +788,13 @@ bool StaIface::isValid()
 }
 
 ::ndk::ScopedAStatus StaIface::sendQosPolicyResponse(
-	bool in_morePolicies,
+	int32_t in_qosPolicyRequestId, bool in_morePolicies,
 	const std::vector<QosPolicyStatus>& in_qosPolicyStatusList)
 {
 	return validateAndCall(
 		this, SupplicantStatusCode::FAILURE_UNKNOWN,
-		&StaIface::sendQosPolicyResponseInternal, in_morePolicies,
-		in_qosPolicyStatusList);
+		&StaIface::sendQosPolicyResponseInternal, in_qosPolicyRequestId,
+		in_morePolicies, in_qosPolicyStatusList);
 }
 
 ::ndk::ScopedAStatus StaIface::removeAllQosPolicies()
@@ -793,6 +802,12 @@ bool StaIface::isValid()
 	return validateAndCall(
 		this, SupplicantStatusCode::FAILURE_UNKNOWN,
 		&StaIface::removeAllQosPoliciesInternal);
+}
+
+::ndk::ScopedAStatus StaIface::getConnectionMloLinksInfo(MloLinksInfo* _aidl_return) {
+	return validateAndCall(
+		this, SupplicantStatusCode::FAILURE_UNKNOWN,
+		&StaIface::getConnectionMloLinksInfoInternal, _aidl_return);
 }
 
 std::pair<std::string, ndk::ScopedAStatus> StaIface::getNameInternal()
@@ -1394,10 +1409,12 @@ ndk::ScopedAStatus StaIface::removeDppUriInternal(uint32_t bootstrap_id)
 	return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 }
 
-ndk::ScopedAStatus StaIface::startDppConfiguratorInitiatorInternal(
-		uint32_t peer_bootstrap_id,	uint32_t own_bootstrap_id,
+std::pair<std::vector<uint8_t>, ndk::ScopedAStatus>
+StaIface::startDppConfiguratorInitiatorInternal(
+		uint32_t peer_bootstrap_id, uint32_t own_bootstrap_id,
 		const std::string& ssid, const std::string& password,
-		const std::string& psk, DppNetRole net_role, DppAkm security_akm)
+		const std::string& psk, DppNetRole net_role, DppAkm security_akm,
+		const std::vector<uint8_t> &privEcKey)
 {
 #ifdef CONFIG_DPP
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
@@ -1407,7 +1424,8 @@ ndk::ScopedAStatus StaIface::startDppConfiguratorInitiatorInternal(
 			net_role != DppNetRole::STA) {
 		wpa_printf(MSG_ERROR,
 			   "DPP: Error: Invalid network role specified: %d", net_role);
-		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+		return {std::vector<uint8_t>(),
+			createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
 	}
 
 	cmd += " peer=" + std::to_string(peer_bootstrap_id);
@@ -1416,10 +1434,11 @@ ndk::ScopedAStatus StaIface::startDppConfiguratorInitiatorInternal(
 
 	/* Check for supported AKMs */
 	if (security_akm != DppAkm::PSK && security_akm != DppAkm::SAE &&
-			security_akm != DppAkm::PSK_SAE) {
+			security_akm != DppAkm::PSK_SAE && security_akm != DppAkm::DPP) {
 		wpa_printf(MSG_ERROR, "DPP: Error: invalid AKM specified: %d",
 				security_akm);
-		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+		return {std::vector<uint8_t>(),
+			createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
 	}
 
 	/* SAE AKM requires SSID and password to be initialized */
@@ -1427,17 +1446,20 @@ ndk::ScopedAStatus StaIface::startDppConfiguratorInitiatorInternal(
 			security_akm == DppAkm::PSK_SAE) &&
 			(ssid.empty() || password.empty())) {
 		wpa_printf(MSG_ERROR, "DPP: Error: Password or SSID not specified");
-		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+		return {std::vector<uint8_t>(),
+			createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
 	} else if (security_akm == DppAkm::PSK ||
 			security_akm == DppAkm::PSK_SAE) {
 		/* PSK AKM requires SSID and password/psk to be initialized */
 		if (ssid.empty()) {
 			wpa_printf(MSG_ERROR, "DPP: Error: SSID not specified");
-			return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+			return {std::vector<uint8_t>(),
+				createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
 		}
 		if (password.empty() && psk.empty()) {
 			wpa_printf(MSG_ERROR, "DPP: Error: Password or PSK not specified");
-			return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+			return {std::vector<uint8_t>(),
+				createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
 		}
 	}
 
@@ -1471,10 +1493,13 @@ ndk::ScopedAStatus StaIface::startDppConfiguratorInitiatorInternal(
 		role += "psk-sae";
 		break;
 
+	// TODO add code to handle DPP AKM
+	case DppAkm::DPP:
 	default:
 		wpa_printf(MSG_ERROR,
 			   "DPP: Invalid or unsupported security AKM specified: %d", security_akm);
-		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+		return {std::vector<uint8_t>(),
+			createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
 	}
 
 	cmd += " conf=";
@@ -1489,10 +1514,10 @@ ndk::ScopedAStatus StaIface::startDppConfiguratorInitiatorInternal(
 		   "DPP initiator command: %s", cmd.c_str());
 
 	if (wpas_dpp_auth_init(wpa_s, cmd.c_str()) == 0) {
-		return ndk::ScopedAStatus::ok();
+		return {std::vector<uint8_t>(), ndk::ScopedAStatus::ok()};
 	}
 #endif
-	return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+	return {std::vector<uint8_t>(), createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
 }
 
 ndk::ScopedAStatus StaIface::startDppEnrolleeInitiatorInternal(
@@ -1637,6 +1662,17 @@ ndk::ScopedAStatus StaIface::stopDppResponderInternal(uint32_t own_bootstrap_id)
 #endif
 }
 
+ndk::ScopedAStatus StaIface::generateSelfDppConfigurationInternal(const std::string& ssid,
+		const std::vector<uint8_t> &privEcKey)
+{
+#ifdef CONFIG_DPP
+    // TODO Implement this function
+    return createStatus(SupplicantStatusCode::FAILURE_UNSUPPORTED);
+#else
+	return createStatus(SupplicantStatusCode::FAILURE_UNSUPPORTED);
+#endif
+}
+
 std::pair<ConnectionCapabilities, ndk::ScopedAStatus>
 StaIface::getConnectionCapabilitiesInternal()
 {
@@ -1773,7 +1809,8 @@ ndk::ScopedAStatus StaIface::setQosPolicyFeatureEnabledInternal(bool enable)
 }
 
 ndk::ScopedAStatus StaIface::sendQosPolicyResponseInternal(
-	bool more_policies, const std::vector<QosPolicyStatus>& qos_policy_status_list)
+	int32_t qos_policy_request_id, bool more_policies,
+	const std::vector<QosPolicyStatus>& qos_policy_status_list)
 {
 	return ndk::ScopedAStatus::ok();
 }
@@ -1781,6 +1818,12 @@ ndk::ScopedAStatus StaIface::sendQosPolicyResponseInternal(
 ndk::ScopedAStatus StaIface::removeAllQosPoliciesInternal()
 {
 	return ndk::ScopedAStatus::ok();
+}
+
+std::pair<MloLinksInfo, ndk::ScopedAStatus> StaIface::getConnectionMloLinksInfoInternal()
+{
+	MloLinksInfo linksInfo;
+	return {linksInfo, ndk::ScopedAStatus::ok()};
 }
 
 /**
