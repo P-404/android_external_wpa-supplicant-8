@@ -429,7 +429,9 @@ static struct p2p_device * p2p_create_device(struct p2p_data *p2p,
 			oldest = dev;
 	}
 	if (count + 1 > p2p->cfg->max_peers && oldest) {
-		p2p_dbg(p2p, "Remove oldest peer entry to make room for a new peer");
+		p2p_dbg(p2p,
+			"Remove oldest peer entry to make room for a new peer "
+			MACSTR, MAC2STR(oldest->info.p2p_device_addr));
 		dl_list_del(&oldest->list);
 		p2p_device_free(p2p, oldest);
 	}
@@ -4009,6 +4011,10 @@ static void p2p_timeout_wait_peer_idle(struct p2p_data *p2p)
 
 	p2p_dbg(p2p, "Go to Listen state while waiting for the peer to become ready for GO Negotiation");
 	p2p->cfg->stop_listen(p2p->cfg->cb_ctx);
+	if (p2p->pending_listen_freq) {
+		p2p_dbg(p2p, "Clear pending_listen_freq for %s", __func__);
+		p2p->pending_listen_freq = 0;
+	}
 	p2p_set_state(p2p, P2P_WAIT_PEER_CONNECT);
 	p2p_listen_in_find(p2p, 0);
 }
