@@ -29,8 +29,8 @@ void wpas_notify_state_changed(struct wpa_supplicant *wpa_s,
 			       enum wpa_states old_state);
 void wpas_notify_disconnect_reason(struct wpa_supplicant *wpa_s);
 void wpas_notify_auth_status_code(struct wpa_supplicant *wpa_s);
-void wpas_notify_assoc_status_code(struct wpa_supplicant *wpa_s,
-				   const u8 *bssid, u8 timed_out);
+void wpas_notify_assoc_status_code(struct wpa_supplicant *wpa_s, const u8 *bssid, u8 timed_out,
+				   const u8 *assoc_resp_ie, size_t assoc_resp_ie_len);
 void wpas_notify_auth_timeout(struct wpa_supplicant *wpa_s);
 void wpas_notify_roam_time(struct wpa_supplicant *wpa_s);
 void wpas_notify_roam_complete(struct wpa_supplicant *wpa_s);
@@ -214,12 +214,5 @@ void wpas_notify_ssid_temp_disabled(struct wpa_supplicant *wpa_s,
 		const char *reason_string);
 void wpas_notify_open_ssl_failure(struct wpa_supplicant *wpa_s,
 		const char *reason_string);
-
-//Vendor dpp notification
-void wpas_notify_dpp_conf(void *msg_ctx, u8 type, u8* ssid,
-			  u8 ssid_len, const char *connector,
-			  struct wpabuf *c_sign, struct wpabuf *net_access,
-			  uint32_t net_access_expiry, const char *passphrase,
-			  uint32_t psk_set, u8 *psk);
 
 #endif /* NOTIFY_H */

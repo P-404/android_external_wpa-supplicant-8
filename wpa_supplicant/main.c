@@ -93,9 +93,9 @@ static void usage(void)
 #ifdef CONFIG_DEBUG_SYSLOG
 	       "  -s = log output to syslog instead of stdout\n"
 #endif /* CONFIG_DEBUG_SYSLOG */
-#ifdef CONFIG_HIDL
-	       "  -S = override default HIDL service name\n"
-#endif /* CONFIG_HIDL */
+#ifdef CONFIG_AIDL
+	       "  -S = override default AIDL service name\n"
+#endif /* CONFIG_AIDL */
 	       "  -t = include timestamp in debug messages\n"
 #ifdef CONFIG_DEBUG_LINUX_TRACING
 	       "  -T = record to Linux tracing in addition to logging\n"
@@ -290,11 +290,11 @@ int main(int argc, char *argv[])
 			params.wpa_debug_syslog++;
 			break;
 #endif /* CONFIG_DEBUG_SYSLOG */
-#ifdef CONFIG_HIDL
+#ifdef CONFIG_AIDL
 		case 'S':
-			params.hidl_service_name = optarg;
+			params.aidl_service_name = optarg;
 			break;
-#endif /* CONFIG_HIDL */
+#endif /* CONFIG_AIDL */
 #ifdef CONFIG_DEBUG_LINUX_TRACING
 		case 'T':
 			params.wpa_debug_tracing++;
