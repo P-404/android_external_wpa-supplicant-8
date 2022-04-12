@@ -208,6 +208,12 @@ void wpas_notify_interworking_ap_added(struct wpa_supplicant *wpa_s,
 				       const char *type, int bh, int bss_load,
 				       int conn_capab);
 void wpas_notify_interworking_select_done(struct wpa_supplicant *wpa_s);
+void wpas_notify_eap_method_selected(struct wpa_supplicant *wpa_s,
+		const char* reason_string);
+void wpas_notify_ssid_temp_disabled(struct wpa_supplicant *wpa_s,
+		const char *reason_string);
+void wpas_notify_open_ssl_failure(struct wpa_supplicant *wpa_s,
+		const char *reason_string);
 
 //Vendor dpp notification
 void wpas_notify_dpp_conf(void *msg_ctx, u8 type, u8* ssid,
