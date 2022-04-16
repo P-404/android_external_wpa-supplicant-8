@@ -348,16 +348,6 @@ static inline int hostapd_drv_br_set_net_param(struct hostapd_data *hapd,
 	return hapd->driver->br_set_net_param(hapd->drv_priv, param, val);
 }
 
-#ifdef ANDROID
-static inline int hostapd_drv_driver_cmd(struct hostapd_data *hapd,
-				     char *cmd, char *buf, size_t buf_len)
-{
-	if (!hapd->driver->driver_cmd)
-		return -1;
-	return hapd->driver->driver_cmd(hapd->drv_priv, cmd, buf, buf_len);
-}
-#endif /* ANDROID */
-
 static inline int hostapd_drv_vendor_cmd(struct hostapd_data *hapd,
 					 int vendor_id, int subcmd,
 					 const u8 *data, size_t data_len,
@@ -402,5 +392,28 @@ hostapd_drv_set_band(struct hostapd_data *hapd, u32 band_mask)
 		return -1;
 	return hapd->driver->set_band(hapd->drv_priv, band_mask);
 }
+
+#ifdef ANDROID
+static inline int hostapd_drv_driver_cmd(struct hostapd_data *hapd,
+					 char *cmd, char *buf, size_t buf_len)
+{
+	if (!hapd->driver->driver_cmd)
+		return -1;
+	return hapd->driver->driver_cmd(hapd->drv_priv, cmd, buf, buf_len);
+}
+#endif /* ANDROID */
+
+#ifdef CONFIG_TESTING_OPTIONS
+static inline int
+hostapd_drv_register_frame(struct hostapd_data *hapd, u16 type,
+			   const u8 *match, size_t match_len,
+			   bool multicast)
+{
+	if (!hapd->driver || !hapd->drv_priv || !hapd->driver->register_frame)
+		return -1;
+	return hapd->driver->register_frame(hapd->drv_priv, type, match,
+					    match_len, multicast);
+}
+#endif /* CONFIG_TESTING_OPTIONS */
 
 #endif /* AP_DRV_OPS */

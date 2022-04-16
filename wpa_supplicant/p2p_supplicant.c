@@ -3603,9 +3603,9 @@ static int wpas_p2p_default_channels(struct wpa_supplicant *wpa_s,
 }
 
 
-static int has_channel(struct wpa_global *global,
-			struct hostapd_hw_modes *mode, u8 op_class,
-			u8 chan, int *flags)
+static enum chan_allowed has_channel(struct wpa_global *global,
+				     struct hostapd_hw_modes *mode, u8 op_class,
+				     u8 chan, int *flags)
 {
 	int i;
 	unsigned int freq;
@@ -6321,6 +6321,14 @@ static int wpas_p2p_select_go_freq(struct wpa_supplicant *wpa_s, int freq)
 			wpa_printf(MSG_DEBUG, "P2P: Use best 5 GHz band "
 				   "channel: %d MHz", freq);
 		} else {
+			const int freqs[] = {
+				/* operating class 115 */
+				5180, 5200, 5220, 5240,
+				/* operating class 124 */
+				5745, 5765, 5785, 5805,
+			};
+			unsigned int i, num_freqs = ARRAY_SIZE(freqs);
+
 			if (os_get_random((u8 *) &r, sizeof(r)) < 0)
 				return -1;
 
@@ -6337,7 +6345,6 @@ static int wpas_p2p_select_go_freq(struct wpa_supplicant *wpa_s, int freq)
 			int possible_5g_freqs_num =
 			    sizeof(possible_5g_freqs)/sizeof(possible_5g_freqs[0]);
 
-			int i;
 			for (i = 0; i < possible_5g_freqs_num; i++, r++) {
 				if (p2p_supported_freq_go(
 				    wpa_s->global->p2p,
