@@ -4663,6 +4663,8 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 		bss->disable_11ac = !!atoi(pos);
 	} else if (os_strcmp(buf, "disable_11ax") == 0) {
 		bss->disable_11ax = !!atoi(pos);
+	} else if (os_strcmp(buf, "disable_11be") == 0) {
+		bss->disable_11be = !!atoi(pos);
 #ifdef CONFIG_PASN
 #ifdef CONFIG_TESTING_OPTIONS
 	} else if (os_strcmp(buf, "force_kdk_derivation") == 0) {
@@ -4676,6 +4678,10 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 			return 1;
 		}
 #endif /* CONFIG_PASN */
+#ifdef CONFIG_IEEE80211BE
+	} else if (os_strcmp(buf, "ieee80211be") == 0) {
+		conf->ieee80211be = atoi(pos);
+#endif /* CONFIG_IEEE80211BE */
 	} else {
 		wpa_printf(MSG_ERROR,
 			   "Line %d: unknown configuration item '%s'",
