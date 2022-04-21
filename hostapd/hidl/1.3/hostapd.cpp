@@ -959,6 +959,21 @@ V1_2::HostapdStatus Hostapd::addSingleAccessPoint(
 		}
 		else if (os_strncmp(txt, AP_EVENT_DISABLED,
 			 strlen(AP_EVENT_DISABLED)) == 0) {
+			if (strlen(iface_hapd->conf->bridge) > 0) {
+				std::vector<std::string> bridged_interfaces;
+				if (!GetInterfacesInBridge(iface_hapd->conf->bridge, &bridged_interfaces))
+					return;
+				for (size_t i = 0; i < interfaces_->count; i++) {
+					std::string iface_name = interfaces_->iface[i]->conf->bss[0]->iface;
+					auto index = std::find(bridged_interfaces.begin(),
+										bridged_interfaces.end(), iface_name);
+					if (index != bridged_interfaces.end()) {
+						if (os_strcmp(iface_name.data(), iface_hapd->conf->iface) != 0 &&
+							interfaces_->iface[i]->state != HAPD_IFACE_DISABLED)
+							return;
+					}
+				}
+			}
 		    // Invoke the failure callback on all registered clients.
 		    for (const auto& callback : callbacks_) {
 			    callback->onFailure(strlen(iface_hapd->conf->bridge) > 0 ?
