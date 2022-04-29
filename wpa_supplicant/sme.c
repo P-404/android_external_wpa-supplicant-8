@@ -1341,7 +1341,7 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 	if (status_code != WLAN_STATUS_SUCCESS &&
 	    status_code != WLAN_STATUS_SAE_HASH_TO_ELEMENT &&
 	    status_code != WLAN_STATUS_SAE_PK)
-		return -1;
+		return -2;
 
 	if (auth_transaction == 1) {
 		u16 res;
@@ -1491,7 +1491,10 @@ void sme_external_auth_mgmt_rx(struct wpa_supplicant *wpa_s,
 		if (res < 0) {
 			/* Notify failure to the driver */
 			sme_send_external_auth_status(
-				wpa_s, WLAN_STATUS_UNSPECIFIED_FAILURE);
+				wpa_s,
+				res == -2 ?
+				le_to_host16(header->u.auth.status_code) :
+				WLAN_STATUS_UNSPECIFIED_FAILURE);
 			return;
 		}
 		if (res != 1)
