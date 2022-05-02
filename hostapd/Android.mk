@@ -1140,9 +1140,6 @@ ifeq ($(filter gce_x86 gce_x86_64 calypso, $(TARGET_DEVICE)),)
 ifdef CONFIG_CTRL_IFACE_AIDL
 HOSTAPD_USE_AIDL=y
 L_CFLAGS += -DCONFIG_CTRL_IFACE_AIDL
-ifdef HOSTAPD_USE_VENDOR_HIDL
-L_CFLAGS += -DCONFIG_USE_VENDOR_HIDL
-endif
 L_CPPFLAGS = -Wall -Werror -Wno-unused-variable
 endif
 endif
@@ -1183,17 +1180,6 @@ ifneq ($(wildcard external/libnl),)
 LOCAL_SHARED_LIBRARIES += libnl
 else
 LOCAL_STATIC_LIBRARIES += libnl_2
-endif
-endif
-LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.0
-LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.1
-LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.2
-LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.3
-ifeq ($(HOSTAPD_USE_AIDL), y)
-ifdef HOSTAPD_USE_VENDOR_HIDL
-LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.hostapd@1.0 \
-    vendor.qti.hardware.wifi.hostapd@1.1 \
-    vendor.qti.hardware.wifi.hostapd@1.2
 endif
 endif
 ifeq ($(HOSTAPD_USE_AIDL), y)
@@ -1251,36 +1237,13 @@ LOCAL_SRC_FILES := \
     aidl/aidl.cpp \
     aidl/hostapd.cpp
 LOCAL_SHARED_LIBRARIES := \
-    android.hardware.wifi.hostapd@1.0 \
-    android.hardware.wifi.hostapd@1.1 \
-    android.hardware.wifi.hostapd@1.2 \
-    android.hardware.wifi.hostapd@1.3 \
     android.hardware.wifi.hostapd-V1-ndk \
     libbinder_ndk \
     libbase \
     libutils \
-    libhidlbase \
     liblog
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
     $(LOCAL_PATH)/aidl
-
-ifdef HOSTAPD_USE_VENDOR_HIDL
-VENDOR_HIDL_INTERFACE_VERSION = 1.2
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/hidl/$(HIDL_INTERFACE_VERSION)
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/hidl/vendor/$(VENDOR_HIDL_INTERFACE_VERSION)
-ifeq ($(BOARD_HAS_QCOM_WLAN), true)
-LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/sdk/softap/include
-endif
-LOCAL_C_INCLUDES += external/wpa_supplicant_8/hostapd/hidl/1.3
-
-LOCAL_SRC_FILES += \
-    hidl/vendor/$(VENDOR_HIDL_INTERFACE_VERSION)/hostapd_vendor.cpp
-LOCAL_SHARED_LIBRARIES += \
-    vendor.qti.hardware.wifi.hostapd@1.0 \
-    vendor.qti.hardware.wifi.hostapd@1.1 \
-    vendor.qti.hardware.wifi.hostapd@1.2
-endif
-
 include $(BUILD_STATIC_LIBRARY)
 endif # HOSTAPD_USE_AIDL == y
 endif # ifeq ($(WPA_BUILD_HOSTAPD),true)

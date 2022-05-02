@@ -429,17 +429,6 @@ static int sae_derive_pwe_ecc(struct sae_data *sae, const u8 *addr1,
 		res = -1;
 	}
 
-	is_eq = const_time_eq(pwd_seed_odd, x_y[prime_len - 1] & 0x01);
-	const_time_select_bin(is_eq, x_y, x_y + SAE_MAX_ECC_PRIME_LEN,
-			      prime_len, x_y + prime_len);
-	os_memcpy(x_y, x_bin, prime_len);
-	wpa_hexdump_key(MSG_DEBUG, "SAE: PWE", x_y, 2 * prime_len);
-	crypto_ec_point_deinit(sae->tmp->pwe_ecc, 1);
-	sae->tmp->pwe_ecc = crypto_ec_point_from_bin(sae->tmp->ec, x_y);
-	if (!sae->tmp->pwe_ecc) {
-		wpa_printf(MSG_DEBUG, "SAE: Could not generate PWE");
-		res = -1;
-	}
 fail:
 	forced_memzero(x_y, sizeof(x_y));
 	crypto_bignum_deinit(qr, 0);
