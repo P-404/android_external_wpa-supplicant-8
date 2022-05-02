@@ -28,6 +28,7 @@
 #include "scan.h"
 #include "notify.h"
 #include "dpp_supplicant.h"
+#include "aidl.h"
 
 
 static int wpas_dpp_listen_start(struct wpa_supplicant *wpa_s,
@@ -1604,11 +1605,6 @@ static int wpas_dpp_handle_config_obj(struct wpa_supplicant *wpa_s,
 			conf->server_name);
 #endif /* CONFIG_DPP2 */
 
-	wpas_notify_dpp_conf(wpa_s, DPP_CONF_RECEIVED, conf->ssid,
-			    conf->ssid_len, conf->connector,
-			    conf->c_sign_key, auth->net_access_key,
-			    auth->net_access_key_expiry, conf->passphrase,
-			    conf->psk_set, conf->psk);
 	return wpas_dpp_process_config(wpa_s, auth, conf);
 }
 
@@ -1746,8 +1742,6 @@ fail:
 	if (status != DPP_STATUS_OK) {
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_FAILED);
 		wpas_notify_dpp_configuration_failure(wpa_s);
-		wpas_notify_dpp_conf(wpa_s, DPP_CONF_FAILED, NULL, 0, NULL, NULL, NULL, 0,
-				     NULL, 0, NULL);
 	}
 #ifdef CONFIG_DPP2
 	if (auth->peer_version >= 2 &&
@@ -3341,8 +3335,6 @@ wpas_dpp_gas_req_handler(void *ctx, void *resp_ctx, const u8 *sa,
 	if (!resp) {
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_FAILED);
 		wpas_notify_dpp_configuration_failure(wpa_s);
-		wpas_notify_dpp_conf(wpa_s, DPP_CONF_FAILED, NULL, 0, NULL, NULL, NULL, 0,
-				     NULL, 0, NULL);
 	}
 	auth->conf_resp = resp;
 	return resp;
@@ -3402,13 +3394,10 @@ wpas_dpp_gas_status_handler(void *ctx, struct wpabuf *resp, int ok)
 	if (ok) {
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_SENT);
 		wpas_notify_dpp_config_sent(wpa_s);
-		wpas_notify_dpp_conf(wpa_s, DPP_CONF_SENT, NULL, 0, NULL, NULL, NULL, 0,
-				     NULL, 0, NULL);
-	} else {
+	}
+	else {
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_CONF_FAILED);
 		wpas_notify_dpp_configuration_failure(wpa_s);
-		wpas_notify_dpp_conf(wpa_s, DPP_CONF_FAILED, NULL, 0, NULL, NULL, NULL, 0,
-				     NULL, 0, NULL);
 	}
 	dpp_auth_deinit(wpa_s->dpp_auth);
 	wpa_s->dpp_auth = NULL;
@@ -3472,7 +3461,6 @@ int wpas_dpp_check_connect(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 	const u8 *rsn;
 	struct wpa_ie_data ied;
 	size_t len;
-	u8 missing_param = 0;
 
 	if (!(ssid->key_mgmt & WPA_KEY_MGMT_DPP) || !bss)
 		return 0; /* Not using DPP AKM - continue */
@@ -3490,9 +3478,7 @@ int wpas_dpp_check_connect(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 			!ssid->dpp_connector ? "Connector" :
 			(!ssid->dpp_netaccesskey ? "netAccessKey" :
 			 "C-sign-key"));
-		missing_param |= (!ssid->dpp_connector) ? DPP_AUTH_CONNECTOR :
-				 ((!ssid->dpp_netaccesskey) ? DPP_AUTH_NET_ACCESS_KEY :
-				   DPP_AUTH_CSIGN_KEY);
+		return -1;
 	}
 
 	os_get_time(&now);
@@ -3501,11 +3487,6 @@ int wpas_dpp_check_connect(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 	    (os_time_t) ssid->dpp_netaccesskey_expiry < now.sec) {
 		wpa_msg(wpa_s, MSG_INFO, DPP_EVENT_MISSING_CONNECTOR
 			"netAccessKey expired");
-		missing_param |= DPP_AUTH_NET_ACCESS_KEY_EXPIRY;
-	}
-
-	if (missing_param) {
-		wpas_notify_dpp_missing_auth(wpa_s);
 		return -1;
 	}
 

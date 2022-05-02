@@ -760,9 +760,9 @@ int main(int argc, char *argv[])
 							&if_names_size, optarg))
 				goto out;
 			break;
-#ifdef CONFIG_CTRL_IFACE_HIDL
+#ifdef CONFIG_CTRL_IFACE_AIDL
 		case 'j':
-			interfaces.hidl_service_name = strdup(optarg);
+			interfaces.aidl_service_name = strdup(optarg);
 			break;
 #endif
 		default:
@@ -900,7 +900,7 @@ int main(int argc, char *argv[])
 	hostapd_global_ctrl_iface_init(&interfaces);
 #ifdef CONFIG_CTRL_IFACE_AIDL
 	if (hostapd_aidl_init(&interfaces)) {
-		wpa_printf(MSG_ERROR, "Failed to initialize AIDL interface");		
+		wpa_printf(MSG_ERROR, "Failed to initialize AIDL interface");
 		goto out;
 	}
 #endif /* CONFIG_CTRL_IFACE_AIDL */
