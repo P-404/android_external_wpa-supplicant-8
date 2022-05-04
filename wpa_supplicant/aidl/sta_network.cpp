@@ -2119,7 +2119,12 @@ ndk::ScopedAStatus StaNetwork::setKeyMgmtInternal(
 		return createStatus(SupplicantStatusCode::FAILURE_ARGS_INVALID);
 	}
 	setFastTransitionKeyMgmt(key_mgmt_mask);
-
+#ifdef CONFIG_OCV
+	if (!(key_mgmt_mask & WPA_KEY_MGMT_NONE))
+		wpa_ssid->ocv = 1;
+#endif
+	if (!(key_mgmt_mask & WPA_KEY_MGMT_NONE))
+		wpa_ssid->beacon_prot = 1;
 	if (key_mgmt_mask & WPA_KEY_MGMT_OWE) {
 		// Do not allow to connect to Open network when OWE is selected
 		wpa_ssid->owe_only = 1;
