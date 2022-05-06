@@ -380,7 +380,8 @@ std::string CreateHostapdConfig(
 			"ieee80211w=1\n"
 			"sae_require_mfp=1\n"
 			"wpa_passphrase=%s\n"
-			"sae_password=%s",
+			"sae_password=%s\n"
+			"sae_pwe=2",
 			is_60Ghz_band_only ? "GCMP" : "CCMP",
 			nw_params.passphrase.c_str(),
 			nw_params.passphrase.c_str());
@@ -620,7 +621,11 @@ std::string CreateHostapdConfig(
 		"%s\n"
 		"%s\n"
 		"%s\n"
-		"%s\n",
+		"%s\n"
+#ifdef CONFIG_OCV
+		"ocv=2\n"
+#endif
+		"beacon_prot=1\n",
 		iface_params.name.c_str(), ssid_as_string.c_str(),
 		channel_config_as_string.c_str(),
 		iface_params.hwModeParams.enable80211N ? 1 : 0,
