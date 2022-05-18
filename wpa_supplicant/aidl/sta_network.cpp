@@ -45,7 +45,8 @@ constexpr uint32_t kAllowedKeyMgmtMask =
 	 static_cast<uint32_t>(KeyMgmtMask::WAPI_PSK) |
 	 static_cast<uint32_t>(KeyMgmtMask::WAPI_CERT) |
 	 static_cast<uint32_t>(KeyMgmtMask::FILS_SHA256) |
-	 static_cast<uint32_t>(KeyMgmtMask::FILS_SHA384));
+	 static_cast<uint32_t>(KeyMgmtMask::FILS_SHA384) |
+	 static_cast<uint32_t>(KeyMgmtMask::DPP));
 constexpr uint32_t kAllowedProtoMask =
 	(static_cast<uint32_t>(ProtoMask::WPA) |
 	 static_cast<uint32_t>(ProtoMask::RSN) |
@@ -946,10 +947,33 @@ ndk::ScopedAStatus StaNetwork::setBssidInternal(
 ndk::ScopedAStatus StaNetwork::setDppKeysInternal(const DppConnectionKeys& keys)
 {
 #ifdef CONFIG_DPP
-    // TODO Implement the function
-    return createStatus(SupplicantStatusCode::FAILURE_UNSUPPORTED);
+	if (keys.connector.empty() || keys.cSign.empty() || keys.netAccessKey.empty()) {
+		return createStatus(SupplicantStatusCode::FAILURE_ARGS_INVALID);
+	}
+
+	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
+	std::string connector_str(keys.connector.begin(), keys.connector.end());
+
+	if (setStringFieldAndResetState(
+		connector_str.c_str(), &(wpa_ssid->dpp_connector), "dpp_connector")) {
+		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+	}
+
+	if (setByteArrayFieldAndResetState(
+		keys.cSign.data(), keys.cSign.size(), &(wpa_ssid->dpp_csign),
+		&(wpa_ssid->dpp_csign_len), "dpp csign")) {
+		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+	}
+
+	if (setByteArrayFieldAndResetState(
+		keys.netAccessKey.data(), keys.netAccessKey.size(), &(wpa_ssid->dpp_netaccesskey),
+		&(wpa_ssid->dpp_netaccesskey_len), "dpp netAccessKey")) {
+		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+	}
+
+	return ndk::ScopedAStatus::ok();
 #else
-    return createStatus(SupplicantStatusCode::FAILURE_UNSUPPORTED);
+	return createStatus(SupplicantStatusCode::FAILURE_UNSUPPORTED);
 #endif
 }
 
@@ -2119,7 +2143,12 @@ ndk::ScopedAStatus StaNetwork::setKeyMgmtInternal(
 		return createStatus(SupplicantStatusCode::FAILURE_ARGS_INVALID);
 	}
 	setFastTransitionKeyMgmt(key_mgmt_mask);
-
+#ifdef CONFIG_OCV
+	if (!(key_mgmt_mask & WPA_KEY_MGMT_NONE))
+		wpa_ssid->ocv = 1;
+#endif
+	if (!(key_mgmt_mask & WPA_KEY_MGMT_NONE))
+		wpa_ssid->beacon_prot = 1;
 	if (key_mgmt_mask & WPA_KEY_MGMT_OWE) {
 		// Do not allow to connect to Open network when OWE is selected
 		wpa_ssid->owe_only = 1;

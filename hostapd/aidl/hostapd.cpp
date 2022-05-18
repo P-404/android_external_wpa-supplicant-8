@@ -321,6 +321,7 @@ std::string CreateHostapdConfig(
 	// Encryption config string
 	uint32_t band = 0;
 	band |= static_cast<uint32_t>(channelParams.bandMask);
+	bool is_2Ghz_band_only = band == static_cast<uint32_t>(band2Ghz);
 	bool is_6Ghz_band_only = band == static_cast<uint32_t>(band6Ghz);
 	bool is_60Ghz_band_only = band == static_cast<uint32_t>(band60Ghz);
 	std::string encryption_config_as_string;
@@ -379,7 +380,8 @@ std::string CreateHostapdConfig(
 			"ieee80211w=1\n"
 			"sae_require_mfp=1\n"
 			"wpa_passphrase=%s\n"
-			"sae_password=%s",
+			"sae_password=%s\n"
+			"sae_pwe=2",
 			is_60Ghz_band_only ? "GCMP" : "CCMP",
 			nw_params.passphrase.c_str(),
 			nw_params.passphrase.c_str());
@@ -460,9 +462,7 @@ std::string CreateHostapdConfig(
 	std::string hw_mode_as_string;
 	std::string enable_edmg_as_string;
 	std::string edmg_channel_as_string;
-#ifdef CONFIG_IEEE80211AX
 	bool is_60Ghz_used = false;
-#endif /* CONFIG_IEEE80211AX */
 
 	if (((band & band60Ghz) != 0)) {
 		hw_mode_as_string = "hw_mode=ad";
@@ -472,9 +472,7 @@ std::string CreateHostapdConfig(
 				"edmg_channel=%d",
 				channelParams.channel);
 		}
-#ifdef CONFIG_IEEE80211AX
 		is_60Ghz_used = true;
-#endif /* CONFIG_IEEE80211AX */
 	} else if ((band & band2Ghz) != 0) {
 		if (((band & band5Ghz) != 0)
 		    || ((band & band6Ghz) != 0)) {
@@ -550,17 +548,17 @@ std::string CreateHostapdConfig(
 			iface_params.hwModeParams.enable80211AC ? 2 : 0);
 		break;
 	default:
-		ht_cap_vht_oper_he_oper_chwidth_as_string = StringPrintf(
-			"ht_capab=[HT40+]\n"
+		if (!is_2Ghz_band_only && !is_60Ghz_used
+		    && iface_params.hwModeParams.enable80211AC) {
+			ht_cap_vht_oper_he_oper_chwidth_as_string =
+					"ht_capab=[HT40+]\n"
+					"vht_oper_chwidth=1\n";
+		}
 #ifdef CONFIG_IEEE80211AX
-			"he_oper_chwidth=%d\n"
+		if (iface_params.hwModeParams.enable80211AX && !is_60Ghz_used) {
+			ht_cap_vht_oper_he_oper_chwidth_as_string += "he_oper_chwidth=1";
+		}
 #endif
-			"vht_oper_chwidth=%d",
-#ifdef CONFIG_IEEE80211AX
-			(iface_params.hwModeParams.enable80211AX && !is_60Ghz_used) ? 1 : 0,
-#endif
-			((((band & band5Ghz) != 0) || ((band & band6Ghz) != 0))
-			&& iface_params.hwModeParams.enable80211AC) ? 1 : 0);
 		break;
 	}
 
@@ -623,7 +621,11 @@ std::string CreateHostapdConfig(
 		"%s\n"
 		"%s\n"
 		"%s\n"
-		"%s\n",
+		"%s\n"
+#ifdef CONFIG_OCV
+		"ocv=2\n"
+#endif
+		"beacon_prot=1\n",
 		iface_params.name.c_str(), ssid_as_string.c_str(),
 		channel_config_as_string.c_str(),
 		iface_params.hwModeParams.enable80211N ? 1 : 0,
@@ -1028,7 +1030,7 @@ std::vector<uint8_t>  generateRandomOweSsid()
 	iface_hapd->setup_complete_cb_ctx = iface_hapd;
 	iface_hapd->sta_authorized_cb = onAsyncStaAuthorizedCb;
 	iface_hapd->sta_authorized_cb_ctx = iface_hapd;
-	wpa_msg_register_cb(onAsyncWpaEventCb);
+	wpa_msg_register_aidl_cb(onAsyncWpaEventCb);
 
 	if (hostapd_enable_iface(iface_hapd->iface) < 0) {
 		wpa_printf(

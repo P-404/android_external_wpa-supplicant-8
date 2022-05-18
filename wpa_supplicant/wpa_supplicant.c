@@ -4052,7 +4052,7 @@ static void wpas_start_assoc_cb(struct wpa_radio_work *work, int deinit)
 			 */
 			wpas_connection_failed(wpa_s, wpa_s->pending_bssid);
 			wpa_s->assoc_status_code = WLAN_STATUS_UNSPECIFIED_FAILURE;
-			wpas_notify_assoc_status_code(wpa_s, wpa_s->pending_bssid, 0);
+			wpas_notify_assoc_status_code(wpa_s, wpa_s->pending_bssid, 0, NULL, 0);
 			wpa_supplicant_set_state(wpa_s, WPA_DISCONNECTED);
 			os_memset(wpa_s->pending_bssid, 0, ETH_ALEN);
 			return;
@@ -7441,11 +7441,11 @@ struct wpa_global * wpa_supplicant_init(struct wpa_params *params)
 		params->wpa_debug_show_keys;
 	wpa_debug_timestamp = global->params.wpa_debug_timestamp =
 		params->wpa_debug_timestamp;
-#ifdef CONFIG_HIDL
-	if (params->hidl_service_name)
-		global->params.hidl_service_name =
-			os_strdup(params->hidl_service_name);
-#endif /* CONFIG_HIDL */
+#ifdef CONFIG_AIDL
+	if (params->aidl_service_name)
+		global->params.aidl_service_name =
+			os_strdup(params->aidl_service_name);
+#endif /* CONFIG_AIDL */
 
 	wpa_printf(MSG_DEBUG, "wpa_supplicant v%s", VERSION_STR);
 
@@ -7593,9 +7593,9 @@ void wpa_supplicant_deinit(struct wpa_global *global)
 #ifdef CONFIG_P2P
 	os_free(global->params.conf_p2p_dev);
 #endif /* CONFIG_P2P */
-#ifdef CONFIG_HIDL
-	os_free(global->params.hidl_service_name);
-#endif /* CONFIG_HIDL */
+#ifdef CONFIG_AIDL
+	os_free(global->params.aidl_service_name);
+#endif /* CONFIG_AIDL */
 
 	os_free(global->p2p_disallow_freq.range);
 	os_free(global->p2p_go_avoid_freq.range);
@@ -7893,7 +7893,7 @@ int wpas_driver_bss_selection(struct wpa_supplicant *wpa_s)
 }
 
 
-#if defined(CONFIG_CTRL_IFACE) || defined(CONFIG_CTRL_IFACE_DBUS_NEW) || defined (CONFIG_CTRL_IFACE_HIDL)
+#if defined(CONFIG_CTRL_IFACE) || defined(CONFIG_CTRL_IFACE_DBUS_NEW) || defined (CONFIG_CTRL_IFACE_AIDL)
 int wpa_supplicant_ctrl_iface_ctrl_rsp_handle(struct wpa_supplicant *wpa_s,
 					      struct wpa_ssid *ssid,
 					      const char *field,
@@ -8023,7 +8023,7 @@ int wpa_supplicant_ctrl_rsp_handle(struct wpa_supplicant *wpa_s,
 	return -1;
 #endif /* IEEE8021X_EAPOL */
 }
-#endif /* CONFIG_CTRL_IFACE || CONFIG_CTRL_IFACE_DBUS_NEW || CONFIG_CTRL_IFACE_HIDL */
+#endif /* CONFIG_CTRL_IFACE || CONFIG_CTRL_IFACE_DBUS_NEW || CONFIG_CTRL_IFACE_AIDL */
 
 
 int wpas_network_disabled(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid)
