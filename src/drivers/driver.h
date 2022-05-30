@@ -2034,7 +2034,7 @@ struct wpa_driver_capa {
 /** Driver expects user space implementation of SME in AP mode */
 #define WPA_DRIVER_FLAGS2_AP_SME		0x0000000000000100ULL
 /** Driver supports of adaptive 11r feature */
-#define WPA_DRIVER_FLAGS_ADAPTIVE_11R	        0x0000000000000200ULL
+#define WPA_DRIVER_FLAGS_ADAPTIVE_11R	        0x8000000000000000ULL
 	u64 flags2;
 
 #define FULL_AP_CLIENT_STATE_SUPP(drv_flags) \
