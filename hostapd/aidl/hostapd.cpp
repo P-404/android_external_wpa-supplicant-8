@@ -444,7 +444,7 @@ std::string CreateHostapdConfig(
 		channel_config_as_string = StringPrintf(
 			"channel=0\n"
 			"acs_exclude_dfs=%d\n"
-			"freqlist=%s",
+			"freqlist=%s\n",
 			channelParams.acsShouldExcludeDfs,
 			freqList_as_string.c_str());
 	} else {
@@ -513,7 +513,8 @@ std::string CreateHostapdConfig(
 #ifdef CONFIG_IEEE80211AX
 			"he_oper_chwidth=0\n"
 #endif
-			"vht_oper_chwidth=0");
+			"vht_oper_chwidth=0\n"
+			"%s\n", (band & band6Ghz) ? "op_class=131" : "");
 		break;
 	case ChannelBandwidth::BANDWIDTH_40:
 		ht_cap_vht_oper_he_oper_chwidth_as_string = StringPrintf(
@@ -521,7 +522,8 @@ std::string CreateHostapdConfig(
 #ifdef CONFIG_IEEE80211AX
 			"he_oper_chwidth=0\n"
 #endif
-			"vht_oper_chwidth=0");
+			"vht_oper_chwidth=0\n"
+			"%s\n", (band & band6Ghz) ? "op_class=132" : "");
 		break;
 	case ChannelBandwidth::BANDWIDTH_80:
 		ht_cap_vht_oper_he_oper_chwidth_as_string = StringPrintf(
@@ -529,11 +531,13 @@ std::string CreateHostapdConfig(
 #ifdef CONFIG_IEEE80211AX
 			"he_oper_chwidth=%d\n"
 #endif
-			"vht_oper_chwidth=%d",
+			"vht_oper_chwidth=%d\n"
+			"%s\n",
 #ifdef CONFIG_IEEE80211AX
 			(iface_params.hwModeParams.enable80211AX && !is_60Ghz_used) ? 1 : 0,
 #endif
-			iface_params.hwModeParams.enable80211AC ? 1 : 0);
+			iface_params.hwModeParams.enable80211AC ? 1 : 0,
+			(band & band6Ghz) ? "op_class=133" : "");
 		break;
 	case ChannelBandwidth::BANDWIDTH_160:
 		ht_cap_vht_oper_he_oper_chwidth_as_string = StringPrintf(
@@ -541,11 +545,13 @@ std::string CreateHostapdConfig(
 #ifdef CONFIG_IEEE80211AX
 			"he_oper_chwidth=%d\n"
 #endif
-			"vht_oper_chwidth=%d",
+			"vht_oper_chwidth=%d\n"
+			"%s\n",
 #ifdef CONFIG_IEEE80211AX
 			(iface_params.hwModeParams.enable80211AX && !is_60Ghz_used) ? 2 : 0,
 #endif
-			iface_params.hwModeParams.enable80211AC ? 2 : 0);
+			iface_params.hwModeParams.enable80211AC ? 2 : 0,
+			(band & band6Ghz) ? "op_class=134" : "");
 		break;
 	default:
 		if (!is_2Ghz_band_only && !is_60Ghz_used
@@ -553,6 +559,9 @@ std::string CreateHostapdConfig(
 			ht_cap_vht_oper_he_oper_chwidth_as_string =
 					"ht_capab=[HT40+]\n"
 					"vht_oper_chwidth=1\n";
+		}
+		if (band & band6Ghz) {
+			ht_cap_vht_oper_he_oper_chwidth_as_string += "op_class=134\n";
 		}
 #ifdef CONFIG_IEEE80211AX
 		if (iface_params.hwModeParams.enable80211AX && !is_60Ghz_used) {
