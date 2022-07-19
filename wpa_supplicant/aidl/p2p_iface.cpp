@@ -470,7 +470,7 @@ int joinGroup(
 
 	if (wpas_p2p_group_add_persistent(
 		wpa_s, wpa_network, 0, 0, 0, 0, ht40, vht,
-		CHANWIDTH_USE_HT, he, 0, NULL, 0, 0, is6GhzAllowed(wpa_s))) {
+		CONF_OPER_CHWIDTH_USE_HT, he, 0, NULL, 0, 0, is6GhzAllowed(wpa_s))) {
 		ret = -1;
 	}
 
@@ -1311,7 +1311,7 @@ std::pair<std::string, ndk::ScopedAStatus> P2pIface::connectInternal(
 	int new_pin = wpas_p2p_connect(
 		wpa_s, peer_address.data(), pin, wps_method, persistent, auto_join,
 		join_existing_group, false, go_intent_signed, 0, 0, -1, false, ht40,
-		vht, CHANWIDTH_USE_HT, he, 0, nullptr, 0, is6GhzAllowed(wpa_s));
+		vht, CONF_OPER_CHWIDTH_USE_HT, he, 0, nullptr, 0, is6GhzAllowed(wpa_s));
 	if (new_pin < 0) {
 		return {"", createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
 	}
@@ -1419,7 +1419,7 @@ ndk::ScopedAStatus P2pIface::reinvokeInternal(
 	}
 	if (wpas_p2p_invite(
 		wpa_s, peer_address.data(), ssid, NULL, 0, 0, ht40, vht,
-		CHANWIDTH_USE_HT, 0, he, 0, is6GhzAllowed(wpa_s))) {
+		CONF_OPER_CHWIDTH_USE_HT, 0, he, 0, is6GhzAllowed(wpa_s))) {
 		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 	}
 	return ndk::ScopedAStatus::ok();
@@ -1861,7 +1861,7 @@ ndk::ScopedAStatus P2pIface::addGroupInternal(
 	if (ssid == NULL) {
 		if (wpas_p2p_group_add(
 			wpa_s, persistent, 0, 0, ht40, vht,
-			CHANWIDTH_USE_HT, he, 0, is6GhzAllowed(wpa_s))) {
+			CONF_OPER_CHWIDTH_USE_HT, he, 0, is6GhzAllowed(wpa_s))) {
 			return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 		} else {
 			return ndk::ScopedAStatus::ok();
@@ -1869,7 +1869,7 @@ ndk::ScopedAStatus P2pIface::addGroupInternal(
 	} else if (ssid->disabled == 2) {
 		if (wpas_p2p_group_add_persistent(
 			wpa_s, ssid, 0, 0, 0, 0, ht40, vht,
-			CHANWIDTH_USE_HT, he, 0, NULL, 0, 0, is6GhzAllowed(wpa_s))) {
+			CONF_OPER_CHWIDTH_USE_HT, he, 0, NULL, 0, 0, is6GhzAllowed(wpa_s))) {
 			return createStatus(SupplicantStatusCode::FAILURE_NETWORK_UNKNOWN);
 		} else {
 			return ndk::ScopedAStatus::ok();
@@ -1914,7 +1914,7 @@ ndk::ScopedAStatus P2pIface::addGroupWithConfigInternal(
 
 		if (wpas_p2p_group_add(
 			wpa_s, persistent, freq, 0, ht40, vht,
-			CHANWIDTH_USE_HT, he, 0, is6GhzAllowed(wpa_s))) {
+			CONF_OPER_CHWIDTH_USE_HT, he, 0, is6GhzAllowed(wpa_s))) {
 			return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 		}
 		return ndk::ScopedAStatus::ok();
