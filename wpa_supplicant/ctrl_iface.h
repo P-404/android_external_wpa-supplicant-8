@@ -126,6 +126,7 @@ int wpa_supplicant_ctrl_iface_get_capability(
        struct wpa_supplicant *wpa_s, const char *_field, char *buf,
        size_t buflen);
 
+int wpas_ctrl_cmd_debug_level(const char *cmd);
 
 #else /* CONFIG_CTRL_IFACE */
 

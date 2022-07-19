@@ -2879,7 +2879,8 @@ static void nl80211_control_port_frame(struct wpa_driver_nl80211_data *drv,
 				   nla_len(tb[NL80211_ATTR_FRAME]));
 		break;
 	default:
-		wpa_printf(MSG_INFO, "nl80211: Unxpected ethertype 0x%04x from "
+		wpa_printf(MSG_INFO,
+			   "nl80211: Unexpected ethertype 0x%04x from "
 			   MACSTR " over control port",
 			   ethertype, MAC2STR(src_addr));
 		break;
@@ -2928,9 +2929,12 @@ static void nl80211_frame_wait_cancel(struct wpa_driver_nl80211_data *drv,
 		}
 	}
 	wpa_printf(MSG_DEBUG,
-		   "nl80211: TX frame wait expired for cookie 0x%llx%s",
+		   "nl80211: TX frame wait expired for cookie 0x%llx%s%s",
 		   (long long unsigned int) cookie,
-		   match ? " (match)" : "");
+		   match ? " (match)" : "",
+		   drv->send_frame_cookie == cookie ? " (match-saved)" : "");
+	if (drv->send_frame_cookie == cookie)
+		drv->send_frame_cookie = (u64) -1;
 	if (!match)
 		return;
 
@@ -2942,6 +2946,69 @@ static void nl80211_frame_wait_cancel(struct wpa_driver_nl80211_data *drv,
 
 	wpa_supplicant_event(drv->ctx, EVENT_TX_WAIT_EXPIRE, NULL);
 }
+
+
+static void nl80211_assoc_comeback(struct wpa_driver_nl80211_data *drv,
+				   struct nlattr *mac, struct nlattr *timeout)
+{
+	if (!mac || !timeout)
+		return;
+	wpa_printf(MSG_DEBUG, "nl80211: Association comeback requested by "
+		   MACSTR " (timeout: %u ms)",
+		   MAC2STR((u8 *) nla_data(mac)), nla_get_u32(timeout));
+}
+
+
+#ifdef CONFIG_IEEE80211AX
+
+static void nl80211_obss_color_collision(struct wpa_driver_nl80211_data *drv,
+					 struct nlattr *tb[])
+{
+	union wpa_event_data data;
+
+	if (!tb[NL80211_ATTR_OBSS_COLOR_BITMAP])
+		return;
+
+	os_memset(&data, 0, sizeof(data));
+	data.bss_color_collision.bitmap =
+		nla_get_u64(tb[NL80211_ATTR_OBSS_COLOR_BITMAP]);
+
+	wpa_printf(MSG_DEBUG, "nl80211: BSS color collision - bitmap %08lx",
+		   data.bss_color_collision.bitmap);
+	wpa_supplicant_event(drv->ctx, EVENT_BSS_COLOR_COLLISION, &data);
+}
+
+
+static void
+nl80211_color_change_announcement_started(struct wpa_driver_nl80211_data *drv)
+{
+	union wpa_event_data data = {};
+
+	wpa_printf(MSG_DEBUG, "nl80211: CCA started");
+	wpa_supplicant_event(drv->ctx, EVENT_CCA_STARTED_NOTIFY, &data);
+}
+
+
+static void
+nl80211_color_change_announcement_aborted(struct wpa_driver_nl80211_data *drv)
+{
+	union wpa_event_data data = {};
+
+	wpa_printf(MSG_DEBUG, "nl80211: CCA aborted");
+	wpa_supplicant_event(drv->ctx, EVENT_CCA_ABORTED_NOTIFY, &data);
+}
+
+
+static void
+nl80211_color_change_announcement_completed(struct wpa_driver_nl80211_data *drv)
+{
+	union wpa_event_data data = {};
+
+	wpa_printf(MSG_DEBUG, "nl80211: CCA completed");
+	wpa_supplicant_event(drv->ctx, EVENT_CCA_NOTIFY, &data);
+}
+
+#endif /* CONFIG_IEEE80211AX */
 
 
 static void do_process_drv_event(struct i802_bss *bss, int cmd,
@@ -3193,6 +3260,24 @@ static void do_process_drv_event(struct i802_bss *bss, int cmd,
 	case NL80211_CMD_FRAME_WAIT_CANCEL:
 		nl80211_frame_wait_cancel(drv, tb[NL80211_ATTR_COOKIE]);
 		break;
+	case NL80211_CMD_ASSOC_COMEBACK:
+		nl80211_assoc_comeback(drv, tb[NL80211_ATTR_MAC],
+				       tb[NL80211_ATTR_TIMEOUT]);
+		break;
+#ifdef CONFIG_IEEE80211AX
+	case NL80211_CMD_OBSS_COLOR_COLLISION:
+		nl80211_obss_color_collision(drv, tb);
+		break;
+	case NL80211_CMD_COLOR_CHANGE_STARTED:
+		nl80211_color_change_announcement_started(drv);
+		break;
+	case NL80211_CMD_COLOR_CHANGE_ABORTED:
+		nl80211_color_change_announcement_aborted(drv);
+		break;
+	case NL80211_CMD_COLOR_CHANGE_COMPLETED:
+		nl80211_color_change_announcement_completed(drv);
+		break;
+#endif /* CONFIG_IEEE80211AX */
 	default:
 		wpa_dbg(drv->ctx, MSG_DEBUG, "nl80211: Ignored unknown event "
 			"(cmd=%d)", cmd);
