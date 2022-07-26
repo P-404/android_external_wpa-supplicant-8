@@ -565,6 +565,7 @@ struct wpas_pasn {
 	int akmp;
 	int cipher;
 	u16 group;
+	bool secure_ltf;
 	int freq;
 	size_t kdk_len;
 
@@ -1557,6 +1558,8 @@ struct wpa_supplicant {
 #ifdef CONFIG_PASN
 	struct wpas_pasn pasn;
 	struct wpa_radio_work *pasn_auth_work;
+	unsigned int pasn_count;
+	struct pasn_auth *pasn_params;
 #endif /* CONFIG_PASN */
 	struct scs_robust_av_data scs_robust_av_req;
 	u8 scs_dialog_token;
@@ -1952,5 +1955,8 @@ int disabled_freq(struct wpa_supplicant *wpa_s, int freq);
 
 int wpas_pasn_deauthenticate(struct wpa_supplicant *wpa_s, const u8 *own_addr,
 			     const u8 *bssid);
+void wpas_pasn_auth_trigger(struct wpa_supplicant *wpa_s,
+			    struct pasn_auth *pasn_auth);
+void wpas_pasn_auth_work_done(struct wpa_supplicant *wpa_s, int status);
 
 #endif /* WPA_SUPPLICANT_I_H */
