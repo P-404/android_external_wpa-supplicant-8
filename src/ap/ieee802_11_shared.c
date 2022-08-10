@@ -998,7 +998,7 @@ int get_tx_parameters(struct sta_info *sta, int ap_max_chanwidth,
 		 * If a VHT Operation element was present, use it to determine
 		 * the supported channel bandwidth.
 		 */
-		if (oper->vht_op_info_chwidth == 0) {
+		if (oper->vht_op_info_chwidth == CHANWIDTH_USE_HT) {
 			requested_bw = ht_40mhz ? 40 : 20;
 		} else if (oper->vht_op_info_chan_center_freq_seg1_idx == 0) {
 			requested_bw = 80;
@@ -1092,4 +1092,30 @@ u8 * hostapd_eid_rsnxe(struct hostapd_data *hapd, u8 *eid, size_t len)
 		*pos++ = capab;
 
 	return pos;
+}
+
+
+u16 check_ext_capab(struct hostapd_data *hapd, struct sta_info *sta,
+		    const u8 *ext_capab_ie, size_t ext_capab_ie_len)
+{
+#ifdef CONFIG_INTERWORKING
+	/* check for QoS Map support */
+	if (ext_capab_ie_len >= 5) {
+		if (ext_capab_ie[4] & 0x01)
+			sta->qos_map_enabled = 1;
+	}
+#endif /* CONFIG_INTERWORKING */
+
+	if (ext_capab_ie_len > 0) {
+		sta->ecsa_supported = !!(ext_capab_ie[0] & BIT(2));
+		os_free(sta->ext_capability);
+		sta->ext_capability = os_malloc(1 + ext_capab_ie_len);
+		if (sta->ext_capability) {
+			sta->ext_capability[0] = ext_capab_ie_len;
+			os_memcpy(sta->ext_capability + 1, ext_capab_ie,
+				  ext_capab_ie_len);
+		}
+	}
+
+	return WLAN_STATUS_SUCCESS;
 }

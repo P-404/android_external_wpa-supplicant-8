@@ -1741,6 +1741,8 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 			 wpa_s->oci_freq_override_ft_assoc);
 	wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_OCI_FREQ_FILS_ASSOC,
 			 wpa_s->oci_freq_override_fils_assoc);
+	wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_DISABLE_EAPOL_G2_TX,
+			 wpa_s->disable_eapol_g2_tx);
 #endif /* CONFIG_TESTING_OPTIONS */
 
 	/* Extended Key ID is only supported in infrastructure BSS so far */
@@ -1812,9 +1814,15 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 		if (bss && ssid->bssid_set && ssid->ssid_len == 0 &&
 		    ssid->passphrase && !sae_only) {
 			u8 psk[PMK_LEN];
-		        pbkdf2_sha1(ssid->passphrase, bss->ssid, bss->ssid_len,
-				    4096, psk, PMK_LEN);
-		        wpa_hexdump_key(MSG_MSGDUMP, "PSK (from passphrase)",
+
+			if (pbkdf2_sha1(ssid->passphrase, bss->ssid,
+					bss->ssid_len,
+					4096, psk, PMK_LEN) != 0) {
+				wpa_msg(wpa_s, MSG_WARNING,
+					"Error in pbkdf2_sha1()");
+				return -1;
+			}
+			wpa_hexdump_key(MSG_MSGDUMP, "PSK (from passphrase)",
 					psk, PMK_LEN);
 			wpa_sm_set_pmk(wpa_s->wpa, psk, PMK_LEN, NULL, NULL);
 			psk_set = 1;
@@ -1848,8 +1856,14 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 #ifndef CONFIG_NO_PBKDF2
 			if (wpabuf_len(pw) >= 8 && wpabuf_len(pw) < 64 && bss)
 			{
-				pbkdf2_sha1(pw_str, bss->ssid, bss->ssid_len,
-					    4096, psk, PMK_LEN);
+				if (pbkdf2_sha1(pw_str, bss->ssid,
+						bss->ssid_len,
+						4096, psk, PMK_LEN) != 0) {
+					wpa_msg(wpa_s, MSG_WARNING,
+						"Error in pbkdf2_sha1()");
+					ext_password_free(pw);
+					return -1;
+				}
 				os_memset(pw_str, 0, sizeof(pw_str));
 				wpa_hexdump_key(MSG_MSGDUMP, "PSK (from "
 						"external passphrase)",
@@ -2273,6 +2287,7 @@ void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 	else
 		rand_style = ssid->mac_addr;
 
+	wpa_s->eapol_failed = 0;
 	wpa_s->multi_ap_ie = 0;
 	wmm_ac_clear_saved_tspecs(wpa_s);
 	wpa_s->reassoc_same_bss = 0;
@@ -2719,7 +2734,7 @@ skip_to_6ghz:
 	if (!ibss_mesh_is_80mhz_avail(channel, mode))
 		return;
 
-	chwidth = CHANWIDTH_80MHZ;
+	chwidth = CONF_OPER_CHWIDTH_80MHZ;
 	seg0 = channel + 6;
 	seg1 = 0;
 
@@ -2735,14 +2750,14 @@ skip_to_6ghz:
 
 		for (j = 0; j < ARRAY_SIZE(bw160); j++) {
 			if (freq->freq == bw160[j]) {
-				chwidth = CHANWIDTH_160MHZ;
+				chwidth = CONF_OPER_CHWIDTH_160MHZ;
 				seg0 = channel + 14;
 				break;
 			}
 		}
 	}
 
-	if (ssid->max_oper_chwidth == CHANWIDTH_80P80MHZ) {
+	if (ssid->max_oper_chwidth == CONF_OPER_CHWIDTH_80P80MHZ) {
 		/* setup center_freq2, bandwidth */
 		for (k = 0; k < ARRAY_SIZE(bw80); k++) {
 			/* Only accept 80 MHz segments separated by a gap */
@@ -2766,28 +2781,28 @@ skip_to_6ghz:
 					continue;
 
 				/* Found a suitable second segment for 80+80 */
-				chwidth = CHANWIDTH_80P80MHZ;
+				chwidth = CONF_OPER_CHWIDTH_80P80MHZ;
 				if (!is_6ghz)
 					vht_caps |=
 						VHT_CAP_SUPP_CHAN_WIDTH_160_80PLUS80MHZ;
 				seg1 = channel + 6;
 			}
 
-			if (chwidth == CHANWIDTH_80P80MHZ)
+			if (chwidth == CONF_OPER_CHWIDTH_80P80MHZ)
 				break;
 		}
-	} else if (ssid->max_oper_chwidth == CHANWIDTH_160MHZ) {
+	} else if (ssid->max_oper_chwidth == CONF_OPER_CHWIDTH_160MHZ) {
 		if (freq->freq == 5180) {
-			chwidth = CHANWIDTH_160MHZ;
+			chwidth = CONF_OPER_CHWIDTH_160MHZ;
 			vht_caps |= VHT_CAP_SUPP_CHAN_WIDTH_160MHZ;
 			seg0 = 50;
 		} else if (freq->freq == 5520) {
-			chwidth = CHANWIDTH_160MHZ;
+			chwidth = CONF_OPER_CHWIDTH_160MHZ;
 			vht_caps |= VHT_CAP_SUPP_CHAN_WIDTH_160MHZ;
 			seg0 = 114;
 		}
-	} else if (ssid->max_oper_chwidth == CHANWIDTH_USE_HT) {
-		chwidth = CHANWIDTH_USE_HT;
+	} else if (ssid->max_oper_chwidth == CONF_OPER_CHWIDTH_USE_HT) {
+		chwidth = CONF_OPER_CHWIDTH_USE_HT;
 		seg0 = channel + 2;
 #ifdef CONFIG_HT_OVERRIDES
 		if (ssid->disable_ht40)
@@ -2805,9 +2820,11 @@ skip_to_6ghz:
 				    freq->channel, ssid->enable_edmg,
 				    ssid->edmg_channel, freq->ht_enabled,
 				    vht_freq.vht_enabled, freq->he_enabled,
+				    false,
 				    freq->sec_channel_offset,
 				    chwidth, seg0, seg1, vht_caps,
-				    &mode->he_capab[ieee80211_mode]) != 0)
+				    &mode->he_capab[ieee80211_mode],
+				    NULL) != 0)
 		return;
 
 	*freq = vht_freq;
@@ -4306,7 +4323,7 @@ struct wpa_ssid * wpa_supplicant_add_network(struct wpa_supplicant *wpa_s)
  */
 int wpa_supplicant_remove_network(struct wpa_supplicant *wpa_s, int id)
 {
-	struct wpa_ssid *ssid;
+	struct wpa_ssid *ssid, *prev = wpa_s->current_ssid;
 	int was_disabled;
 
 	ssid = wpa_config_get_network(wpa_s->conf, id);
@@ -4314,10 +4331,7 @@ int wpa_supplicant_remove_network(struct wpa_supplicant *wpa_s, int id)
 		return -1;
 	wpas_notify_network_removed(wpa_s, ssid);
 
-	if (wpa_s->last_ssid == ssid)
-		wpa_s->last_ssid = NULL;
-
-	if (ssid == wpa_s->current_ssid || !wpa_s->current_ssid) {
+	if (ssid == prev || !prev) {
 #ifdef CONFIG_SME
 		wpa_s->sme.prev_bssid_set = 0;
 #endif /* CONFIG_SME */
@@ -4328,7 +4342,7 @@ int wpa_supplicant_remove_network(struct wpa_supplicant *wpa_s, int id)
 		eapol_sm_invalidate_cached_session(wpa_s->eapol);
 	}
 
-	if (ssid == wpa_s->current_ssid) {
+	if (ssid == prev) {
 		wpa_sm_set_config(wpa_s->wpa, NULL);
 		eapol_sm_notify_config(wpa_s->eapol, NULL, NULL);
 
@@ -4394,8 +4408,6 @@ int wpa_supplicant_remove_all_networks(struct wpa_supplicant *wpa_s)
 
 		id = ssid->id;
 		ssid = ssid->next;
-		if (wpa_s->last_ssid == remove_ssid)
-			wpa_s->last_ssid = NULL;
 		wpas_notify_network_removed(wpa_s, remove_ssid);
 		wpa_config_remove_network(wpa_s->conf, id);
 	}
@@ -6776,6 +6788,7 @@ static int wpa_supplicant_init_iface(struct wpa_supplicant *wpa_s,
 		wpa_s->drv_flags2 = capa.flags2;
 		wpa_s->drv_enc = capa.enc;
 		wpa_s->drv_rrm_flags = capa.rrm_flags;
+		wpa_s->drv_max_acl_mac_addrs = capa.max_acl_mac_addrs;
 		wpa_s->probe_resp_offloads = capa.probe_resp_offloads;
 		wpa_s->max_scan_ssids = capa.max_scan_ssids;
 		wpa_s->max_sched_scan_ssids = capa.max_sched_scan_ssids;

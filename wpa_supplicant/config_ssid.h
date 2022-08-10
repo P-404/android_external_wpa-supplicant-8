@@ -560,7 +560,7 @@ struct wpa_ssid {
 
 	int he;
 
-	int max_oper_chwidth;
+	enum oper_chan_width max_oper_chwidth;
 
 	unsigned int vht_center_freq1;
 	unsigned int vht_center_freq2;
@@ -909,6 +909,13 @@ struct wpa_ssid {
 	 * Range: 0-255 (default: 255)
 	 */
 	int mka_priority;
+
+	/**
+	 * macsec_csindex - Cipher suite index for MACsec
+	 *
+	 * Range: 0-1 (default: 0)
+	 */
+	int macsec_csindex;
 
 	/**
 	 * mka_ckn - MKA pre-shared CKN
