@@ -512,4 +512,6 @@ enum ptk0_rekey_handling {
 	PTK0_REKEY_ALLOW_NEVER
 };
 
+#define MAX_NUM_MLD_LINKS 15
+
 #endif /* DEFS_H */
