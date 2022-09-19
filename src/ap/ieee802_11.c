@@ -55,6 +55,7 @@
 #include "fils_hlp.h"
 #include "dpp_hostapd.h"
 #include "gas_query_ap.h"
+#include "pasn/pasn_common.h"
 
 
 #ifdef CONFIG_FILS
@@ -2396,7 +2397,7 @@ static int pasn_wd_handle_sae_commit(struct hostapd_data *hapd,
 				     struct sta_info *sta,
 				     struct wpabuf *wd)
 {
-	struct pasn_data *pasn = sta->pasn;
+	struct wpas_pasn *pasn = sta->pasn;
 	const char *password;
 	const u8 *data;
 	size_t buf_len;
@@ -2476,7 +2477,7 @@ static int pasn_wd_handle_sae_confirm(struct hostapd_data *hapd,
 				      struct sta_info *sta,
 				      struct wpabuf *wd)
 {
-	struct pasn_data *pasn = sta->pasn;
+	struct wpas_pasn *pasn = sta->pasn;
 	const u8 *data;
 	size_t buf_len;
 	u16 res, alg, seq, status;
@@ -2528,7 +2529,7 @@ static int pasn_wd_handle_sae_confirm(struct hostapd_data *hapd,
 static struct wpabuf * pasn_get_sae_wd(struct hostapd_data *hapd,
 				       struct sta_info *sta)
 {
-	struct pasn_data *pasn = sta->pasn;
+	struct wpas_pasn *pasn = sta->pasn;
 	struct wpabuf *buf = NULL;
 	u8 *len_ptr;
 	size_t len;
@@ -2573,8 +2574,8 @@ static struct wpabuf * pasn_get_sae_wd(struct hostapd_data *hapd,
 static struct wpabuf * pasn_get_fils_wd(struct hostapd_data *hapd,
 					struct sta_info *sta)
 {
-	struct pasn_data *pasn = sta->pasn;
-	struct pasn_fils_data *fils = &pasn->fils;
+	struct wpas_pasn *pasn = sta->pasn;
+	struct pasn_fils *fils = &pasn->fils;
 	struct wpabuf *buf = NULL;
 
 	if (!fils->erp_resp) {
@@ -2625,8 +2626,8 @@ static void pasn_fils_auth_resp(struct hostapd_data *hapd,
 				struct wpabuf *erp_resp,
 				const u8 *msk, size_t msk_len)
 {
-	struct pasn_data *pasn = sta->pasn;
-	struct pasn_fils_data *fils = &pasn->fils;
+	struct wpas_pasn *pasn = sta->pasn;
+	struct pasn_fils *fils = &pasn->fils;
 	u8 pmk[PMK_LEN_MAX];
 	size_t pmk_len;
 	int ret;
@@ -2704,8 +2705,8 @@ static int pasn_wd_handle_fils(struct hostapd_data *hapd, struct sta_info *sta,
 	wpa_printf(MSG_DEBUG, "PASN: FILS: RADIUS is not configured. Fail");
 	return -1;
 #else /* CONFIG_NO_RADIUS */
-	struct pasn_data *pasn = sta->pasn;
-	struct pasn_fils_data *fils = &pasn->fils;
+	struct wpas_pasn *pasn = sta->pasn;
+	struct pasn_fils *fils = &pasn->fils;
 	struct ieee802_11_elems elems;
 	struct wpa_ie_data rsne_data;
 	struct wpabuf *fils_wd;
