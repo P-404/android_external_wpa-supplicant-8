@@ -72,6 +72,7 @@ static int sme_set_sae_group(struct wpa_supplicant *wpa_s)
 		if (sae_set_group(&wpa_s->sme.sae, group) == 0) {
 			wpa_dbg(wpa_s, MSG_DEBUG, "SME: Selected SAE group %d",
 				wpa_s->sme.sae.group);
+			wpa_s->sme.sae.akmp = wpa_s->key_mgmt;
 			return 0;
 		}
 		wpa_s->sme.sae_group_index++;
@@ -153,6 +154,9 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 
 	if (ssid->sae_password_id && wpa_s->conf->sae_pwe != 3)
 		use_pt = 1;
+	if (wpa_key_mgmt_sae_ext_key(wpa_s->key_mgmt) &&
+	    wpa_s->conf->sae_pwe != 3)
+		use_pt = 1;
 #ifdef CONFIG_SAE_PK
 	if ((rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_PK)) &&
 	    ssid->sae_pk != SAE_PK_MODE_DISABLED &&
@@ -174,7 +178,8 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 	if (use_pt || wpa_s->conf->sae_pwe == 1 || wpa_s->conf->sae_pwe == 2) {
 		use_pt = !!(rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_H2E));
 
-		if ((wpa_s->conf->sae_pwe == 1 || ssid->sae_password_id) &&
+		if ((wpa_s->conf->sae_pwe == 1 || ssid->sae_password_id ||
+		     wpa_key_mgmt_sae_ext_key(wpa_s->key_mgmt)) &&
 		    wpa_s->conf->sae_pwe != 3 &&
 		    !use_pt) {
 			wpa_printf(MSG_DEBUG,
@@ -749,9 +754,9 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 	if (!skip_auth && params.auth_alg == WPA_AUTH_ALG_SAE &&
 	    pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid, ssid, 0,
 				    NULL,
-				    wpa_s->key_mgmt == WPA_KEY_MGMT_FT_SAE ?
-				    WPA_KEY_MGMT_FT_SAE :
-				    WPA_KEY_MGMT_SAE) == 0) {
+				    wpa_key_mgmt_sae(wpa_s->key_mgmt) ?
+				    wpa_s->key_mgmt :
+				    (int) WPA_KEY_MGMT_SAE) == 0) {
 		wpa_dbg(wpa_s, MSG_DEBUG,
 			"PMKSA cache entry found - try to use PMKSA caching instead of new SAE authentication");
 		wpa_sm_set_pmk_from_pmksa(wpa_s->wpa);
@@ -1463,7 +1468,7 @@ static int sme_sae_set_pmk(struct wpa_supplicant *wpa_s, const u8 *bssid)
 {
 	wpa_printf(MSG_DEBUG,
 		   "SME: SAE completed - setting PMK for 4-way handshake");
-	wpa_sm_set_pmk(wpa_s->wpa, wpa_s->sme.sae.pmk, PMK_LEN,
+	wpa_sm_set_pmk(wpa_s->wpa, wpa_s->sme.sae.pmk, wpa_s->sme.sae.pmk_len,
 		       wpa_s->sme.sae.pmkid, bssid);
 	if (wpa_s->conf->sae_pmkid_in_assoc) {
 		/* Update the own RSNE contents now that we have set the PMK
