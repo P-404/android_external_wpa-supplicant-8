@@ -1720,13 +1720,15 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 	} else if (sel & WPA_KEY_MGMT_FT_FILS_SHA384) {
 		wpa_s->key_mgmt = WPA_KEY_MGMT_FT_FILS_SHA384;
 		wpa_dbg(wpa_s, MSG_DEBUG, "WPA: using KEY_MGMT FT-FILS-SHA384");
-	} else if (sel & WPA_KEY_MGMT_FT_FILS_SHA256) {
-		wpa_s->key_mgmt = WPA_KEY_MGMT_FT_FILS_SHA256;
-		wpa_dbg(wpa_s, MSG_DEBUG, "WPA: using KEY_MGMT FT-FILS-SHA256");
 #endif /* CONFIG_IEEE80211R */
 	} else if (sel & WPA_KEY_MGMT_FILS_SHA384) {
 		wpa_s->key_mgmt = WPA_KEY_MGMT_FILS_SHA384;
 		wpa_dbg(wpa_s, MSG_DEBUG, "WPA: using KEY_MGMT FILS-SHA384");
+#ifdef CONFIG_IEEE80211R
+	} else if (sel & WPA_KEY_MGMT_FT_FILS_SHA256) {
+		wpa_s->key_mgmt = WPA_KEY_MGMT_FT_FILS_SHA256;
+		wpa_dbg(wpa_s, MSG_DEBUG, "WPA: using KEY_MGMT FT-FILS-SHA256");
+#endif /* CONFIG_IEEE80211R */
 	} else if (sel & WPA_KEY_MGMT_FILS_SHA256) {
 		wpa_s->key_mgmt = WPA_KEY_MGMT_FILS_SHA256;
 		wpa_dbg(wpa_s, MSG_DEBUG, "WPA: using KEY_MGMT FILS-SHA256");
@@ -6943,6 +6945,9 @@ static int wpa_supplicant_init_iface(struct wpa_supplicant *wpa_s,
 		    wpa_s->extended_capa[2] & 0x40)
 			wpa_s->multi_bss_support = 1;
 	}
+#ifdef CONFIG_PASN
+	wpa_pasn_sm_set_caps(wpa_s->wpa, wpa_s->drv_flags2);
+#endif /* CONFIG_PASN */
 	if (wpa_s->max_remain_on_chan == 0)
 		wpa_s->max_remain_on_chan = 1000;
 
