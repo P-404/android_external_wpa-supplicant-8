@@ -2056,15 +2056,15 @@ struct wpa_driver_capa {
 #define WPA_DRIVER_FLAGS2_CONTROL_PORT_RX	0x0000000000000001ULL
 /** Driver supports TX status reports for EAPOL frames through control port */
 #define WPA_DRIVER_FLAGS2_CONTROL_PORT_TX_STATUS 0x0000000000000002ULL
-/** Driver supports secure LTF */
-#define WPA_DRIVER_FLAGS2_SEC_LTF		0x0000000000000004ULL
-/** Driver supports secure RTT measurement exchange */
-#define WPA_DRIVER_FLAGS2_SEC_RTT		0x0000000000000008ULL
+/** Driver supports secure LTF in AP mode */
+#define WPA_DRIVER_FLAGS2_SEC_LTF_AP		0x0000000000000004ULL
+/** Driver supports secure RTT measurement exchange in AP mode */
+#define WPA_DRIVER_FLAGS2_SEC_RTT_AP		0x0000000000000008ULL
 /**
  * Driver supports protection of range negotiation and measurement management
- * frames
+ * frames in AP mode
  */
-#define WPA_DRIVER_FLAGS2_PROT_RANGE_NEG	0x0000000000000010ULL
+#define WPA_DRIVER_FLAGS2_PROT_RANGE_NEG_AP	0x0000000000000010ULL
 /** Driver supports Beacon frame TX rate configuration (HE rates) */
 #define WPA_DRIVER_FLAGS2_BEACON_RATE_HE	0x0000000000000020ULL
 /** Driver supports Beacon protection only in client mode */
@@ -2077,6 +2077,15 @@ struct wpa_driver_capa {
 #define WPA_DRIVER_FLAGS2_SA_QUERY_OFFLOAD_AP	0x0000000000000200ULL
 /** Driver supports background radar/CAC detection */
 #define WPA_DRIVER_RADAR_BACKGROUND		0x0000000000000400ULL
+/** Driver supports secure LTF in STA mode */
+#define WPA_DRIVER_FLAGS2_SEC_LTF_STA		0x0000000000000800ULL
+/** Driver supports secure RTT measurement exchange in STA mode */
+#define WPA_DRIVER_FLAGS2_SEC_RTT_STA		0x0000000000001000ULL
+/**
+ * Driver supports protection of range negotiation and measurement management
+ * frames in STA mode
+ */
+#define WPA_DRIVER_FLAGS2_PROT_RANGE_NEG_STA	0x0000000000002000ULL
 /** Driver supports of adaptive 11r feature */
 #define WPA_DRIVER_FLAGS_ADAPTIVE_11R	        0x8000000000000000ULL
 	u64 flags2;
@@ -2611,6 +2620,90 @@ struct external_auth {
 	unsigned int key_mgmt_suite;
 	u16 status;
 	const u8 *pmkid;
+};
+
+#define WPAS_MAX_PASN_PEERS 10
+
+enum pasn_status {
+	PASN_STATUS_SUCCESS = 0,
+	PASN_STATUS_FAILURE = 1,
+};
+
+/**
+ * struct pasn_peer - PASN peer parameters
+ *
+ * Used to process the PASN authentication event from the driver to
+ * userspace and to send a response back.
+ * @own_addr: Own MAC address specified by the driver to use for PASN
+ *	handshake.
+ * @peer_addr: MAC address of the peer with which PASN authentication is to be
+ *	performed.
+ * @network_id: Unique id for the network.
+ *	This identifier is used as a unique identifier for each network
+ *	block when using the control interface. Each network is allocated an
+ *	id when it is being created, either when reading the configuration
+ *	file or when a new network is added through the control interface.
+ * @akmp: Authentication key management protocol type supported.
+ * @cipher: Cipher suite.
+ * @group: Finite cyclic group. Default group used is 19 (ECC).
+ * @ltf_keyseed_required: Indicates whether LTF keyseed generation is required
+ * @status: PASN response status, %PASN_STATUS_SUCCESS for successful
+ *	authentication, use %PASN_STATUS_FAILURE if PASN authentication
+ *	fails or if wpa_supplicant fails to set the security ranging context to
+ *	the driver
+ */
+struct pasn_peer {
+	u8 own_addr[ETH_ALEN];
+	u8 peer_addr[ETH_ALEN];
+	int network_id;
+	int akmp;
+	int cipher;
+	int group;
+	bool ltf_keyseed_required;
+	enum pasn_status status;
+};
+
+/**
+ * struct pasn_auth - PASN authentication trigger parameters
+ *
+ * These are used across the PASN authentication event from the driver to
+ * userspace and to send a response to it.
+ * @action: Action type. Only significant for the event interface.
+ * @num_peers: The number of peers for which the PASN handshake is requested
+ *	for.
+ * @peer: Holds the peer details.
+ */
+struct pasn_auth {
+	enum {
+		PASN_ACTION_AUTH,
+		PASN_ACTION_DELETE_SECURE_RANGING_CONTEXT,
+	} action;
+	unsigned int num_peers;
+	struct pasn_peer peer[WPAS_MAX_PASN_PEERS];
+};
+
+/**
+ * struct secure_ranging_params - Parameters required to set secure ranging
+ *	context for a peer.
+ *
+ * @action: Add or delete a security context to the driver.
+ * @own_addr: Own MAC address used during key derivation.
+ * @peer_addr: Address of the peer device.
+ * @cipher: Cipher suite.
+ * @tk_len: Length of temporal key.
+ * @tk: Temporal key buffer.
+ * @ltf_keyseed_len: Length of LTF keyseed.
+ * @ltf_keyeed: LTF keyseed buffer.
+ */
+struct secure_ranging_params {
+	u32 action;
+	const u8 *own_addr;
+	const u8 *peer_addr;
+	u32 cipher;
+	u8 tk_len;
+	const u8 *tk;
+	u8 ltf_keyseed_len;
+	const u8 *ltf_keyseed;
 };
 
 /* enum nested_attr - Used to specify if subcommand uses nested attributes */
@@ -4681,6 +4774,26 @@ struct wpa_driver_ops {
 	 */
 	int (*dpp_listen)(void *priv, bool enable);
 
+	/**
+	 * set_secure_ranging_ctx - Add or delete secure ranging parameters of
+	 * the specified peer to the driver.
+	 * @priv: Private driver interface data
+	 * @params: Secure ranging parameters
+	 * Returns: 0 on success, -1 on failure
+	 *
+	 */
+	int (*set_secure_ranging_ctx)(void *priv,
+				      struct secure_ranging_params *params);
+
+	/**
+	 * send_pasn_resp - Send PASN response for a set of peers to the
+	 * driver.
+	 * @priv: Private driver interface data
+	 * @params: Parameters holding peers and respective status.
+	 * Returns: 0 on success, -1 on failure
+	 */
+	int (*send_pasn_resp)(void *priv, struct pasn_auth *params);
+
 #ifdef CONFIG_TESTING_OPTIONS
 	int (*register_frame)(void *priv, u16 type,
 			      const u8 *match, size_t match_len,
@@ -5274,6 +5387,12 @@ enum wpa_event_type {
 	 * EVENT_CCA_NOTIFY - Notification that CCA has completed
 	 */
 	EVENT_CCA_NOTIFY,
+
+	/**
+	 * EVENT_PASN_AUTH - This event is used by the driver that requests
+	 * PASN authentication and secure ranging context for multiple peers.
+	 */
+	EVENT_PASN_AUTH,
 };
 
 
@@ -6173,6 +6292,12 @@ union wpa_event_data {
 	struct bss_color_collision {
 		u64 bitmap;
 	} bss_color_collision;
+
+	/**
+	 * struct pasn_auth - Data for EVENT_PASN_AUTH
+	 */
+	struct pasn_auth pasn_auth;
+
 };
 
 /**

@@ -565,12 +565,14 @@ struct wpas_pasn {
 	int akmp;
 	int cipher;
 	u16 group;
+	bool secure_ltf;
 	int freq;
 	size_t kdk_len;
 
 	u8 trans_seq;
 	u8 status;
 
+	u8 own_addr[ETH_ALEN];
 	u8 bssid[ETH_ALEN];
 	size_t pmk_len;
 	u8 pmk[PMK_LEN_MAX];
@@ -1556,6 +1558,8 @@ struct wpa_supplicant {
 #ifdef CONFIG_PASN
 	struct wpas_pasn pasn;
 	struct wpa_radio_work *pasn_auth_work;
+	unsigned int pasn_count;
+	struct pasn_auth *pasn_params;
 #endif /* CONFIG_PASN */
 	struct scs_robust_av_data scs_robust_av_req;
 	u8 scs_dialog_token;
@@ -1667,7 +1671,7 @@ void wpa_supplicant_deinit(struct wpa_global *global);
 int wpa_supplicant_scard_init(struct wpa_supplicant *wpa_s,
 			      struct wpa_ssid *ssid);
 void wpa_supplicant_terminate_proc(struct wpa_global *global);
-void wpa_supplicant_rx_eapol(void *ctx, const u8 *src_addr,
+void wpa_supplicant_rx_eapol(void *ctx, const u8 *own_addr,
 			     const u8 *buf, size_t len);
 void wpa_supplicant_update_config(struct wpa_supplicant *wpa_s);
 void wpa_supplicant_clear_status(struct wpa_supplicant *wpa_s);
@@ -1938,7 +1942,7 @@ void wpas_handle_assoc_resp_qos_mgmt(struct wpa_supplicant *wpa_s,
 int wpas_send_dscp_query(struct wpa_supplicant *wpa_s, const char *domain_name,
 			 size_t domain_name_length);
 
-int wpas_pasn_auth_start(struct wpa_supplicant *wpa_s,
+int wpas_pasn_auth_start(struct wpa_supplicant *wpa_s, const u8 *own_addr,
 			 const u8 *bssid, int akmp, int cipher,
 			 u16 group, int network_id,
 			 const u8 *comeback, size_t comeback_len);
@@ -1949,6 +1953,10 @@ int wpas_pasn_auth_rx(struct wpa_supplicant *wpa_s,
 		      const struct ieee80211_mgmt *mgmt, size_t len);
 int disabled_freq(struct wpa_supplicant *wpa_s, int freq);
 
-int wpas_pasn_deauthenticate(struct wpa_supplicant *wpa_s, const u8 *bssid);
+int wpas_pasn_deauthenticate(struct wpa_supplicant *wpa_s, const u8 *own_addr,
+			     const u8 *bssid);
+void wpas_pasn_auth_trigger(struct wpa_supplicant *wpa_s,
+			    struct pasn_auth *pasn_auth);
+void wpas_pasn_auth_work_done(struct wpa_supplicant *wpa_s, int status);
 
 #endif /* WPA_SUPPLICANT_I_H */

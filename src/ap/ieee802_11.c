@@ -3167,7 +3167,7 @@ static void handle_auth_pasn_1(struct hostapd_data *hapd, struct sta_info *sta,
 	sta->pasn->akmp = rsn_data.key_mgmt;
 	sta->pasn->cipher = rsn_data.pairwise_cipher;
 
-	derive_kdk = (hapd->iface->drv_flags2 & WPA_DRIVER_FLAGS2_SEC_LTF) &&
+	derive_kdk = (hapd->iface->drv_flags2 & WPA_DRIVER_FLAGS2_SEC_LTF_AP) &&
 		ieee802_11_rsnx_capab_len(elems.rsnxe, elems.rsnxe_len,
 					  WLAN_RSNX_CAPAB_SECURE_LTF);
 #ifdef CONFIG_TESTING_OPTIONS
@@ -3502,8 +3502,8 @@ static void handle_auth_pasn_3(struct hostapd_data *hapd, struct sta_info *sta,
 	wpa_printf(MSG_INFO,
 		   "PASN: Success handling transaction == 3. Store PTK");
 
-	ptksa_cache_add(hapd->ptksa, sta->addr, sta->pasn->cipher, 43200,
-			&sta->pasn->ptk);
+	ptksa_cache_add(hapd->ptksa, hapd->own_addr, sta->addr,
+			sta->pasn->cipher, 43200, &sta->pasn->ptk, NULL, NULL);
 fail:
 	ap_free_sta(hapd, sta);
 }
