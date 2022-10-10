@@ -1054,6 +1054,9 @@ static int wiphy_info_handler(struct nl_msg *msg, void *arg)
 				case QCA_NL80211_VENDOR_SUBCMD_GET_STA_INFO:
 					drv->get_sta_info_vendor_cmd_avail = 1;
 					break;
+				case QCA_NL80211_VENDOR_SUBCMD_SECURE_RANGING_CONTEXT:
+					drv->secure_ranging_ctx_vendor_cmd_avail = 1;
+					break;
 #endif /* CONFIG_DRIVER_NL80211_QCA */
 				}
 #ifdef CONFIG_DRIVER_NL80211_BRCM
@@ -2526,7 +2529,8 @@ static const char * modestr(enum hostapd_hw_mode mode)
 }
 
 
-static void nl80211_dump_chan_list(struct hostapd_hw_modes *modes,
+static void nl80211_dump_chan_list(struct wpa_driver_nl80211_data *drv,
+				   struct hostapd_hw_modes *modes,
 				   u16 num_modes)
 {
 	int i;
@@ -2544,6 +2548,9 @@ static void nl80211_dump_chan_list(struct hostapd_hw_modes *modes,
 		for (j = 0; j < mode->num_channels; j++) {
 			struct hostapd_channel_data *chan = &mode->channels[j];
 
+			if (chan->freq >= 5925 && chan->freq <= 7125 &&
+			    !(chan->flag & HOSTAPD_CHAN_DISABLED))
+				drv->uses_6ghz = true;
 			res = os_snprintf(pos, end - pos, " %d%s%s%s",
 					  chan->freq,
 					  (chan->flag & HOSTAPD_CHAN_DISABLED) ?
@@ -2615,7 +2622,7 @@ nl80211_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags,
 
 		modes = wpa_driver_nl80211_postprocess_modes(result.modes,
 							     num_modes);
-		nl80211_dump_chan_list(modes, *num_modes);
+		nl80211_dump_chan_list(drv, modes, *num_modes);
 		return modes;
 	}
 

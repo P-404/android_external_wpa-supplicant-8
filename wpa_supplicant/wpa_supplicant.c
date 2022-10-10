@@ -985,6 +985,13 @@ void wpa_supplicant_set_state(struct wpa_supplicant *wpa_s,
 	if (state == WPA_COMPLETED && wpa_s->new_connection) {
 		struct wpa_ssid *ssid = wpa_s->current_ssid;
 		int fils_hlp_sent = 0;
+		char mld_addr[50];
+
+		mld_addr[0] = '\0';
+		if (wpa_s->valid_links)
+			os_snprintf(mld_addr, sizeof(mld_addr),
+				    " ap_mld_addr=" MACSTR,
+				    MAC2STR(wpa_s->ap_mld_addr));
 
 #ifdef CONFIG_SME
 		if ((wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME) &&
@@ -997,11 +1004,11 @@ void wpa_supplicant_set_state(struct wpa_supplicant *wpa_s,
 
 #if defined(CONFIG_CTRL_IFACE) || !defined(CONFIG_NO_STDOUT_DEBUG)
 		wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_CONNECTED "- Connection to "
-			MACSTR " completed [id=%d id_str=%s%s]",
+			MACSTR " completed [id=%d id_str=%s%s]%s",
 			MAC2STR(wpa_s->bssid),
 			ssid ? ssid->id : -1,
 			ssid && ssid->id_str ? ssid->id_str : "",
-			fils_hlp_sent ? " FILS_HLP_SENT" : "");
+			fils_hlp_sent ? " FILS_HLP_SENT" : "", mld_addr);
 #endif /* CONFIG_CTRL_IFACE || !CONFIG_NO_STDOUT_DEBUG */
 		wpas_clear_temp_disabled(wpa_s, ssid, 1);
 		wpa_s->consecutive_conn_failures = 0;
@@ -2305,7 +2312,7 @@ int wpas_update_random_addr_disassoc(struct wpa_supplicant *wpa_s)
 }
 
 
-static void wpa_s_setup_sae_pt(struct wpa_config *conf, struct wpa_ssid *ssid)
+void wpa_s_setup_sae_pt(struct wpa_config *conf, struct wpa_ssid *ssid)
 {
 #ifdef CONFIG_SAE
 	int *groups = conf->sae_groups;

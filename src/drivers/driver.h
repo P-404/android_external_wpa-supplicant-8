@@ -2390,6 +2390,11 @@ struct wpa_signal_info {
 	int center_frq2;
 };
 
+struct wpa_mlo_signal_info {
+	u16 valid_links;
+	struct wpa_signal_info links[MAX_NUM_MLD_LINKS];
+};
+
 /**
  * struct wpa_channel_info - Information about the current channel
  * @frequency: Center frequency of the primary 20 MHz channel
@@ -2729,6 +2734,16 @@ struct weighted_pcl {
 	u32 freq; /* MHz */
 	u8 weight;
 	u32 flag; /* bitmap for WEIGHTED_PCL_* */
+};
+
+struct driver_sta_mlo_info {
+	u16 valid_links; /* bitmap of valid link IDs */
+	u8 ap_mld_addr[ETH_ALEN];
+	struct {
+		u8 addr[ETH_ALEN];
+		u8 bssid[ETH_ALEN];
+		unsigned int freq;
+	} links[MAX_NUM_MLD_LINKS];
 };
 
 /**
@@ -3978,6 +3993,14 @@ struct wpa_driver_ops {
 	int (*signal_poll)(void *priv, struct wpa_signal_info *signal_info);
 
 	/**
+	 * mlo_signal_poll - Get current MLO connection information
+	 * @priv: Private driver interface data
+	 * @mlo_signal_info: MLO connection info structure
+	 */
+	int (*mlo_signal_poll)(void *priv,
+			       struct wpa_mlo_signal_info *mlo_signal_info);
+
+	/**
 	 * channel_info - Get parameters of the current operating channel
 	 * @priv: Private driver interface data
 	 * @channel_info: Channel info structure
@@ -4794,6 +4817,17 @@ struct wpa_driver_ops {
 	 */
 	int (*send_pasn_resp)(void *priv, struct pasn_auth *params);
 
+	/**
+	 * get_sta_mlo_info - Get the current multi-link association info
+	 * @priv: Private driver interface data
+	 * @mlo: Pointer to fill multi-link association info
+	 * Returns: 0 on success, -1 on failure
+	 *
+	 * This callback is used to fetch multi-link of the current association.
+	 */
+	int (*get_sta_mlo_info)(void *priv,
+				struct driver_sta_mlo_info *mlo_info);
+
 #ifdef CONFIG_TESTING_OPTIONS
 	int (*register_frame)(void *priv, u16 type,
 			      const u8 *match, size_t match_len,
@@ -5393,6 +5427,24 @@ enum wpa_event_type {
 	 * PASN authentication and secure ranging context for multiple peers.
 	 */
 	EVENT_PASN_AUTH,
+
+	/**
+	 * EVENT_LINK_CH_SWITCH - MLD AP link decided to switch channels
+	 *
+	 * Described in wpa_event_data.ch_switch.
+	 *
+	 */
+	EVENT_LINK_CH_SWITCH,
+
+	/**
+	 * EVENT_LINK_CH_SWITCH_STARTED - MLD AP link started to switch channels
+	 *
+	 * This is a pre-switch event indicating the shortly following switch
+	 * of operating channels.
+	 *
+	 * Described in wpa_event_data.ch_switch.
+	 */
+	EVENT_LINK_CH_SWITCH_STARTED,
 };
 
 
@@ -6107,6 +6159,7 @@ union wpa_event_data {
 	 * @ch_width: Channel width
 	 * @cf1: Center frequency 1
 	 * @cf2: Center frequency 2
+	 * @link_id: Link ID of the MLO link
 	 */
 	struct ch_switch {
 		int freq;
@@ -6115,6 +6168,7 @@ union wpa_event_data {
 		enum chan_width ch_width;
 		int cf1;
 		int cf2;
+		int link_id;
 	} ch_switch;
 
 	/**
