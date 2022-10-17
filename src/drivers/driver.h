@@ -1241,6 +1241,12 @@ struct wpa_driver_associate_params {
 	 * 2 = both hunting-and-pecking loop and hash-to-element enabled
 	 */
 	int sae_pwe;
+
+	/**
+	 * disable_eht - Disable EHT for this connection
+	 */
+	int disable_eht;
+
 #ifdef CONFIG_DRIVER_NL80211_BRCM
 	/**
 	 * td_policy - Transition Disable Policy
