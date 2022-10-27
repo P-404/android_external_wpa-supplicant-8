@@ -286,7 +286,7 @@ static void wpa_supplicant_eapol_cb(struct eapol_sm *eapol,
 {
 	struct wpa_supplicant *wpa_s = ctx;
 	int res, pmk_len;
-	u8 pmk[PMK_LEN];
+	u8 pmk[PMK_LEN_MAX];
 
 	wpa_printf(MSG_DEBUG, "EAPOL authentication completed - result=%s",
 		   result_str(result));
@@ -336,7 +336,11 @@ static void wpa_supplicant_eapol_cb(struct eapol_sm *eapol,
 	wpa_printf(MSG_DEBUG, "Configure PMK for driver-based RSN 4-way "
 		   "handshake");
 
-	pmk_len = PMK_LEN;
+	if (wpa_key_mgmt_sha384(wpa_s->key_mgmt))
+		pmk_len = PMK_LEN_SUITE_B_192;
+	else
+		pmk_len = PMK_LEN;
+
 	if (wpa_key_mgmt_ft(wpa_s->key_mgmt)) {
 #ifdef CONFIG_IEEE80211R
 		u8 buf[2 * PMK_LEN];
@@ -351,7 +355,7 @@ static void wpa_supplicant_eapol_cb(struct eapol_sm *eapol,
 		res = -1;
 #endif /* CONFIG_IEEE80211R */
 	} else {
-		res = eapol_sm_get_key(eapol, pmk, PMK_LEN);
+		res = eapol_sm_get_key(eapol, pmk, pmk_len);
 		if (res) {
 			/*
 			 * EAP-LEAP is an exception from other EAP methods: it
@@ -1328,7 +1332,7 @@ static void wpa_supplicant_transition_disable(void *_wpa_s, u8 bitmap)
 #ifdef CONFIG_SAE
 	if ((bitmap & TRANSITION_DISABLE_WPA3_PERSONAL) &&
 	    wpa_key_mgmt_sae(wpa_s->key_mgmt) &&
-	    (ssid->key_mgmt & (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_FT_SAE)) &&
+	    wpa_key_mgmt_sae(ssid->key_mgmt) &&
 	    (ssid->ieee80211w != MGMT_FRAME_PROTECTION_REQUIRED ||
 	     (ssid->group_cipher & WPA_CIPHER_TKIP))) {
 		wpa_printf(MSG_DEBUG,
@@ -1343,7 +1347,7 @@ static void wpa_supplicant_transition_disable(void *_wpa_s, u8 bitmap)
 	    wpa_s->sme.sae.state == SAE_ACCEPTED &&
 	    wpa_s->sme.sae.pk &&
 #endif /* CONFIG_SME */
-	    (ssid->key_mgmt & (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_FT_SAE)) &&
+	    wpa_key_mgmt_sae(ssid->key_mgmt) &&
 	    (ssid->sae_pk != SAE_PK_MODE_ONLY ||
 	     ssid->ieee80211w != MGMT_FRAME_PROTECTION_REQUIRED ||
 	     (ssid->group_cipher & WPA_CIPHER_TKIP))) {
@@ -1403,10 +1407,26 @@ static void wpa_supplicant_store_ptk(void *ctx, u8 *addr, int cipher,
 {
 	struct wpa_supplicant *wpa_s = ctx;
 
-	ptksa_cache_add(wpa_s->ptksa, addr, cipher, life_time, ptk);
+	ptksa_cache_add(wpa_s->ptksa, wpa_s->own_addr, addr, cipher, life_time,
+			ptk, NULL, NULL);
 }
 
 #endif /* CONFIG_NO_WPA */
+
+
+#ifdef CONFIG_PASN
+static int wpa_supplicant_set_ltf_keyseed(void *_wpa_s, const u8 *own_addr,
+					  const u8 *peer_addr,
+					  size_t ltf_keyseed_len,
+					  const u8 *ltf_keyseed)
+{
+	struct wpa_supplicant *wpa_s = _wpa_s;
+
+	return wpa_drv_set_secure_ranging_ctx(wpa_s, own_addr, peer_addr, 0, 0,
+					      NULL, ltf_keyseed_len,
+					      ltf_keyseed, 0);
+}
+#endif /* CONFIG_PASN */
 
 
 int wpa_supplicant_init_wpa(struct wpa_supplicant *wpa_s)
@@ -1471,6 +1491,9 @@ int wpa_supplicant_init_wpa(struct wpa_supplicant *wpa_s)
 	ctx->channel_info = wpa_supplicant_channel_info;
 	ctx->transition_disable = wpa_supplicant_transition_disable;
 	ctx->store_ptk = wpa_supplicant_store_ptk;
+#ifdef CONFIG_PASN
+	ctx->set_ltf_keyseed = wpa_supplicant_set_ltf_keyseed;
+#endif /* CONFIG_PASN */
 
 	wpa_s->wpa = wpa_sm_init(ctx);
 	if (wpa_s->wpa == NULL) {
