@@ -608,5 +608,6 @@ void wpa_sm_set_dpp_z(struct wpa_sm *sm, const struct wpabuf *z);
 void wpa_pasn_pmksa_cache_add(struct wpa_sm *sm, const u8 *pmk, size_t pmk_len,
 			      const u8 *pmkid, const u8 *bssid, int key_mgmt);
 void wpa_pasn_sm_set_caps(struct wpa_sm *sm, unsigned int flags2);
+const u8 * wpa_sm_get_auth_addr(struct wpa_sm *sm);
 
 #endif /* WPA_H */
