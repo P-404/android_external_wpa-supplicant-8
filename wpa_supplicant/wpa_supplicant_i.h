@@ -4,12 +4,6 @@
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
- *
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef WPA_SUPPLICANT_I_H
@@ -58,7 +52,6 @@ struct ctrl_iface_priv;
 struct ctrl_iface_global_priv;
 struct wpas_dbus_priv;
 struct wpas_aidl_priv;
-struct wpas_vendor_aidl_priv;
 
 /**
  * struct wpa_interface - Parameters for wpa_supplicant_add_iface()
@@ -301,7 +294,6 @@ struct wpa_global {
 	struct ctrl_iface_global_priv *ctrl_iface;
 	struct wpas_dbus_priv *dbus;
 	struct wpas_aidl_priv *aidl;
-	struct wpas_vendor_aidl_priv *vendor_aidl;
 	void **drv_priv;
 	size_t drv_count;
 	struct os_time suspend_time;
