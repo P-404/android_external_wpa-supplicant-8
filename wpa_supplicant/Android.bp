@@ -68,7 +68,6 @@ cc_defaults {
     srcs: [":wpa_supplicant_srcs"],
     shared_libs: [
         "android.hardware.wifi.supplicant-V1-ndk",
-        "vendor.qti.hardware.wifi.supplicant-V1-ndk",
         "libbase",
         "libc",
         "libcrypto",
