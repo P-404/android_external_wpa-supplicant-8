@@ -767,6 +767,7 @@ struct wpa_supplicant {
 	int ap_ies_from_associnfo;
 	unsigned int assoc_freq;
 	u8 ap_mld_addr[ETH_ALEN];
+	u8 mlo_assoc_link_id;
 	u8 valid_links; /* bitmap of valid MLO link IDs */
 	struct {
 		u8 addr[ETH_ALEN];
@@ -1615,7 +1616,8 @@ void wpas_set_mgmt_group_cipher(struct wpa_supplicant *wpa_s,
 				struct wpa_ssid *ssid, struct wpa_ie_data *ie);
 int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 			      struct wpa_bss *bss, struct wpa_ssid *ssid,
-			      u8 *wpa_ie, size_t *wpa_ie_len);
+			      u8 *wpa_ie, size_t *wpa_ie_len,
+			      bool skip_default_rsne);
 int wpas_restore_permanent_mac_addr(struct wpa_supplicant *wpa_s);
 void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 			      struct wpa_bss *bss,
