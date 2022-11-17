@@ -1785,6 +1785,12 @@ struct wpa_driver_set_key_params {
 	 * %KEY_FLAG_RX_TX
 	 *  RX/TX key. */
 	enum key_flag key_flag;
+
+	/**
+	 * link_id - MLO Link ID
+	 *
+	 * Set to a valid Link ID (0-14) when applicable, otherwise -1. */
+	int link_id;
 };
 
 enum wpa_driver_if_type {
@@ -2743,7 +2749,9 @@ struct weighted_pcl {
 };
 
 struct driver_sta_mlo_info {
-	u16 valid_links; /* bitmap of valid link IDs */
+	u16 req_links; /* bitmap of requested link IDs */
+	u16 valid_links; /* bitmap of accepted link IDs */
+	u8 assoc_link_id;
 	u8 ap_mld_addr[ETH_ALEN];
 	struct {
 		u8 addr[ETH_ALEN];

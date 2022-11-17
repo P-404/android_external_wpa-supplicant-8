@@ -38,6 +38,27 @@
 static const u8 null_rsc[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
 
+static void wpa_hexdump_link(int level, u8 link_id, const char *title,
+			     const void *buf, size_t len)
+{
+	char *link_title = NULL;
+
+	if (link_id >= MAX_NUM_MLD_LINKS)
+		goto out;
+
+	link_title = os_malloc(os_strlen(title) + 20);
+	if (!link_title)
+		goto out;
+
+	os_snprintf(link_title, os_strlen(title) + 20, "MLO link[%u]: %s",
+		    link_id, title);
+
+out:
+	wpa_hexdump(level, link_title ? link_title : title, buf, len);
+	os_free(link_title);
+}
+
+
 /**
  * wpa_eapol_key_send - Send WPA/RSN EAPOL-Key message
  * @sm: Pointer to WPA state machine data from wpa_sm_init()
@@ -619,7 +640,7 @@ static int wpa_derive_ptk(struct wpa_sm *sm, const unsigned char *src_addr,
 		kdk_len = 0;
 
 	ret = wpa_pmk_to_ptk(sm->pmk, sm->pmk_len, "Pairwise key expansion",
-			     sm->own_addr, sm->bssid, sm->snonce,
+			     sm->own_addr, wpa_sm_get_auth_addr(sm), sm->snonce,
 			     key->key_nonce, ptk, akmp,
 			     sm->pairwise_cipher, z, z_len,
 			     kdk_len);
@@ -683,6 +704,53 @@ static int wpa_handle_ext_key_id(struct wpa_sm *sm,
 }
 
 
+static u8 * rsn_add_kde(u8 *pos, u32 kde, const u8 *data, size_t data_len)
+{
+	*pos++ = WLAN_EID_VENDOR_SPECIFIC;
+	*pos++ = RSN_SELECTOR_LEN + data_len;
+	RSN_SELECTOR_PUT(pos, kde);
+	pos += RSN_SELECTOR_LEN;
+	os_memcpy(pos, data, data_len);
+	pos += data_len;
+
+	return pos;
+}
+
+
+static size_t wpa_mlo_link_kde_len(struct wpa_sm *sm)
+{
+	int i;
+	unsigned int num_links = 0;
+
+	for (i = 0; i < MAX_NUM_MLO_LINKS; i++) {
+		if (sm->mlo.assoc_link_id != i && (sm->mlo.req_links & BIT(i)))
+			num_links++;
+	}
+
+	return num_links * (RSN_SELECTOR_LEN + 1 + ETH_ALEN + 2);
+}
+
+
+static u8 * wpa_mlo_link_kde(struct wpa_sm *sm, u8 *pos)
+{
+	int i;
+	u8 hdr[1 + ETH_ALEN];
+
+	for (i = 0; i < MAX_NUM_MLO_LINKS; i++) {
+		if (sm->mlo.assoc_link_id == i || !(sm->mlo.req_links & BIT(i)))
+			continue;
+
+		wpa_printf(MSG_DEBUG,
+			   "MLO: Add MLO Link %d KDE in EAPOL-Key 2/4", i);
+		hdr[0] = i & 0xF; /* LinkID; no RSNE or RSNXE */
+		os_memcpy(&hdr[1], sm->mlo.links[i].addr, ETH_ALEN);
+		pos = rsn_add_kde(pos, RSN_KEY_DATA_MLO_LINK, hdr, sizeof(hdr));
+	}
+
+	return pos;
+}
+
+
 static void wpa_supplicant_process_1_of_4(struct wpa_sm *sm,
 					  const unsigned char *src_addr,
 					  const struct wpa_eapol_key *key,
@@ -694,6 +762,7 @@ static void wpa_supplicant_process_1_of_4(struct wpa_sm *sm,
 	int res;
 	u8 *kde, *kde_buf = NULL;
 	size_t kde_len;
+	size_t mlo_kde_len = 0;
 
 	if (wpa_sm_get_network_ctx(sm) == NULL) {
 		wpa_msg(sm->ctx->msg_ctx, MSG_WARNING, "WPA: No SSID info "
@@ -762,13 +831,19 @@ static void wpa_supplicant_process_1_of_4(struct wpa_sm *sm,
 	}
 	sm->tptk_set = 1;
 
+	/* Add MLO Link KDE and MAC KDE in M2 for ML connection */
+	if (sm->mlo.valid_links)
+		mlo_kde_len = wpa_mlo_link_kde_len(sm) +
+			RSN_SELECTOR_LEN + ETH_ALEN + 2;
+
 	kde = sm->assoc_wpa_ie;
 	kde_len = sm->assoc_wpa_ie_len;
 	kde_buf = os_malloc(kde_len +
 			    2 + RSN_SELECTOR_LEN + 3 +
 			    sm->assoc_rsnxe_len +
 			    2 + RSN_SELECTOR_LEN + 1 +
-			    2 + RSN_SELECTOR_LEN + 2);
+			    2 + RSN_SELECTOR_LEN + 2 + mlo_kde_len);
+
 	if (!kde_buf)
 		goto failed;
 	os_memcpy(kde_buf, kde, kde_len);
@@ -841,6 +916,21 @@ static void wpa_supplicant_process_1_of_4(struct wpa_sm *sm,
 		kde_len = pos - kde;
 	}
 #endif /* CONFIG_DPP2 */
+
+	if (sm->mlo.valid_links) {
+		u8 *pos;
+
+		/* Add MAC KDE */
+		wpa_printf(MSG_DEBUG, "MLO: Add MAC KDE into EAPOL-Key 2/4");
+		pos = kde + kde_len;
+		pos = rsn_add_kde(pos, RSN_KEY_DATA_MAC_ADDR, sm->own_addr,
+				  ETH_ALEN);
+
+		/* Add MLO Link KDE */
+		wpa_printf(MSG_DEBUG, "Add MLO Link KDE(s) into EAPOL-Key 2/4");
+		pos = wpa_mlo_link_kde(sm, pos);
+		kde_len = pos - kde;
+	}
 
 	if (wpa_supplicant_send_2_of_4(sm, sm->bssid, key, ver, sm->snonce,
 				       kde, kde_len, ptk) < 0)
@@ -965,13 +1055,13 @@ static int wpa_supplicant_install_ptk(struct wpa_sm *sm,
 		wpa_hexdump(MSG_DEBUG, "WPA: RSC", key_rsc, rsclen);
 	}
 
-	if (wpa_sm_set_key(sm, alg, sm->bssid, sm->keyidx_active, 1, key_rsc,
-			   rsclen, sm->ptk.tk, keylen,
-			   KEY_FLAG_PAIRWISE | key_flag) < 0) {
+	if (wpa_sm_set_key(sm, -1, alg, wpa_sm_get_auth_addr(sm),
+			   sm->keyidx_active, 1, key_rsc, rsclen, sm->ptk.tk,
+			   keylen, KEY_FLAG_PAIRWISE | key_flag) < 0) {
 		wpa_msg(sm->ctx->msg_ctx, MSG_WARNING,
-			"WPA: Failed to set PTK to the driver (alg=%d keylen=%d bssid="
+			"WPA: Failed to set PTK to the driver (alg=%d keylen=%d auth_addr="
 			MACSTR " idx=%d key_flag=0x%x)",
-			alg, keylen, MAC2STR(sm->bssid),
+			alg, keylen, MAC2STR(wpa_sm_get_auth_addr(sm)),
 			sm->keyidx_active, key_flag);
 		return -1;
 	}
@@ -1010,14 +1100,16 @@ static int wpa_supplicant_install_ptk(struct wpa_sm *sm,
 static int wpa_supplicant_activate_ptk(struct wpa_sm *sm)
 {
 	wpa_dbg(sm->ctx->msg_ctx, MSG_DEBUG,
-		"WPA: Activate PTK (idx=%d bssid=" MACSTR ")",
-		sm->keyidx_active, MAC2STR(sm->bssid));
+		"WPA: Activate PTK (idx=%d auth_addr=" MACSTR ")",
+		sm->keyidx_active, MAC2STR(wpa_sm_get_auth_addr(sm)));
 
-	if (wpa_sm_set_key(sm, 0, sm->bssid, sm->keyidx_active, 0, NULL, 0,
-			   NULL, 0, KEY_FLAG_PAIRWISE_RX_TX_MODIFY) < 0) {
+	if (wpa_sm_set_key(sm, -1, 0, wpa_sm_get_auth_addr(sm),
+			   sm->keyidx_active, 0, NULL, 0, NULL, 0,
+			   KEY_FLAG_PAIRWISE_RX_TX_MODIFY) < 0) {
 		wpa_msg(sm->ctx->msg_ctx, MSG_WARNING,
-			"WPA: Failed to activate PTK for TX (idx=%d bssid="
-			MACSTR ")", sm->keyidx_active, MAC2STR(sm->bssid));
+			"WPA: Failed to activate PTK for TX (idx=%d auth_addr="
+			MACSTR ")", sm->keyidx_active,
+			MAC2STR(wpa_sm_get_auth_addr(sm)));
 		return -1;
 	}
 	return 0;
@@ -1092,7 +1184,7 @@ static int wpa_supplicant_install_gtk(struct wpa_sm *sm,
 		_gtk = gtk_buf;
 	}
 	if (sm->pairwise_cipher == WPA_CIPHER_NONE) {
-		if (wpa_sm_set_key(sm, gd->alg, NULL,
+		if (wpa_sm_set_key(sm, -1, gd->alg, NULL,
 				   gd->keyidx, 1, key_rsc, gd->key_rsc_len,
 				   _gtk, gd->gtk_len,
 				   KEY_FLAG_GROUP_RX_TX_DEFAULT) < 0) {
@@ -1102,7 +1194,7 @@ static int wpa_supplicant_install_gtk(struct wpa_sm *sm,
 			forced_memzero(gtk_buf, sizeof(gtk_buf));
 			return -1;
 		}
-	} else if (wpa_sm_set_key(sm, gd->alg, broadcast_ether_addr,
+	} else if (wpa_sm_set_key(sm, -1, gd->alg, broadcast_ether_addr,
 				  gd->keyidx, gd->tx, key_rsc, gd->key_rsc_len,
 				  _gtk, gd->gtk_len, KEY_FLAG_GROUP_RX) < 0) {
 		wpa_msg(sm->ctx->msg_ctx, MSG_WARNING,
@@ -1255,7 +1347,7 @@ static int wpa_supplicant_install_igtk(struct wpa_sm *sm,
 			"WPA: Invalid IGTK KeyID %d", keyidx);
 		return -1;
 	}
-	if (wpa_sm_set_key(sm, wpa_cipher_to_alg(sm->mgmt_group_cipher),
+	if (wpa_sm_set_key(sm, -1, wpa_cipher_to_alg(sm->mgmt_group_cipher),
 			   broadcast_ether_addr,
 			   keyidx, 0, igtk->pn, sizeof(igtk->pn),
 			   igtk->igtk, len, KEY_FLAG_GROUP_RX) < 0) {
@@ -1324,7 +1416,7 @@ static int wpa_supplicant_install_bigtk(struct wpa_sm *sm,
 			"WPA: Invalid BIGTK KeyID %d", keyidx);
 		return -1;
 	}
-	if (wpa_sm_set_key(sm, wpa_cipher_to_alg(sm->mgmt_group_cipher),
+	if (wpa_sm_set_key(sm, -1, wpa_cipher_to_alg(sm->mgmt_group_cipher),
 			   broadcast_ether_addr,
 			   keyidx, 0, bigtk->pn, sizeof(bigtk->pn),
 			   bigtk->bigtk, len, KEY_FLAG_GROUP_RX) < 0) {
@@ -1649,13 +1741,32 @@ int wpa_supplicant_send_4_of_4(struct wpa_sm *sm, const unsigned char *dst,
 	size_t mic_len, hdrlen, rlen;
 	struct wpa_eapol_key *reply;
 	u8 *rbuf, *key_mic;
+	u8 *kde = NULL;
+	size_t kde_len = 0;
+
+	if (sm->mlo.valid_links) {
+		u8 *pos;
+
+		kde = os_malloc(RSN_SELECTOR_LEN + ETH_ALEN + 2);
+		if (!kde)
+			return -1;
+
+		/* Add MAC KDE */
+		wpa_printf(MSG_DEBUG, "MLO: Add MAC KDE into EAPOL-Key 4/4");
+		pos = kde;
+		pos = rsn_add_kde(pos, RSN_KEY_DATA_MAC_ADDR, sm->own_addr,
+				  ETH_ALEN);
+		kde_len = pos - kde;
+	}
 
 	mic_len = wpa_mic_len(sm->key_mgmt, sm->pmk_len);
 	hdrlen = sizeof(*reply) + mic_len + 2;
 	rbuf = wpa_sm_alloc_eapol(sm, IEEE802_1X_TYPE_EAPOL_KEY, NULL,
-				  hdrlen, &rlen, (void *) &reply);
-	if (rbuf == NULL)
+				  hdrlen + kde_len, &rlen, (void *) &reply);
+	if (!rbuf) {
+		os_free(kde);
 		return -1;
+	}
 
 	reply->type = (sm->proto == WPA_PROTO_RSN ||
 		       sm->proto == WPA_PROTO_OSEN) ?
@@ -1675,7 +1786,11 @@ int wpa_supplicant_send_4_of_4(struct wpa_sm *sm, const unsigned char *dst,
 		  WPA_REPLAY_COUNTER_LEN);
 
 	key_mic = (u8 *) (reply + 1);
-	WPA_PUT_BE16(key_mic + mic_len, 0);
+	WPA_PUT_BE16(key_mic + mic_len, kde_len); /* Key Data length */
+	if (kde) {
+		os_memcpy(key_mic + mic_len + 2, kde, kde_len); /* Key Data */
+		os_free(kde);
+	}
 
 	wpa_dbg(sm->ctx->msg_ctx, MSG_INFO, "WPA: Sending EAPOL-Key 4/4");
 	return wpa_eapol_key_send(sm, ptk, ver, dst, ETH_P_EAPOL, rbuf, rlen,
@@ -1860,7 +1975,7 @@ static void wpa_supplicant_process_3_of_4(struct wpa_sm *sm,
 
 		sa = pmksa_cache_add(sm->pmksa, sm->pmk, sm->pmk_len, NULL,
 				     sm->ptk.kck, sm->ptk.kck_len,
-				     sm->bssid, sm->own_addr,
+				     wpa_sm_get_auth_addr(sm), sm->own_addr,
 				     sm->network_ctx, sm->key_mgmt, NULL);
 		if (!sm->cur_pmksa)
 			sm->cur_pmksa = sa;
@@ -2990,6 +3105,8 @@ struct wpa_sm * wpa_sm_init(struct wpa_sm_ctx *ctx)
  */
 void wpa_sm_deinit(struct wpa_sm *sm)
 {
+	int i;
+
 	if (sm == NULL)
 		return;
 	pmksa_cache_deinit(sm->pmksa);
@@ -3000,6 +3117,10 @@ void wpa_sm_deinit(struct wpa_sm *sm)
 	os_free(sm->ap_wpa_ie);
 	os_free(sm->ap_rsn_ie);
 	os_free(sm->ap_rsnxe);
+	for (i = 0; i < MAX_NUM_MLD_LINKS; i++) {
+		os_free(sm->mlo.links[i].ap_rsne);
+		os_free(sm->mlo.links[i].ap_rsnxe);
+	}
 	wpa_sm_drop_sa(sm);
 	os_free(sm->ctx);
 #ifdef CONFIG_IEEE80211R
@@ -3284,6 +3405,81 @@ void wpa_sm_set_config(struct wpa_sm *sm, struct rsn_supp_config *config)
 		sm->beacon_prot = 0;
 		sm->force_kdk_derivation = false;
 	}
+}
+
+
+int wpa_sm_set_mlo_params(struct wpa_sm *sm, const struct wpa_sm_mlo *mlo)
+{
+	int i;
+
+	if (!sm)
+		return -1;
+
+	os_memcpy(sm->mlo.ap_mld_addr, mlo->ap_mld_addr, ETH_ALEN);
+	sm->mlo.assoc_link_id =  mlo->assoc_link_id;
+	sm->mlo.valid_links = mlo->valid_links;
+	sm->mlo.req_links = mlo->req_links;
+
+	for (i = 0; i < MAX_NUM_MLD_LINKS; i++) {
+		const u8 *ie;
+		size_t len;
+
+		if (sm->mlo.req_links & BIT(i)) {
+			if (!mlo->links[i].ap_rsne ||
+			    mlo->links[i].ap_rsne_len == 0) {
+				wpa_dbg(sm->ctx->msg_ctx, MSG_INFO,
+					"RSN: No RSNE for AP MLO link %d with BSSID "
+					MACSTR,
+					i, MAC2STR(mlo->links[i].bssid));
+				return -1;
+
+			}
+			os_memcpy(sm->mlo.links[i].addr, mlo->links[i].addr,
+				  ETH_ALEN);
+			os_memcpy(sm->mlo.links[i].bssid, mlo->links[i].bssid,
+				  ETH_ALEN);
+		}
+
+		ie = mlo->links[i].ap_rsne;
+		len = mlo->links[i].ap_rsne_len;
+		os_free(sm->mlo.links[i].ap_rsne);
+		if (!ie || len == 0) {
+			wpa_dbg(sm->ctx->msg_ctx, MSG_DEBUG,
+				"RSN: Clearing MLO link[%u] AP RSNE", i);
+			sm->mlo.links[i].ap_rsne = NULL;
+			sm->mlo.links[i].ap_rsne_len = 0;
+		} else {
+			wpa_hexdump_link(MSG_DEBUG, i, "RSN: Set AP RSNE",
+					 ie, len);
+			sm->mlo.links[i].ap_rsne = os_memdup(ie, len);
+			if (!sm->mlo.links[i].ap_rsne) {
+				sm->mlo.links[i].ap_rsne_len = 0;
+				return -1;
+			}
+			sm->mlo.links[i].ap_rsne_len = len;
+		}
+
+		ie = mlo->links[i].ap_rsnxe;
+		len = mlo->links[i].ap_rsnxe_len;
+		os_free(sm->mlo.links[i].ap_rsnxe);
+		if (!ie || len == 0) {
+			wpa_dbg(sm->ctx->msg_ctx, MSG_DEBUG,
+				"RSN: Clearing MLO link[%u] AP RSNXE", i);
+			sm->mlo.links[i].ap_rsnxe = NULL;
+			sm->mlo.links[i].ap_rsnxe_len = 0;
+		} else {
+			wpa_hexdump_link(MSG_DEBUG, i, "RSN: Set AP RSNXE", ie,
+					 len);
+			sm->mlo.links[i].ap_rsnxe = os_memdup(ie, len);
+			if (!sm->mlo.links[i].ap_rsnxe) {
+				sm->mlo.links[i].ap_rsnxe_len = 0;
+				return -1;
+			}
+			sm->mlo.links[i].ap_rsnxe_len = len;
+		}
+	}
+
+	return 0;
 }
 
 
@@ -4110,6 +4306,12 @@ unsigned int wpa_sm_get_key_mgmt(struct wpa_sm *sm)
 }
 
 
+const u8 * wpa_sm_get_auth_addr(struct wpa_sm *sm)
+{
+	return sm->mlo.valid_links ? sm->mlo.ap_mld_addr : sm->bssid;
+}
+
+
 #ifdef CONFIG_FILS
 
 struct wpabuf * fils_build_auth(struct wpa_sm *sm, int dh_group, const u8 *md)
@@ -4492,7 +4694,8 @@ int fils_process_auth(struct wpa_sm *sm, const u8 *bssid, const u8 *data,
 	else
 		kdk_len = 0;
 
-	if (fils_pmk_to_ptk(sm->pmk, sm->pmk_len, sm->own_addr, sm->bssid,
+	if (fils_pmk_to_ptk(sm->pmk, sm->pmk_len, sm->own_addr,
+			    wpa_sm_get_auth_addr(sm),
 			    sm->fils_nonce, sm->fils_anonce,
 			    dh_ss ? wpabuf_head(dh_ss) : NULL,
 			    dh_ss ? wpabuf_len(dh_ss) : 0,
@@ -5054,12 +5257,13 @@ int fils_process_assoc_resp(struct wpa_sm *sm, const u8 *resp, size_t len)
 	rsclen = wpa_cipher_rsc_len(sm->pairwise_cipher);
 	wpa_hexdump_key(MSG_DEBUG, "FILS: Set TK to driver",
 			sm->ptk.tk, keylen);
-	if (wpa_sm_set_key(sm, alg, sm->bssid, 0, 1, null_rsc, rsclen,
+	if (wpa_sm_set_key(sm, -1, alg, wpa_sm_get_auth_addr(sm), 0, 1,
+			   null_rsc, rsclen,
 			   sm->ptk.tk, keylen, KEY_FLAG_PAIRWISE_RX_TX) < 0) {
 		wpa_msg(sm->ctx->msg_ctx, MSG_WARNING,
-			"FILS: Failed to set PTK to the driver (alg=%d keylen=%d bssid="
+			"FILS: Failed to set PTK to the driver (alg=%d keylen=%d auth_addr="
 			MACSTR ")",
-			alg, keylen, MAC2STR(sm->bssid));
+			alg, keylen, MAC2STR(wpa_sm_get_auth_addr(sm)));
 		goto fail;
 	}
 
