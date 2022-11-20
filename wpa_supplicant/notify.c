@@ -22,6 +22,7 @@
 #include "dbus/dbus_common.h"
 #include "dbus/dbus_new.h"
 #include "rsn_supp/wpa.h"
+#include "rsn_supp/pmksa_cache.h"
 #include "fst/fst.h"
 #include "crypto/tls.h"
 #include "bss.h"
@@ -1256,15 +1257,6 @@ void wpas_notify_dpp_config_rejected(struct wpa_supplicant *wpa_s)
 #endif /* CONFIG_DPP2 */
 }
 
-void wpas_notify_pmk_cache_added(struct wpa_supplicant *wpa_s,
-				 struct rsn_pmksa_cache_entry *entry)
-{
-	if (!wpa_s)
-		return;
-
-	wpas_aidl_notify_pmk_cache_added(wpa_s, entry);
-}
-
 void wpas_notify_transition_disable(struct wpa_supplicant *wpa_s,
 				    struct wpa_ssid *ssid,
 				    u8 bitmap)
@@ -1313,6 +1305,16 @@ void wpas_notify_interworking_select_done(struct wpa_supplicant *wpa_s)
 }
 
 #endif /* CONFIG_INTERWORKING */
+
+
+void wpas_notify_pmk_cache_added(struct wpa_supplicant *wpa_s,
+				 struct rsn_pmksa_cache_entry *entry)
+{
+       if (!wpa_s)
+               return;
+
+       wpas_aidl_notify_pmk_cache_added(wpa_s, entry);
+}
 
 void wpas_notify_eap_method_selected(struct wpa_supplicant *wpa_s,
 			const char* reason_string)
