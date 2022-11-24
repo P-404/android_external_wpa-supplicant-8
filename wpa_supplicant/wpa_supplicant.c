@@ -727,6 +727,8 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 	dpp_global_deinit(wpa_s->dpp);
 	wpa_s->dpp = NULL;
 #endif /* CONFIG_DPP */
+	wpas_scs_deinit(wpa_s);
+	wpas_dscp_deinit(wpa_s);
 }
 
 
@@ -1851,6 +1853,8 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 
 static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx)
 {
+	bool scs = true, mscs = true;
+
 	*pos = 0x00;
 
 	switch (idx) {
@@ -1894,6 +1898,12 @@ static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx)
 #endif /* CONFIG_MBO */
 		break;
 	case 6: /* Bits 48-55 */
+#ifdef CONFIG_TESTING_OPTIONS
+		if (wpa_s->disable_scs_support)
+			scs = false;
+#endif /* CONFIG_TESTING_OPTIONS */
+		if (scs)
+			*pos |= 0x40; /* Bit 54 - SCS */
 		break;
 	case 7: /* Bits 56-63 */
 		break;
@@ -1910,7 +1920,12 @@ static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx)
 #endif /* CONFIG_FILS */
 		break;
 	case 10: /* Bits 80-87 */
-		*pos |= 0x20; /* Bit 85 - Mirrored SCS */
+#ifdef CONFIG_TESTING_OPTIONS
+		if (wpa_s->disable_mscs_support)
+			mscs = false;
+#endif /* CONFIG_TESTING_OPTIONS */
+		if (mscs)
+			*pos |= 0x20; /* Bit 85 - Mirrored SCS */
 		break;
 	}
 }
@@ -2760,6 +2775,54 @@ int wpa_is_fils_sk_pfs_supported(struct wpa_supplicant *wpa_s)
 #endif /* CONFIG_FILS */
 
 
+static int wpas_populate_wfa_capa(struct wpa_supplicant *wpa_s,
+				  struct wpa_bss *bss,
+				  u8 *wpa_ie, size_t wpa_ie_len,
+				  size_t max_wpa_ie_len)
+{
+	struct wpabuf *wfa_ie = NULL;
+	u8 wfa_capa[1];
+	size_t wfa_ie_len, buf_len;
+
+	os_memset(wfa_capa, 0, sizeof(wfa_capa));
+	if (wpa_s->enable_dscp_policy_capa)
+		wfa_capa[0] |= WFA_CAPA_QM_DSCP_POLICY;
+
+	if (!wfa_capa[0])
+		return wpa_ie_len;
+
+	/* Wi-Fi Alliance element */
+	buf_len = 1 +	/* Element ID */
+		  1 +	/* Length */
+		  3 +	/* OUI */
+		  1 +	/* OUI Type */
+		  1 +	/* Capabilities Length */
+		  sizeof(wfa_capa);	/* Capabilities */
+	wfa_ie = wpabuf_alloc(buf_len);
+	if (!wfa_ie)
+		return wpa_ie_len;
+
+	wpabuf_put_u8(wfa_ie, WLAN_EID_VENDOR_SPECIFIC);
+	wpabuf_put_u8(wfa_ie, buf_len - 2);
+	wpabuf_put_be24(wfa_ie, OUI_WFA);
+	wpabuf_put_u8(wfa_ie, WFA_CAPA_OUI_TYPE);
+	wpabuf_put_u8(wfa_ie, sizeof(wfa_capa));
+	wpabuf_put_data(wfa_ie, wfa_capa, sizeof(wfa_capa));
+
+	wfa_ie_len = wpabuf_len(wfa_ie);
+	if (wpa_ie_len + wfa_ie_len <= max_wpa_ie_len) {
+		wpa_hexdump_buf(MSG_MSGDUMP, "WFA Capabilities element",
+				wfa_ie);
+		os_memcpy(wpa_ie + wpa_ie_len, wpabuf_head(wfa_ie),
+			  wfa_ie_len);
+		wpa_ie_len += wfa_ie_len;
+	}
+
+	wpabuf_free(wfa_ie);
+	return wpa_ie_len;
+}
+
+
 static u8 * wpas_populate_assoc_ies(
 	struct wpa_supplicant *wpa_s,
 	struct wpa_bss *bss, struct wpa_ssid *ssid,
@@ -3202,12 +3265,14 @@ pfs_fail:
 		wpa_ie_len += wpa_s->rsnxe_len;
 	}
 
-	if (bss && wpa_s->robust_av.valid_config) {
+#ifdef CONFIG_TESTING_OPTIONS
+	if (wpa_s->disable_mscs_support)
+		goto mscs_end;
+#endif /* CONFIG_TESTING_OPTIONS */
+	if (wpa_bss_ext_capab(bss, WLAN_EXT_CAPAB_MSCS) &&
+	    wpa_s->robust_av.valid_config) {
 		struct wpabuf *mscs_ie;
 		size_t mscs_ie_len, buf_len;
-
-		if (!wpa_bss_ext_capab(bss, WLAN_EXT_CAPAB_MSCS))
-			goto mscs_fail;
 
 		buf_len = 3 +	/* MSCS descriptor IE header */
 			  1 +	/* Request type */
@@ -3219,7 +3284,7 @@ pfs_fail:
 		if (!mscs_ie) {
 			wpa_printf(MSG_INFO,
 				   "MSCS: Failed to allocate MSCS IE");
-			goto mscs_fail;
+			goto mscs_end;
 		}
 
 		wpas_populate_mscs_descriptor_ie(&wpa_s->robust_av, mscs_ie);
@@ -3233,7 +3298,10 @@ pfs_fail:
 
 		wpabuf_free(mscs_ie);
 	}
-mscs_fail:
+mscs_end:
+
+	wpa_ie_len = wpas_populate_wfa_capa(wpa_s, bss, wpa_ie, wpa_ie_len,
+					    max_wpa_ie_len);
 
 	if (ssid->multi_ap_backhaul_sta) {
 		size_t multi_ap_ie_len;
@@ -3933,6 +4001,9 @@ static void wpa_supplicant_clear_connection(struct wpa_supplicant *wpa_s,
 	eapol_sm_notify_config(wpa_s->eapol, NULL, NULL);
 	if (old_ssid != wpa_s->current_ssid)
 		wpas_notify_network_changed(wpa_s);
+
+	wpas_scs_deinit(wpa_s);
+	wpas_dscp_deinit(wpa_s);
 	eloop_cancel_timeout(wpa_supplicant_timeout, wpa_s, NULL);
 }
 
@@ -5021,6 +5092,7 @@ wpa_supplicant_alloc(struct wpa_supplicant *parent)
 #ifdef CONFIG_TESTING_OPTIONS
 	dl_list_init(&wpa_s->drv_signal_override);
 #endif /* CONFIG_TESTING_OPTIONS */
+	dl_list_init(&wpa_s->active_scs_ids);
 
 	return wpa_s;
 }
@@ -7674,6 +7746,16 @@ int wpas_get_ssid_pmf(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid)
 	}
 
 	return ssid->ieee80211w;
+}
+
+
+int pmf_in_use(struct wpa_supplicant *wpa_s, const u8 *addr)
+{
+	if (wpa_s->current_ssid == NULL ||
+	    wpa_s->wpa_state < WPA_4WAY_HANDSHAKE ||
+	    os_memcmp(addr, wpa_s->bssid, ETH_ALEN) != 0)
+		return 0;
+	return wpa_sm_pmf_enabled(wpa_s->wpa);
 }
 
 

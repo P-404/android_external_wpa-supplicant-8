@@ -153,6 +153,10 @@ extern "C" {
 #define WPS_EVENT_ENROLLEE_SEEN "WPS-ENROLLEE-SEEN "
 
 #define WPS_EVENT_OPEN_NETWORK "WPS-OPEN-NETWORK "
+/** Result of SCS setup */
+#define WPA_EVENT_SCS_RESULT "CTRL-EVENT-SCS-RESULT "
+/* Event indicating DSCP policy */
+#define WPA_EVENT_DSCP_POLICY "CTRL-EVENT-DSCP-POLICY "
 
 /* WPS ER events */
 #define WPS_EVENT_ER_AP_ADD "WPS-ER-AP-ADD "

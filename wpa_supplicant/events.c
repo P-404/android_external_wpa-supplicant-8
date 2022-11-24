@@ -2931,6 +2931,9 @@ no_pfs:
 
 	wpa_s->assoc_freq = data->assoc_info.freq;
 
+	wpas_handle_assoc_resp_qos_mgmt(wpa_s, data->assoc_info.resp_ies,
+					data->assoc_info.resp_ies_len);
+
 	return 0;
 }
 
@@ -4212,9 +4215,23 @@ static void wpas_event_rx_mgmt_action(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_DPP */
 
 	if (category == WLAN_ACTION_ROBUST_AV_STREAMING &&
+	    payload[0] == ROBUST_AV_SCS_RESP) {
+		wpas_handle_robust_av_scs_recv_action(wpa_s, mgmt->sa,
+						      payload + 1, plen - 1);
+		return;
+	}
+
+	if (category == WLAN_ACTION_ROBUST_AV_STREAMING &&
 	    payload[0] == ROBUST_AV_MSCS_RESP) {
 		wpas_handle_robust_av_recv_action(wpa_s, mgmt->sa,
 						  payload + 1, plen - 1);
+		return;
+	}
+
+	if (category == WLAN_ACTION_VENDOR_SPECIFIC_PROTECTED && plen > 4 &&
+	    WPA_GET_BE32(payload) == QM_ACTION_VENDOR_TYPE) {
+		wpas_handle_qos_mgmt_recv_action(wpa_s, mgmt->sa,
+						 payload + 4, plen - 4);
 		return;
 	}
 
