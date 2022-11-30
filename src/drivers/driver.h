@@ -2150,6 +2150,8 @@ struct wpa_driver_capa {
  * frames in STA mode
  */
 #define WPA_DRIVER_FLAGS2_PROT_RANGE_NEG_STA	0x0000000000002000ULL
+/** Driver supports MLO in station/AP mode */
+#define WPA_DRIVER_FLAGS2_MLO			0x0000000000004000ULL
 /** Driver supports of adaptive 11r feature */
 #define WPA_DRIVER_FLAGS_ADAPTIVE_11R	        0x8000000000000000ULL
 	u64 flags2;

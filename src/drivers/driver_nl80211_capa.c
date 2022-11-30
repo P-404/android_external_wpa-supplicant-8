@@ -1118,6 +1118,9 @@ static int wiphy_info_handler(struct nl_msg *msg, void *arg)
 		capa->max_num_akms =
 			nla_get_u16(tb[NL80211_ATTR_MAX_NUM_AKM_SUITES]);
 
+	if (tb[NL80211_ATTR_MLO_SUPPORT])
+		capa->flags2 |= WPA_DRIVER_FLAGS2_MLO;
+
 	return NL_SKIP;
 }
 
