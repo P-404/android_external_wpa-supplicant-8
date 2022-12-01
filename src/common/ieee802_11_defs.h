@@ -592,6 +592,9 @@
 #define WLAN_RSNX_CAPAB_URNM_MFPR_X20 10
 #define WLAN_RSNX_CAPAB_URNM_MFPR 15
 
+/* Multiple BSSID element subelements */
+#define WLAN_MBSSID_SUBELEMENT_NONTRANSMITTED_BSSID_PROFILE 0
+
 /* Action frame categories (IEEE Std 802.11-2016, 9.4.1.11, Table 9-76) */
 #define WLAN_ACTION_SPECTRUM_MGMT 0
 #define WLAN_ACTION_QOS 1
