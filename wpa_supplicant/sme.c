@@ -1303,7 +1303,7 @@ static int sme_check_sae_rejected_groups(struct wpa_supplicant *wpa_s,
 
 static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 			u16 status_code, const u8 *data, size_t len,
-			int external, const u8 *sa)
+			int external, const u8 *sa, int *ie_offset)
 {
 	int *groups;
 
@@ -1364,6 +1364,10 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 			token_len = token_pos[1] - 1;
 			token_pos += 3;
 		}
+
+		if (ie_offset)
+			*ie_offset = token_pos + token_len - data;
+
 		wpa_s->sme.sae_token = wpabuf_alloc_copy(token_pos, token_len);
 		wpa_hexdump_buf(MSG_DEBUG, "SME: Requested anti-clogging token",
 				wpa_s->sme.sae_token);
@@ -1459,7 +1463,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 		res = sae_parse_commit(&wpa_s->sme.sae, data, len, NULL, NULL,
 				       groups, status_code ==
 				       WLAN_STATUS_SAE_HASH_TO_ELEMENT ||
-				       status_code == WLAN_STATUS_SAE_PK);
+				       status_code == WLAN_STATUS_SAE_PK,
+				       ie_offset);
 		if (res == SAE_SILENTLY_DISCARD) {
 			wpa_printf(MSG_DEBUG,
 				   "SAE: Drop commit message due to reflection attack");
@@ -1494,7 +1499,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 		wpa_dbg(wpa_s, MSG_DEBUG, "SME SAE confirm");
 		if (wpa_s->sme.sae.state != SAE_CONFIRMED)
 			return -1;
-		if (sae_check_confirm(&wpa_s->sme.sae, data, len) < 0)
+		if (sae_check_confirm(&wpa_s->sme.sae, data, len,
+				      ie_offset) < 0)
 			return -1;
 		wpa_s->sme.sae.state = SAE_ACCEPTED;
 		sae_clear_temp_data(&wpa_s->sme.sae);
@@ -1566,7 +1572,7 @@ void sme_external_auth_mgmt_rx(struct wpa_supplicant *wpa_s,
 			wpa_s, le_to_host16(header->u.auth.auth_transaction),
 			le_to_host16(header->u.auth.status_code),
 			header->u.auth.variable,
-			len - auth_length, 1, header->sa);
+			len - auth_length, 1, header->sa, NULL);
 		if (res < 0) {
 			/* Notify failure to the driver */
 			sme_send_external_auth_status(
@@ -1624,7 +1630,8 @@ void sme_event_auth(struct wpa_supplicant *wpa_s, union wpa_event_data *data)
 		int res;
 		res = sme_sae_auth(wpa_s, data->auth.auth_transaction,
 				   data->auth.status_code, data->auth.ies,
-				   data->auth.ies_len, 0, data->auth.peer);
+				   data->auth.ies_len, 0, data->auth.peer,
+				   NULL);
 		if (res < 0) {
 			wpas_connection_failed(wpa_s, wpa_s->pending_bssid);
 			wpa_supplicant_set_state(wpa_s, WPA_DISCONNECTED);
