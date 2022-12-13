@@ -4,6 +4,12 @@
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef WPA_SUPPLICANT_I_H
@@ -52,6 +58,7 @@ struct ctrl_iface_priv;
 struct ctrl_iface_global_priv;
 struct wpas_dbus_priv;
 struct wpas_aidl_priv;
+struct wpas_vendor_aidl_priv;
 
 /**
  * struct wpa_interface - Parameters for wpa_supplicant_add_iface()
@@ -294,6 +301,7 @@ struct wpa_global {
 	struct ctrl_iface_global_priv *ctrl_iface;
 	struct wpas_dbus_priv *dbus;
 	struct wpas_aidl_priv *aidl;
+	struct wpas_vendor_aidl_priv *vendor_aidl;
 	void **drv_priv;
 	size_t drv_count;
 	struct os_time suspend_time;
@@ -767,6 +775,7 @@ struct wpa_supplicant {
 	int ap_ies_from_associnfo;
 	unsigned int assoc_freq;
 	u8 ap_mld_addr[ETH_ALEN];
+	u8 mlo_assoc_link_id;
 	u8 valid_links; /* bitmap of valid MLO link IDs */
 	struct {
 		u8 addr[ETH_ALEN];
@@ -1615,7 +1624,8 @@ void wpas_set_mgmt_group_cipher(struct wpa_supplicant *wpa_s,
 				struct wpa_ssid *ssid, struct wpa_ie_data *ie);
 int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 			      struct wpa_bss *bss, struct wpa_ssid *ssid,
-			      u8 *wpa_ie, size_t *wpa_ie_len);
+			      u8 *wpa_ie, size_t *wpa_ie_len,
+			      bool skip_default_rsne);
 int wpas_restore_permanent_mac_addr(struct wpa_supplicant *wpa_s);
 void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 			      struct wpa_bss *bss,

@@ -274,7 +274,7 @@ void nl80211_mark_disconnected(struct wpa_driver_nl80211_data *drv)
 	if (drv->associated)
 		os_memcpy(drv->prev_bssid, drv->bssid, ETH_ALEN);
 	drv->associated = 0;
-	drv->sta_mlo_info.valid_links = 0;
+	os_memset(&drv->sta_mlo_info, 0, sizeof(drv->sta_mlo_info));
 	os_memset(drv->bssid, 0, ETH_ALEN);
 	drv->first_bss->freq = 0;
 #ifdef CONFIG_DRIVER_NL80211_QCA
@@ -1508,7 +1508,7 @@ static int nl80211_get_assoc_freq_handler(struct nl_msg *msg, void *arg)
 		}
 
 		if (!drv->sta_mlo_info.valid_links ||
-		    drv->mlo_assoc_link_id == link_id) {
+		    drv->sta_mlo_info.assoc_link_id == link_id) {
 			ctx->assoc_freq = freq;
 			wpa_printf(MSG_DEBUG, "nl80211: Associated on %u MHz",
 				   ctx->assoc_freq);
@@ -1536,7 +1536,7 @@ static int nl80211_get_assoc_freq_handler(struct nl_msg *msg, void *arg)
 		}
 
 		if (!drv->sta_mlo_info.valid_links ||
-		    drv->mlo_assoc_link_id == link_id) {
+		    drv->sta_mlo_info.assoc_link_id == link_id) {
 			os_memcpy(ctx->assoc_bssid, bssid, ETH_ALEN);
 			wpa_printf(MSG_DEBUG, "nl80211: Associated with "
 				   MACSTR, MAC2STR(bssid));
@@ -3450,6 +3450,7 @@ static int wpa_driver_nl80211_set_key(struct i802_bss *bss,
 	size_t key_len = params->key_len;
 	int vlan_id = params->vlan_id;
 	enum key_flag key_flag = params->key_flag;
+	int link_id = params->link_id;
 
 	/* Ignore for P2P Device */
 	if (drv->nlmode == NL80211_IFTYPE_P2P_DEVICE)
@@ -3457,9 +3458,10 @@ static int wpa_driver_nl80211_set_key(struct i802_bss *bss,
 
 	ifindex = if_nametoindex(ifname);
 	wpa_printf(MSG_DEBUG, "%s: ifindex=%d (%s) alg=%d addr=%p key_idx=%d "
-		   "set_tx=%d seq_len=%lu key_len=%lu key_flag=0x%x",
+		   "set_tx=%d seq_len=%lu key_len=%lu key_flag=0x%x link_id=%d",
 		   __func__, ifindex, ifname, alg, addr, key_idx, set_tx,
-		   (unsigned long) seq_len, (unsigned long) key_len, key_flag);
+		   (unsigned long) seq_len, (unsigned long) key_len, key_flag,
+		   link_id);
 
 	if (check_key_flag(key_flag)) {
 		wpa_printf(MSG_DEBUG, "%s: invalid key_flag", __func__);
@@ -3592,6 +3594,12 @@ static int wpa_driver_nl80211_set_key(struct i802_bss *bss,
 			goto fail;
 	}
 
+	if (link_id != -1) {
+		wpa_printf(MSG_DEBUG, "nl80211: Link ID %d", link_id);
+		if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id))
+			goto fail;
+	}
+
 	ret = send_and_recv_msgs(drv, msg, NULL, NULL, NULL, NULL);
 	if ((ret == -ENOENT || ret == -ENOLINK) && alg == WPA_ALG_NONE)
 		ret = 0;
@@ -3651,6 +3659,13 @@ static int wpa_driver_nl80211_set_key(struct i802_bss *bss,
 		wpa_printf(MSG_DEBUG, "nl80211: set_key default - VLAN ID %d",
 			   vlan_id);
 		if (nla_put_u16(msg, NL80211_ATTR_VLAN_ID, vlan_id))
+			goto fail;
+	}
+
+	if (link_id != -1) {
+		wpa_printf(MSG_DEBUG, "nl80211: set_key default - Link ID %d",
+			   link_id);
+		if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id))
 			goto fail;
 	}
 
@@ -3981,6 +3996,7 @@ retry:
 	os_memset(&p, 0, sizeof(p));
 	p.ifname = bss->ifname;
 	p.alg = WPA_ALG_WEP;
+	p.link_id = -1;
 	for (i = 0; i < 4; i++) {
 		if (!params->wep_key[i])
 			continue;
@@ -9219,10 +9235,14 @@ static const char * nl80211_get_radio_name(void *priv)
 
 
 static int nl80211_pmkid(struct i802_bss *bss, int cmd,
-			 struct wpa_pmkid_params *params)
+			 struct wpa_pmkid_params *params, bool skip_pmk)
 {
 	struct nl_msg *msg;
-	const size_t PMK_MAX_LEN = 48; /* current cfg80211 limit */
+
+	if (cmd == NL80211_CMD_SET_PMKSA)
+		wpa_printf(MSG_DEBUG,
+			   "nl80211: NL80211_CMD_SET_PMKSA with skip_pmk=%s pmk_len=%zu",
+			   skip_pmk ? "true" : "false", params->pmk_len);
 
 	if (!(msg = nl80211_bss_msg(bss, 0, cmd)) ||
 	    (params->pmkid &&
@@ -9241,7 +9261,7 @@ static int nl80211_pmkid(struct i802_bss *bss, int cmd,
 	     nla_put_u8(msg, NL80211_ATTR_PMK_REAUTH_THRESHOLD,
 			params->pmk_reauth_threshold)) ||
 	    (cmd != NL80211_CMD_DEL_PMKSA &&
-	     params->pmk_len && params->pmk_len <= PMK_MAX_LEN &&
+	     params->pmk_len && !skip_pmk &&
 	     nla_put(msg, NL80211_ATTR_PMK, params->pmk_len, params->pmk))) {
 		nl80211_nlmsg_clear(msg);
 		nlmsg_free(msg);
@@ -9255,6 +9275,9 @@ static int nl80211_pmkid(struct i802_bss *bss, int cmd,
 static int nl80211_add_pmkid(void *priv, struct wpa_pmkid_params *params)
 {
 	struct i802_bss *bss = priv;
+	const size_t PMK_MAX_LEN = 64; /* current cfg80211 limit */
+	const size_t LEGACY_PMK_MAX_LEN = 48; /* old cfg80211 limit */
+	bool skip_pmk = params->pmk_len > PMK_MAX_LEN;
 	int ret;
 
 	if (params->bssid)
@@ -9267,7 +9290,15 @@ static int nl80211_add_pmkid(void *priv, struct wpa_pmkid_params *params)
 			   wpa_ssid_txt(params->ssid, params->ssid_len));
 	}
 
-	ret = nl80211_pmkid(bss, NL80211_CMD_SET_PMKSA, params);
+	ret = nl80211_pmkid(bss, NL80211_CMD_SET_PMKSA, params, skip_pmk);
+	/*
+	 * Try again by skipping PMK if the first attempt failed with ERANGE
+	 * error, PMK was not skipped, and PMK length is greater than the
+	 * legacy kernel maximum allowed limit.
+	 */
+	if (ret == -ERANGE && !skip_pmk &&
+	    params->pmk_len > LEGACY_PMK_MAX_LEN)
+		ret = nl80211_pmkid(bss, NL80211_CMD_SET_PMKSA, params, true);
 	if (ret < 0) {
 		wpa_printf(MSG_DEBUG,
 			   "nl80211: NL80211_CMD_SET_PMKSA failed: %d (%s)",
@@ -9293,7 +9324,7 @@ static int nl80211_remove_pmkid(void *priv, struct wpa_pmkid_params *params)
 			   wpa_ssid_txt(params->ssid, params->ssid_len));
 	}
 
-	ret = nl80211_pmkid(bss, NL80211_CMD_DEL_PMKSA, params);
+	ret = nl80211_pmkid(bss, NL80211_CMD_DEL_PMKSA, params, true);
 	if (ret < 0) {
 		wpa_printf(MSG_DEBUG,
 			   "nl80211: NL80211_CMD_DEL_PMKSA failed: %d (%s)",
