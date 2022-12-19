@@ -48,7 +48,7 @@ std::pair<std::string, ndk::ScopedAStatus> VendorStaIface::doDriverCmdInternal(
 	char driver_cmd_reply_buf[4096] = {};
 	if (wpa_drv_driver_cmd(
 		wpa_s, cmd_vec.data(), driver_cmd_reply_buf,
-		sizeof(driver_cmd_reply_buf))) {
+		sizeof(driver_cmd_reply_buf)) < 0) {
 		return {"", createStatus(SupplicantVendorStatusCode::FAILURE_UNKNOWN)};
 	}
 	return {driver_cmd_reply_buf, ndk::ScopedAStatus::ok()};
