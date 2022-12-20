@@ -634,7 +634,8 @@ std::string CreateHostapdConfig(
 #ifdef CONFIG_OCV
 		"ocv=2\n"
 #endif
-		"beacon_prot=1\n",
+		"beacon_prot=1\n"
+		"acs_exclude_6ghz_non_psc=1",
 		iface_params.name.c_str(), ssid_as_string.c_str(),
 		channel_config_as_string.c_str(),
 		iface_params.hwModeParams.enable80211N ? 1 : 0,
