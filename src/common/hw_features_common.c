@@ -384,8 +384,7 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 			    u8 edmg_channel, int ht_enabled,
 			    int vht_enabled, int he_enabled,
 			    bool eht_enabled, int sec_channel_offset,
-			    enum oper_chan_width oper_chwidth,
-			    int center_segment0,
+			    int oper_chwidth, int center_segment0,
 			    int center_segment1, u32 vht_caps,
 			    struct he_capabilities *he_cap,
 			    struct eht_capabilities *eht_cap)
@@ -487,8 +486,9 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 		return 0;
 	}
 
+#if 0 /* FIX: Figure out how to handle CHANWIDTH_320MHZ */
 	if (data->eht_enabled) switch (oper_chwidth) {
-	case CONF_OPER_CHWIDTH_320MHZ:
+	case CHANWIDTH_320MHZ:
 		if (!(eht_cap->phy_cap[EHT_PHYCAP_320MHZ_IN_6GHZ_SUPPORT_IDX] &
 		      EHT_PHYCAP_320MHZ_IN_6GHZ_SUPPORT_MASK)) {
 			wpa_printf(MSG_ERROR,
@@ -496,12 +496,11 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 			return -1;
 		}
 		break;
-	default:
-		break;
 	}
+#endif
 
 	if (data->he_enabled || data->eht_enabled) switch (oper_chwidth) {
-	case CONF_OPER_CHWIDTH_USE_HT:
+	case CHANWIDTH_USE_HT:
 		if (sec_channel_offset == 0)
 			break;
 
