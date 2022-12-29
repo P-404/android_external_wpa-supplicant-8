@@ -30,6 +30,7 @@ struct rsn_pmksa_cache {
 			enum pmksa_free_reason reason);
 	bool (*is_current_cb)(struct rsn_pmksa_cache_entry *entry,
 			      void *ctx);
+	void (*notify_cb)(struct rsn_pmksa_cache_entry *entry, void *ctx);
 	void *ctx;
 };
 
@@ -47,12 +48,14 @@ static void pmksa_cache_free_entry(struct rsn_pmksa_cache *pmksa,
 				   struct rsn_pmksa_cache_entry *entry,
 				   enum pmksa_free_reason reason)
 {
-	wpa_sm_remove_pmkid(pmksa->sm, entry->network_ctx, entry->aa,
-			    entry->pmkid,
-			    entry->fils_cache_id_set ? entry->fils_cache_id :
-			    NULL);
+	if (pmksa->sm)
+		wpa_sm_remove_pmkid(pmksa->sm, entry->network_ctx, entry->aa,
+				    entry->pmkid,
+				    entry->fils_cache_id_set ?
+				    entry->fils_cache_id : NULL);
 	pmksa->pmksa_count--;
-	pmksa->free_cb(entry, pmksa->ctx, reason);
+	if (pmksa->free_cb)
+		pmksa->free_cb(entry, pmksa->ctx, reason);
 	_pmksa_cache_free_entry(entry);
 }
 
@@ -66,7 +69,7 @@ static void pmksa_cache_expire(void *eloop_ctx, void *timeout_ctx)
 
 	os_get_reltime(&now);
 	while (entry && entry->expiration <= now.sec) {
-		if (wpa_key_mgmt_sae(entry->akmp) &&
+		if (wpa_key_mgmt_sae(entry->akmp) && pmksa->is_current_cb &&
 		    pmksa->is_current_cb(entry, pmksa->ctx)) {
 			/* Do not expire the currently used PMKSA entry for SAE
 			 * since there is no convenient mechanism for
@@ -99,6 +102,10 @@ static void pmksa_cache_expire(void *eloop_ctx, void *timeout_ctx)
 static void pmksa_cache_reauth(void *eloop_ctx, void *timeout_ctx)
 {
 	struct rsn_pmksa_cache *pmksa = eloop_ctx;
+
+	if (!pmksa->sm)
+		return;
+
 	pmksa->sm->cur_pmksa = NULL;
 	eapol_sm_request_reauth(pmksa->sm->eapol);
 }
@@ -119,6 +126,7 @@ static void pmksa_cache_set_expiration(struct rsn_pmksa_cache *pmksa)
 	if (sec < 0) {
 		sec = 0;
 		if (wpa_key_mgmt_sae(pmksa->pmksa->akmp) &&
+		    pmksa->is_current_cb &&
 		    pmksa->is_current_cb(pmksa->pmksa, pmksa->ctx)) {
 			/* Do not continue polling for the current PMKSA entry
 			 * from SAE to expire every second. Use the expiration
@@ -138,6 +146,9 @@ static void pmksa_cache_set_expiration(struct rsn_pmksa_cache *pmksa)
 		}
 	}
 	eloop_register_timeout(sec + 1, 0, pmksa_cache_expire, pmksa, NULL);
+
+	if (!pmksa->sm)
+		return;
 
 	entry = pmksa->sm->cur_pmksa ? pmksa->sm->cur_pmksa :
 		pmksa_cache_get(pmksa, pmksa->sm->bssid, NULL, NULL, 0);
@@ -179,6 +190,8 @@ pmksa_cache_add(struct rsn_pmksa_cache *pmksa, const u8 *pmk, size_t pmk_len,
 {
 	struct rsn_pmksa_cache_entry *entry;
 	struct os_reltime now;
+	unsigned int pmk_lifetime = 43200;
+	unsigned int pmk_reauth_threshold = 70;
 
 	if (pmk_len > PMK_LEN_MAX)
 		return NULL;
@@ -200,9 +213,14 @@ pmksa_cache_add(struct rsn_pmksa_cache *pmksa, const u8 *pmk, size_t pmk_len,
 	else
 		rsn_pmkid(pmk, pmk_len, aa, spa, entry->pmkid, akmp);
 	os_get_reltime(&now);
-	entry->expiration = now.sec + pmksa->sm->dot11RSNAConfigPMKLifetime;
-	entry->reauth_time = now.sec + pmksa->sm->dot11RSNAConfigPMKLifetime *
-		pmksa->sm->dot11RSNAConfigPMKReauthThreshold / 100;
+	if (pmksa->sm) {
+		pmk_lifetime = pmksa->sm->dot11RSNAConfigPMKLifetime;
+		pmk_reauth_threshold =
+			pmksa->sm->dot11RSNAConfigPMKReauthThreshold;
+	}
+	entry->expiration = now.sec + pmk_lifetime;
+	entry->reauth_time = now.sec +
+		pmk_lifetime * pmk_reauth_threshold / 100;
 	entry->akmp = akmp;
 	if (cache_id) {
 		entry->fils_cache_id_set = 1;
@@ -269,7 +287,7 @@ pmksa_cache_add_entry(struct rsn_pmksa_cache *pmksa,
 		/* Remove the oldest entry to make room for the new entry */
 		pos = pmksa->pmksa;
 
-		if (pos == pmksa->sm->cur_pmksa) {
+		if (pmksa->sm && pos == pmksa->sm->cur_pmksa) {
 			/*
 			 * Never remove the current PMKSA cache entry, since
 			 * it's in use, and removing it triggers a needless
@@ -310,7 +328,13 @@ pmksa_cache_add_entry(struct rsn_pmksa_cache *pmksa,
 	wpa_printf(MSG_DEBUG, "RSN: Added PMKSA cache entry for " MACSTR
 		   " network_ctx=%p akmp=0x%x", MAC2STR(entry->aa),
 		   entry->network_ctx, entry->akmp);
-	wpas_notify_pmk_cache_added((struct wpa_supplicant *)pmksa->sm->ctx->ctx, entry);
+
+	if (!pmksa->sm)
+		return entry;
+
+	if (pmksa->notify_cb)
+		pmksa->notify_cb(entry, pmksa->ctx);
+
 	wpa_sm_add_pmkid(pmksa->sm, entry->network_ctx, entry->aa, entry->pmkid,
 			 entry->fils_cache_id_set ? entry->fils_cache_id : NULL,
 			 entry->pmk, entry->pmk_len,
@@ -425,6 +449,9 @@ pmksa_cache_clone_entry(struct rsn_pmksa_cache *pmksa,
 	os_time_t old_expiration = old_entry->expiration;
 	os_time_t old_reauth_time = old_entry->reauth_time;
 	const u8 *pmkid = NULL;
+
+	if (!pmksa->sm)
+		return NULL;
 
 	if (wpa_key_mgmt_sae(old_entry->akmp) ||
 	    wpa_key_mgmt_fils(old_entry->akmp))
@@ -700,6 +727,8 @@ pmksa_cache_init(void (*free_cb)(struct rsn_pmksa_cache_entry *entry,
 				 void *ctx, enum pmksa_free_reason reason),
 		 bool (*is_current_cb)(struct rsn_pmksa_cache_entry *entry,
 				       void *ctx),
+		 void (*notify_cb)(struct rsn_pmksa_cache_entry *entry,
+				   void *ctx),
 		 void *ctx, struct wpa_sm *sm)
 {
 	struct rsn_pmksa_cache *pmksa;
@@ -708,6 +737,7 @@ pmksa_cache_init(void (*free_cb)(struct rsn_pmksa_cache_entry *entry,
 	if (pmksa) {
 		pmksa->free_cb = free_cb;
 		pmksa->is_current_cb = is_current_cb;
+		pmksa->notify_cb = notify_cb;
 		pmksa->ctx = ctx;
 		pmksa->sm = sm;
 	}

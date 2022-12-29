@@ -28,6 +28,7 @@
 #include "wmm_ac.h"
 #include <netinet/in.h>
 #include <netinet/in6.h>
+#include "pasn/pasn_common.h"
 
 extern const char *const wpa_supplicant_version;
 extern const char *const wpa_supplicant_license;
@@ -558,61 +559,6 @@ struct dscp_resp_data {
 	struct dscp_policy_status *policy;
 	int num_policies;
 };
-
-#ifdef CONFIG_PASN
-
-struct pasn_fils {
-	u8 nonce[FILS_NONCE_LEN];
-	u8 anonce[FILS_NONCE_LEN];
-	u8 session[FILS_SESSION_LEN];
-	u8 erp_pmkid[PMKID_LEN];
-	bool completed;
-};
-
-struct wpas_pasn {
-	int akmp;
-	int cipher;
-	u16 group;
-	bool secure_ltf;
-	int freq;
-	size_t kdk_len;
-
-	u8 trans_seq;
-	u8 status;
-
-	u8 own_addr[ETH_ALEN];
-	u8 bssid[ETH_ALEN];
-	size_t pmk_len;
-	u8 pmk[PMK_LEN_MAX];
-	bool using_pmksa;
-
-	u8 hash[SHA384_MAC_LEN];
-
-	struct wpabuf *beacon_rsne_rsnxe;
-	struct wpa_ptk ptk;
-	struct crypto_ecdh *ecdh;
-
-	struct wpabuf *comeback;
-	u16 comeback_after;
-
-#ifdef CONFIG_SAE
-	struct sae_data sae;
-#endif /* CONFIG_SAE */
-
-	struct wpa_ssid *ssid;
-
-#ifdef CONFIG_FILS
-	struct pasn_fils fils;
-#endif /* CONFIG_FILS */
-
-#ifdef CONFIG_IEEE80211R
-	u8 pmk_r1[PMK_LEN_MAX];
-	size_t pmk_r1_len;
-	u8 pmk_r1_name[WPA_PMK_NAME_LEN];
-#endif /* CONFIG_IEEE80211R */
-};
-#endif /* CONFIG_PASN */
-
 
 enum ip_version {
 	IPV4 = 4,
@@ -1574,7 +1520,7 @@ struct wpa_supplicant {
 	bool mscs_setup_done;
 
 #ifdef CONFIG_PASN
-	struct wpas_pasn pasn;
+	struct pasn_data pasn;
 	struct wpa_radio_work *pasn_auth_work;
 	unsigned int pasn_count;
 	struct pasn_auth *pasn_params;
