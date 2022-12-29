@@ -16,6 +16,7 @@
 #include "common/ieee802_11_defs.h"
 #include "common/sae.h"
 #include "crypto/sha384.h"
+#include "pasn/pasn_common.h"
 
 /* STA flags */
 #define WLAN_STA_AUTH BIT(0)
@@ -65,44 +66,6 @@ struct mbo_non_pref_chan_info {
 struct pending_eapol_rx {
 	struct wpabuf *buf;
 	struct os_reltime rx_time;
-};
-
-enum pasn_fils_state {
-	PASN_FILS_STATE_NONE = 0,
-	PASN_FILS_STATE_PENDING_AS,
-	PASN_FILS_STATE_COMPLETE
-};
-
-struct pasn_fils_data {
-	u8 state;
-	u8 nonce[FILS_NONCE_LEN];
-	u8 anonce[FILS_NONCE_LEN];
-	u8 session[FILS_SESSION_LEN];
-	u8 erp_pmkid[PMKID_LEN];
-
-	struct wpabuf *erp_resp;
-};
-
-struct pasn_data {
-	int akmp;
-	int cipher;
-	u16 group;
-	bool secure_ltf;
-	u8 trans_seq;
-	u8 wrapped_data_format;
-	size_t kdk_len;
-
-	u8 hash[SHA384_MAC_LEN];
-	struct wpa_ptk ptk;
-	struct crypto_ecdh *ecdh;
-
-	struct wpabuf *secret;
-#ifdef CONFIG_SAE
-	struct sae_data sae;
-#endif /* CONFIG_SAE */
-#ifdef CONFIG_FILS
-	struct pasn_fils_data fils;
-#endif /* CONFIG_FILS */
 };
 
 struct sta_info {
