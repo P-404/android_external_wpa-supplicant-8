@@ -1559,11 +1559,6 @@ WPA_SUPPLICANT_USE_AIDL=y
 L_CFLAGS += -DCONFIG_AIDL -DCONFIG_CTRL_IFACE_AIDL
 endif
 
-ifdef CONFIG_SUPPLICANT_VENDOR_AIDL
-SUPPLICANT_VENDOR_AIDL=y
-L_CFLAGS += -DCONFIG_SUPPLICANT_VENDOR_AIDL
-endif
-
 ifdef CONFIG_READLINE
 OBJS_c += src/utils/edit_readline.c
 LIBS_c += -lncurses -lreadline
@@ -1828,9 +1823,6 @@ LOCAL_SHARED_LIBRARIES += libutils libbase
 LOCAL_SHARED_LIBRARIES += libbinder_ndk
 LOCAL_STATIC_LIBRARIES += libwpa_aidl
 LOCAL_VINTF_FRAGMENTS := aidl/android.hardware.wifi.supplicant.xml
-ifeq ($(SUPPLICANT_VENDOR_AIDL), y)
-LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant-V1-ndk
-endif
 ifeq ($(WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY), true)
 LOCAL_INIT_RC=aidl/android.hardware.wifi.supplicant-service.rc
 endif
@@ -1897,14 +1889,6 @@ LOCAL_SRC_FILES := \
     aidl/sta_iface.cpp \
     aidl/sta_network.cpp \
     aidl/supplicant.cpp
-ifeq ($(SUPPLICANT_VENDOR_AIDL), y)
-LOCAL_SRC_FILES += \
-    vendor_aidl/aidl_vendor.cpp \
-    vendor_aidl/aidl_vendor_manager.cpp \
-    vendor_aidl/vendorsta_iface.cpp \
-    vendor_aidl/supplicantvendor.cpp
-endif
-
 LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.supplicant-V1-ndk \
     libbinder_ndk \
@@ -1912,12 +1896,7 @@ LOCAL_SHARED_LIBRARIES := \
     libutils \
     liblog \
     libssl
-ifeq ($(SUPPLICANT_VENDOR_AIDL), y)
-LOCAL_SHARED_LIBRARIES += \
-    vendor.qti.hardware.wifi.supplicant-V1-ndk
-endif
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
     $(LOCAL_PATH)/aidl
 include $(BUILD_STATIC_LIBRARY)
 endif # WPA_SUPPLICANT_USE_AIDL == y
-
