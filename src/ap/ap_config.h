@@ -1132,7 +1132,7 @@ struct hostapd_config {
 
 	int ieee80211be;
 #ifdef CONFIG_IEEE80211BE
-	enum oper_chan_width eht_oper_chwidth;
+        enum oper_chan_width eht_oper_chwidth;
 	u8 eht_oper_centr_freq_seg0_idx;
 	struct eht_phy_capabilities_info eht_phy_capab;
 #endif /* CONFIG_IEEE80211BE */
