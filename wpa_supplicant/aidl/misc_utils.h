@@ -103,8 +103,15 @@ inline std::stringstream& serializePmkCacheEntry(
 inline std::int8_t deserializePmkCacheEntry(
 	std::stringstream &ss, struct rsn_pmksa_cache_entry *pmksa_entry) {
 	ss.seekg(0);
+	if (ss.str().size() < sizeof(pmksa_entry->pmk_len))
+		return -1;
+
 	ss.read((char *) &pmksa_entry->pmk_len, sizeof(pmksa_entry->pmk_len));
-	if (pmksa_entry->pmk_len > PMK_LEN_MAX)
+	if ((pmksa_entry->pmk_len > PMK_LEN_MAX) ||
+	    (ss.str().size() < (sizeof(pmksa_entry->pmk_len) + pmksa_entry->pmk_len +
+	    PMKID_LEN + ETH_ALEN + sizeof(pmksa_entry->akmp) +
+	    sizeof(pmksa_entry->reauth_time) + sizeof(pmksa_entry->expiration) +
+	    sizeof(pmksa_entry->opportunistic) + 1 /* fils_cache_id_set */)))
 		return -1;
 
 	ss.read((char *) pmksa_entry->pmk, pmksa_entry->pmk_len);
@@ -118,6 +125,11 @@ inline std::int8_t deserializePmkCacheEntry(
 	char byte = 0;
 	ss.read((char *) &byte, sizeof(byte));
 	pmksa_entry->fils_cache_id_set = (byte) ? 1 : 0;
+	if (pmksa_entry->fils_cache_id_set == 1) {
+		if((ss.str().size() - static_cast<uint32_t>(ss.tellg())) < FILS_CACHE_ID_LEN)
+			return -1;
+	}
+
 	ss.read((char *) pmksa_entry->fils_cache_id, FILS_CACHE_ID_LEN);
 	return 0;
 }
