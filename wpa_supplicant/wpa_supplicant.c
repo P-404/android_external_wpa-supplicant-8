@@ -1436,7 +1436,8 @@ static void wpas_update_allowed_key_mgmt(struct wpa_supplicant *wpa_s,
 		return;
 	}
 
-	if (wpa_s->conf->sae_pwe)
+	if (wpa_s->conf->sae_pwe != SAE_PWE_HUNT_AND_PECK &&
+	    wpa_s->conf->sae_pwe != SAE_PWE_FORCE_HUNT_AND_PECK)
 		capab |= BIT(WLAN_RSNX_CAPAB_SAE_H2E);
 #ifdef CONFIG_SAE_PK
 	if (ssid->sae_pk)
@@ -1479,7 +1480,8 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 			      bool skip_default_rsne)
 {
 	struct wpa_ie_data ie;
-	int sel, proto, sae_pwe;
+	int sel, proto;
+	enum sae_pwe sae_pwe;
 	const u8 *bss_wpa, *bss_rsn, *bss_rsnx, *bss_osen, *adaptive_11r_ie;
 
 	if (bss) {
@@ -1838,16 +1840,16 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 	sae_pwe = wpa_s->conf->sae_pwe;
 	if ((ssid->sae_password_id ||
 	     wpa_key_mgmt_sae_ext_key(wpa_s->key_mgmt)) &&
-	    sae_pwe != 3)
-		sae_pwe = 1;
+	    sae_pwe != SAE_PWE_FORCE_HUNT_AND_PECK)
+		sae_pwe = SAE_PWE_HASH_TO_ELEMENT;
 	if (bss && is_6ghz_freq(bss->freq)) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "WPA: force hash-to-element mode for 6GHz BSS.");
-		sae_pwe = 1;
+		sae_pwe = SAE_PWE_HASH_TO_ELEMENT;
 	}
 #ifdef CONFIG_TESTING_OPTIONS
 	if (wpa_s->force_hunting_and_pecking_pwe) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "WPA: force hunting and pecking mode.");
-		sae_pwe = 0;
+		sae_pwe = SAE_PWE_HUNT_AND_PECK;
 	}
 #endif
 	wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_SAE_PWE, sae_pwe);
@@ -2339,10 +2341,10 @@ void wpa_s_setup_sae_pt(struct wpa_config *conf, struct wpa_ssid *ssid)
 		password = ssid->passphrase;
 
 	if (!password ||
-	    (conf->sae_pwe == 0 && !ssid->sae_password_id &&
+	    (conf->sae_pwe == SAE_PWE_HUNT_AND_PECK && !ssid->sae_password_id &&
 	     !wpa_key_mgmt_sae_ext_key(ssid->key_mgmt) &&
 	     !sae_pk_valid_password(password)) ||
-	    conf->sae_pwe == 3) {
+	    conf->sae_pwe == SAE_PWE_FORCE_HUNT_AND_PECK) {
 		/* PT derivation not needed */
 		sae_deinit_pt(ssid->pt);
 		ssid->pt = NULL;

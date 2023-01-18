@@ -966,7 +966,8 @@ static int rate_match(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 #ifdef CONFIG_SAE
 			if (flagged && ((rate_ie[j] & 0x7f) ==
 					BSS_MEMBERSHIP_SELECTOR_SAE_H2E_ONLY)) {
-				if (wpa_s->conf->sae_pwe == 0 &&
+				if (wpa_s->conf->sae_pwe ==
+				    SAE_PWE_HUNT_AND_PECK &&
 				    !ssid->sae_password_id &&
 				    wpa_key_mgmt_sae(ssid->key_mgmt)) {
 					if (debug_print)
@@ -1400,9 +1401,10 @@ static bool wpa_scan_res_ok(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 #ifdef CONFIG_SAE
 	/* When using SAE Password Identifier and when operationg on the 6 GHz
 	 * band, only H2E is allowed. */
-	if ((wpa_s->conf->sae_pwe == 1 || is_6ghz_freq(bss->freq) ||
-	     ssid->sae_password_id) &&
-	    wpa_s->conf->sae_pwe != 3 && wpa_key_mgmt_sae(ssid->key_mgmt) &&
+	if ((wpa_s->conf->sae_pwe == SAE_PWE_HASH_TO_ELEMENT ||
+	     is_6ghz_freq(bss->freq) || ssid->sae_password_id) &&
+	    wpa_s->conf->sae_pwe != SAE_PWE_FORCE_HUNT_AND_PECK &&
+	    wpa_key_mgmt_sae(ssid->key_mgmt) &&
 #ifdef CONFIG_DRIVER_NL80211_BRCM
 	    !(wpa_key_mgmt_wpa_psk_no_sae(ssid->key_mgmt)) &&
 #endif /* CONFIG_DRIVER_NL80211_BRCM */

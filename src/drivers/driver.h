@@ -1287,7 +1287,7 @@ struct wpa_driver_associate_params {
 	 * 1 = hash-to-element only
 	 * 2 = both hunting-and-pecking loop and hash-to-element enabled
 	 */
-	int sae_pwe;
+	enum sae_pwe sae_pwe;
 
 	/**
 	 * disable_eht - Disable EHT for this connection
@@ -1648,7 +1648,7 @@ struct wpa_driver_ap_params {
 	 * 1 = hash-to-element only
 	 * 2 = both hunting-and-pecking loop and hash-to-element enabled
 	 */
-	int sae_pwe;
+	enum sae_pwe sae_pwe;
 
 	/**
 	 * FILS Discovery frame minimum interval in TUs
