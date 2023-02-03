@@ -1109,8 +1109,6 @@ ndk::ScopedAStatus StaNetwork::setRequirePmfInternal(bool enable)
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	if (enable) {
 		wpa_ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
-	} else {
-		wpa_ssid->ieee80211w = MGMT_FRAME_PROTECTION_OPTIONAL;
 	}
 	resetInternalStateAfterParamsUpdate();
 	return ndk::ScopedAStatus::ok();
