@@ -1176,6 +1176,8 @@ eap_proxy_init(void *eapol_ctx, const struct eapol_callbacks *eapol_cb,
 
         // Make note of new thread creation, so that we can take care of joining.
         eap_proxy->qmi_thread_joined = false;
+        // Store the PPID of this init caller to compare this during deinit.
+        eap_proxy->init_ppid = getppid();
 
         ret = pthread_create(&eap_proxy->thread_id, NULL, eap_proxy_post_init, eap_proxy);
         if(ret < 0) {
@@ -1204,8 +1206,24 @@ static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy)
          * Also, Do not join the thread if it was already joined before.
          */
         if (!eap_proxy->qmi_thread_joined) {
-                wpa_printf(MSG_ERROR, "eap_proxy: pthread_join on eap_proxy=%p", eap_proxy);
-                pthread_join(eap_proxy->thread_id, NULL);
+                /* In case when the wpa_supplicant is daemonized, the eap_proxy
+                 * thread also dies along with its parent wpa_supplicant. But as
+                 * the dead thread ID is passed in the pthread_join call it
+                 * waits for an indefinite time and this blocks the
+                 * wpa_supplicant termination.
+                 * Hence ensure to call the join only if wpa_supplicant is not a
+                 * daemon by comparing the PPID of eap_proxy init and deinit.
+                 */
+                if (getppid() == eap_proxy->init_ppid) {
+                        wpa_printf(MSG_ERROR,
+                                   "eap_proxy: pthread_join on eap_proxy=%p",
+                                   eap_proxy);
+                        pthread_join(eap_proxy->thread_id, NULL);
+                } else {
+                        wpa_printf(MSG_ERROR,
+                                   "eap_proxy: Do not block if the eap_proxy "
+                                   "thread was created under different parent");
+                }
                 eap_proxy->qmi_thread_joined = true;
         }
         eap_proxy->proxy_state = EAP_PROXY_DISABLED;
