@@ -1109,6 +1109,8 @@ ndk::ScopedAStatus StaNetwork::setRequirePmfInternal(bool enable)
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	if (enable) {
 		wpa_ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
+	} else {
+		wpa_ssid->ieee80211w = MGMT_FRAME_PROTECTION_OPTIONAL;
 	}
 	resetInternalStateAfterParamsUpdate();
 	return ndk::ScopedAStatus::ok();
@@ -2595,13 +2597,13 @@ ndk::ScopedAStatus StaNetwork::setSaeH2eModeInternal(
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	switch (mode) {
 	case SaeH2eMode::DISABLED:
-		wpa_s->conf->sae_pwe = 0;
+		wpa_s->conf->sae_pwe = SAE_PWE_HUNT_AND_PECK;
 		break;
 	case SaeH2eMode::H2E_MANDATORY:
-		wpa_s->conf->sae_pwe = 1;
+		wpa_s->conf->sae_pwe = SAE_PWE_HASH_TO_ELEMENT;
 		break;
 	case SaeH2eMode::H2E_OPTIONAL:
-		wpa_s->conf->sae_pwe = 2;
+		wpa_s->conf->sae_pwe = SAE_PWE_BOTH;
 		break;
 	}
 	resetInternalStateAfterParamsUpdate();

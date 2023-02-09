@@ -309,16 +309,15 @@ void wpa_supplicant_stop_countermeasures(void *eloop_ctx, void *sock_ctx)
 }
 
 
-static void wpas_reset_mlo_info(struct wpa_supplicant *wpa_s)
+void wpas_reset_mlo_info(struct wpa_supplicant *wpa_s)
 {
-	int i;
-
 	if (!wpa_s->valid_links)
 		return;
 
 	wpa_s->valid_links = 0;
-	for (i = 0; i < MAX_NUM_MLD_LINKS; i++)
-		wpa_s->links[i].bss = NULL;
+	wpa_s->mlo_assoc_link_id = 0;
+	os_memset(wpa_s->ap_mld_addr, 0, ETH_ALEN);
+	os_memset(wpa_s->links, 0, sizeof(wpa_s->links));
 }
 
 
@@ -609,7 +608,8 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 #ifdef CONFIG_WEP
 	int wep_ok;
 #endif /* CONFIG_WEP */
-	bool is_6ghz_bss = is_6ghz_freq(bss->freq);
+	bool is_6ghz_bss_or_mld = is_6ghz_freq(bss->freq) ||
+		!is_zero_ether_addr(bss->mld_addr);
 
 	ret = wpas_wps_ssid_bss_match(wpa_s, ssid, bss);
 	if (ret >= 0)
@@ -624,10 +624,10 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_WEP */
 
 	rsn_ie = wpa_bss_get_ie(bss, WLAN_EID_RSN);
-	if (is_6ghz_bss && !rsn_ie) {
+	if (is_6ghz_bss_or_mld && !rsn_ie) {
 		if (debug_print)
 			wpa_dbg(wpa_s, MSG_DEBUG,
-				"   skip - 6 GHz BSS without RSNE");
+				"   skip - 6 GHz/MLD BSS without RSNE");
 		return 0;
 	}
 
@@ -645,7 +645,7 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 		if (!ie.has_group)
 			ie.group_cipher = wpa_default_rsn_cipher(bss->freq);
 
-		if (is_6ghz_bss) {
+		if (is_6ghz_bss_or_mld) {
 			/* WEP and TKIP are not allowed on 6 GHz */
 			ie.pairwise_cipher &= ~(WPA_CIPHER_WEP40 |
 						WPA_CIPHER_WEP104 |
@@ -696,12 +696,12 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 			break;
 		}
 
-		if (is_6ghz_bss) {
+		if (is_6ghz_bss_or_mld) {
 			/* MFPC must be supported on 6 GHz */
 			if (!(ie.capabilities & WPA_CAPABILITY_MFPC)) {
 				if (debug_print)
 					wpa_dbg(wpa_s, MSG_DEBUG,
-						"   skip RSNE - 6 GHz without MFPC");
+						"   skip RSNE - 6 GHz/MLD without MFPC");
 				break;
 			}
 
@@ -741,10 +741,10 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 		return 1;
 	}
 
-	if (is_6ghz_bss) {
+	if (is_6ghz_bss_or_mld) {
 		if (debug_print)
 			wpa_dbg(wpa_s, MSG_DEBUG,
-				"   skip - 6 GHz BSS without matching RSNE");
+				"   skip - 6 GHz/MLD BSS without matching RSNE");
 		return 0;
 	}
 
@@ -967,7 +967,8 @@ static int rate_match(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 #ifdef CONFIG_SAE
 			if (flagged && ((rate_ie[j] & 0x7f) ==
 					BSS_MEMBERSHIP_SELECTOR_SAE_H2E_ONLY)) {
-				if (wpa_s->conf->sae_pwe == 0 &&
+				if (wpa_s->conf->sae_pwe ==
+				    SAE_PWE_HUNT_AND_PECK &&
 				    !ssid->sae_password_id &&
 				    wpa_key_mgmt_sae(ssid->key_mgmt)) {
 					if (debug_print)
@@ -1401,9 +1402,10 @@ static bool wpa_scan_res_ok(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 #ifdef CONFIG_SAE
 	/* When using SAE Password Identifier and when operationg on the 6 GHz
 	 * band, only H2E is allowed. */
-	if ((wpa_s->conf->sae_pwe == 1 || is_6ghz_freq(bss->freq) ||
-	     ssid->sae_password_id) &&
-	    wpa_s->conf->sae_pwe != 3 && wpa_key_mgmt_sae(ssid->key_mgmt) &&
+	if ((wpa_s->conf->sae_pwe == SAE_PWE_HASH_TO_ELEMENT ||
+	     is_6ghz_freq(bss->freq) || ssid->sae_password_id) &&
+	    wpa_s->conf->sae_pwe != SAE_PWE_FORCE_HUNT_AND_PECK &&
+	    wpa_key_mgmt_sae(ssid->key_mgmt) &&
 #ifdef CONFIG_DRIVER_NL80211_BRCM
 	    !(wpa_key_mgmt_wpa_psk_no_sae(ssid->key_mgmt)) &&
 #endif /* CONFIG_DRIVER_NL80211_BRCM */
@@ -2812,8 +2814,10 @@ static int wpa_supplicant_use_own_rsne_params(struct wpa_supplicant *wpa_s,
 		p += len;
 	}
 
-	if (!found || wpa_parse_wpa_ie(p, len, &ie) < 0)
+	if (!found || wpa_parse_wpa_ie(p, len, &ie) < 0) {
+		wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_OCV, 0);
 		return 0;
+	}
 
 	wpa_hexdump(MSG_DEBUG,
 		    "WPA: Update cipher suite selection based on IEs in driver-generated WPA/RSNE in AssocReq",
@@ -2839,6 +2843,11 @@ static int wpa_supplicant_use_own_rsne_params(struct wpa_supplicant *wpa_s,
 			wpa_s, WLAN_REASON_AKMP_NOT_VALID);
 		return -1;
 	}
+
+	if (((wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME) ||
+	     (wpa_s->drv_flags2 & WPA_DRIVER_FLAGS2_OCV)) && ssid->ocv)
+		wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_OCV,
+				 !!(ie.capabilities & WPA_CAPABILITY_OCVC));
 
 	/*
 	 * Update PMK in wpa_sm and the driver if roamed to WPA/WPA2 PSK from a

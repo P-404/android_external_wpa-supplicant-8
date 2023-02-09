@@ -281,6 +281,10 @@ void nl80211_mark_disconnected(struct wpa_driver_nl80211_data *drv)
 	os_free(drv->pending_roam_data);
 	drv->pending_roam_data = NULL;
 #endif /* CONFIG_DRIVER_NL80211_QCA */
+
+	drv->auth_mld = false;
+	drv->auth_mld_link_id = -1;
+	os_memset(drv->auth_ap_mld_addr, 0, ETH_ALEN);
 }
 
 
@@ -1024,6 +1028,51 @@ static int wpa_driver_nl80211_get_ssid(void *priv, u8 *ssid)
 }
 
 
+static int get_mlo_info(struct nl_msg *msg, void *arg)
+{
+	struct nlattr *tb[NL80211_ATTR_MAX + 1];
+	struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+	struct nlattr *link_attr, *link_data[NL80211_ATTR_MAX + 1];
+	static struct nla_policy link_policy[NL80211_ATTR_MAX + 1] = {
+		[NL80211_ATTR_MLO_LINK_ID] = { .type = NLA_U8 },
+		[NL80211_ATTR_MAC] = { .minlen = ETH_ALEN, .maxlen = ETH_ALEN },
+	};
+	struct driver_sta_mlo_info *info = arg;
+	int rem;
+
+	nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
+		  genlmsg_attrlen(gnlh, 0), NULL);
+
+	if (!tb[NL80211_ATTR_MLO_LINKS])
+		return NL_SKIP;
+
+	info->valid_links = 0;
+	nla_for_each_nested(link_attr, tb[NL80211_ATTR_MLO_LINKS], rem) {
+		u8 link_id;
+
+		if (nla_parse_nested(link_data, NL80211_ATTR_MAX,
+				     link_attr, link_policy) != 0)
+			continue;
+
+		if (!link_data[NL80211_ATTR_MLO_LINK_ID] ||
+		    !link_data[NL80211_ATTR_MAC])
+			continue;
+
+		link_id = nla_get_u8(link_data[NL80211_ATTR_MLO_LINK_ID]);
+		if (link_id >= MAX_NUM_MLD_LINKS)
+			continue;
+		info->valid_links |= BIT(link_id);
+		os_memcpy(info->links[link_id].addr,
+			  nla_data(link_data[NL80211_ATTR_MAC]), ETH_ALEN);
+		if (link_data[NL80211_ATTR_WIPHY_FREQ])
+			info->links[link_id].freq =
+				nla_get_u32(link_data[NL80211_ATTR_WIPHY_FREQ]);
+	}
+
+	return NL_SKIP;
+}
+
+
 static int nl80211_get_sta_mlo_info(void *priv,
 				    struct driver_sta_mlo_info *mlo_info)
 {
@@ -1032,6 +1081,15 @@ static int nl80211_get_sta_mlo_info(void *priv,
 
 	if (!drv->associated)
 		return -1;
+
+	if (drv->capa.flags & WPA_DRIVER_FLAGS_SME) {
+		struct nl_msg *msg;
+
+		msg = nl80211_drv_msg(drv, 0, NL80211_CMD_GET_INTERFACE);
+		if (send_and_recv_msgs(drv, msg, get_mlo_info,
+				       &drv->sta_mlo_info, NULL, NULL))
+			return -1;
+	}
 
 	os_memcpy(mlo_info, &drv->sta_mlo_info, sizeof(*mlo_info));
 	return 0;
@@ -3894,6 +3952,15 @@ static void nl80211_copy_auth_params(struct wpa_driver_nl80211_data *drv,
 		}
 	}
 
+	if (params->mld && params->ap_mld_addr) {
+		drv->auth_mld = params->mld;
+		drv->auth_mld_link_id = params->mld_link_id;
+		os_memcpy(drv->auth_ap_mld_addr, params->ap_mld_addr, ETH_ALEN);
+	} else {
+		drv->auth_mld = false;
+		drv->auth_mld_link_id = -1;
+	}
+
 	os_free(drv->auth_data);
 	drv->auth_data = NULL;
 	drv->auth_data_len = 0;
@@ -4057,6 +4124,17 @@ retry:
 			goto fail;
 	}
 
+	if (params->mld && params->ap_mld_addr) {
+		wpa_printf(MSG_DEBUG, "  * MLD: link_id=%u, MLD addr=" MACSTR,
+			   params->mld_link_id, MAC2STR(params->ap_mld_addr));
+
+		if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID,
+			       params->mld_link_id) ||
+		    nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN,
+			    params->ap_mld_addr))
+			goto fail;
+	}
+
 	ret = send_and_recv_msgs(drv, msg, NULL, NULL, NULL, NULL);
 	msg = NULL;
 	if (ret) {
@@ -4160,6 +4238,10 @@ int wpa_driver_nl80211_authenticate_retry(struct wpa_driver_nl80211_data *drv)
 	params.ie_len = drv->auth_ie_len;
 	params.auth_data = drv->auth_data;
 	params.auth_data_len = drv->auth_data_len;
+	params.mld = drv->auth_mld;
+	params.mld_link_id = drv->auth_mld_link_id;
+	if (drv->auth_mld)
+		params.ap_mld_addr = drv->auth_ap_mld_addr;
 
 	for (i = 0; i < 4; i++) {
 		if (drv->auth_wep_key_len[i]) {
@@ -4647,18 +4729,18 @@ static int nl80211_set_multicast_to_unicast(struct i802_bss *bss,
 
 
 #ifdef CONFIG_SAE
-static int nl80211_put_sae_pwe(struct nl_msg *msg, int pwe)
+static int nl80211_put_sae_pwe(struct nl_msg *msg, enum sae_pwe pwe)
 {
 	u8 sae_pwe;
 
 	wpa_printf(MSG_DEBUG, "nl802111: sae_pwe=%d", pwe);
-	if (pwe == 0)
+	if (pwe == SAE_PWE_HUNT_AND_PECK)
 		sae_pwe = NL80211_SAE_PWE_HUNT_AND_PECK;
-	else if (pwe == 1)
+	else if (pwe == SAE_PWE_HASH_TO_ELEMENT)
 		sae_pwe = NL80211_SAE_PWE_HASH_TO_ELEMENT;
-	else if (pwe == 2)
+	else if (pwe == SAE_PWE_BOTH)
 		sae_pwe = NL80211_SAE_PWE_BOTH;
-	else if (pwe == 3)
+	else if (pwe == SAE_PWE_FORCE_HUNT_AND_PECK)
 		return 0; /* special test mode */
 	else
 		return -1;
@@ -6347,10 +6429,85 @@ static int nl80211_connect_common(struct wpa_driver_nl80211_data *drv,
 				  struct wpa_driver_associate_params *params,
 				  struct nl_msg *msg)
 {
+	if (params->mld_params.mld_addr && params->mld_params.valid_links > 0) {
+		struct wpa_driver_mld_params *mld_params = &params->mld_params;
+		struct nlattr *links, *attr;
+		int i;
+		u8 link_id;
+
+		wpa_printf(MSG_DEBUG, "  * MLD: MLD addr=" MACSTR,
+			   MAC2STR(mld_params->mld_addr));
+
+		if (nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN,
+			    mld_params->mld_addr) ||
+		    nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID,
+			       mld_params->assoc_link_id))
+			return -1;
+
+		links = nla_nest_start(msg, NL80211_ATTR_MLO_LINKS);
+		if (!links)
+			return -1;
+
+		attr = nla_nest_start(msg, 0);
+		if (!attr)
+			return -1;
+
+		/* First add the association link ID */
+		link_id = mld_params->assoc_link_id;
+		if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) ||
+		    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN,
+			    mld_params->mld_links[link_id].bssid) ||
+		    nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ,
+				mld_params->mld_links[link_id].freq))
+			return -1;
+
+		os_memcpy(drv->sta_mlo_info.links[link_id].bssid,
+			  mld_params->mld_links[link_id].bssid, ETH_ALEN);
+
+		nla_nest_end(msg, attr);
+
+		for (i = 1, link_id = 0; link_id < MAX_NUM_MLD_LINKS;
+		     link_id++) {
+			if (!(mld_params->valid_links & BIT(link_id)) ||
+			    link_id == mld_params->assoc_link_id)
+				continue;
+
+			attr = nla_nest_start(msg, i);
+			if (!attr)
+				return -1;
+
+			if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID,
+				       link_id) ||
+			    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN,
+				    mld_params->mld_links[link_id].bssid) ||
+			    nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ,
+					mld_params->mld_links[link_id].freq) ||
+			    (mld_params->mld_links[link_id].ies &&
+			     mld_params->mld_links[i].ies_len &&
+			     nla_put(msg, NL80211_ATTR_IE,
+				     mld_params->mld_links[link_id].ies_len,
+				     mld_params->mld_links[link_id].ies)))
+				return -1;
+
+			os_memcpy(drv->sta_mlo_info.links[link_id].bssid,
+				  mld_params->mld_links[link_id].bssid,
+				  ETH_ALEN);
+			nla_nest_end(msg, attr);
+			i++;
+		}
+
+		nla_nest_end(msg, links);
+
+		os_memcpy(drv->sta_mlo_info.ap_mld_addr,
+			  params->mld_params.mld_addr, ETH_ALEN);
+		drv->sta_mlo_info.assoc_link_id = mld_params->assoc_link_id;
+		drv->sta_mlo_info.req_links = mld_params->valid_links;
+	}
+
 	if (nla_put_flag(msg, NL80211_ATTR_IFACE_SOCKET_OWNER))
 		return -1;
 
-	if (params->bssid) {
+	if (params->bssid && !params->mld_params.mld_addr) {
 		wpa_printf(MSG_DEBUG, "  * bssid=" MACSTR,
 			   MAC2STR(params->bssid));
 		if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->bssid))
@@ -6365,7 +6522,7 @@ static int nl80211_connect_common(struct wpa_driver_nl80211_data *drv,
 			return -1;
 	}
 
-	if (params->freq.freq) {
+	if (params->freq.freq && !params->mld_params.mld_addr) {
 		wpa_printf(MSG_DEBUG, "  * freq=%d", params->freq.freq);
 		if (nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ,
 				params->freq.freq))
