@@ -31,7 +31,7 @@
 #include "p2p_supplicant.h"
 #include "sme.h"
 #include "notify.h"
-#include "aidl.h"
+#include "aidl/aidl.h"
 #include "vendor_aidl/aidl_vendor.h"
 
 int wpas_notify_supplicant_initialized(struct wpa_global *global)
