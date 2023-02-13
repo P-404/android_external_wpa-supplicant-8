@@ -23,6 +23,7 @@
 #include "crypto/sha1.h"
 #include "crypto/sha256.h"
 #include "crypto/sha384.h"
+#include "crypto/sha512.h"
 #include "crypto/random.h"
 #include "eapol_auth/eapol_auth_sm.h"
 #include "drivers/driver.h"
@@ -2195,13 +2196,20 @@ SM_STATE(WPA_PTK, INITPSK)
 		os_memcpy(sm->PMK, psk, psk_len);
 		sm->pmk_len = psk_len;
 #ifdef CONFIG_IEEE80211R_AP
-		os_memcpy(sm->xxkey, psk, PMK_LEN);
 		sm->xxkey_len = PMK_LEN;
+#ifdef CONFIG_SAE
+		if (sm->wpa_key_mgmt == WPA_KEY_MGMT_FT_SAE_EXT_KEY &&
+		    (psk_len == SHA512_MAC_LEN || psk_len == SHA384_MAC_LEN ||
+		     psk_len == SHA256_MAC_LEN))
+			sm->xxkey_len = psk_len;
+#endif /* CONFIG_SAE */
+		os_memcpy(sm->xxkey, psk, sm->xxkey_len);
 #endif /* CONFIG_IEEE80211R_AP */
 	}
 #ifdef CONFIG_SAE
 	if (wpa_auth_uses_sae(sm) && sm->pmksa) {
-		wpa_printf(MSG_DEBUG, "SAE: PMK from PMKSA cache");
+		wpa_printf(MSG_DEBUG, "SAE: PMK from PMKSA cache (len=%zu)",
+			   sm->pmksa->pmk_len);
 		os_memcpy(sm->PMK, sm->pmksa->pmk, sm->pmksa->pmk_len);
 		sm->pmk_len = sm->pmksa->pmk_len;
 #ifdef CONFIG_IEEE80211R_AP
@@ -2460,7 +2468,6 @@ int fils_auth_pmk_to_ptk(struct wpa_state_machine *sm, const u8 *pmk,
 		struct wpa_authenticator *wpa_auth = sm->wpa_auth;
 		struct wpa_auth_config *conf = &wpa_auth->conf;
 		u8 pmk_r0[PMK_LEN_MAX], pmk_r0_name[WPA_PMK_NAME_LEN];
-		int use_sha384 = wpa_key_mgmt_sha384(sm->wpa_key_mgmt);
 
 		if (wpa_derive_pmk_r0(fils_ft, fils_ft_len,
 				      conf->ssid, conf->ssid_len,
@@ -2468,7 +2475,7 @@ int fils_auth_pmk_to_ptk(struct wpa_state_machine *sm, const u8 *pmk,
 				      conf->r0_key_holder,
 				      conf->r0_key_holder_len,
 				      sm->addr, pmk_r0, pmk_r0_name,
-				      use_sha384) < 0)
+				      sm->wpa_key_mgmt) < 0)
 			return -1;
 
 		wpa_ft_store_pmk_fils(sm, pmk_r0, pmk_r0_name);
@@ -2476,7 +2483,7 @@ int fils_auth_pmk_to_ptk(struct wpa_state_machine *sm, const u8 *pmk,
 
 		res = wpa_derive_pmk_r1_name(pmk_r0_name, conf->r1_key_holder,
 					     sm->addr, sm->pmk_r1_name,
-					     use_sha384);
+					     fils_ft_len);
 		forced_memzero(pmk_r0, PMK_LEN_MAX);
 		if (res < 0)
 			return -1;
@@ -3691,9 +3698,8 @@ SM_STATE(WPA_PTK, PTKINITNEGOTIATING)
 				  2 + sm->assoc_resp_ftie[1]);
 			res = 2 + sm->assoc_resp_ftie[1];
 		} else {
-			int use_sha384 = wpa_key_mgmt_sha384(sm->wpa_key_mgmt);
-
-			res = wpa_write_ftie(conf, use_sha384,
+			res = wpa_write_ftie(conf, sm->wpa_key_mgmt,
+					     sm->xxkey_len,
 					     conf->r0_key_holder,
 					     conf->r0_key_holder_len,
 					     NULL, NULL, pos,
@@ -5468,13 +5474,14 @@ wpa_auth_pmksa_get_fils_cache_id(struct wpa_authenticator *wpa_auth,
 
 
 #ifdef CONFIG_IEEE80211R_AP
-int wpa_auth_write_fte(struct wpa_authenticator *wpa_auth, int use_sha384,
+int wpa_auth_write_fte(struct wpa_authenticator *wpa_auth,
+		       struct wpa_state_machine *sm,
 		       u8 *buf, size_t len)
 {
 	struct wpa_auth_config *conf = &wpa_auth->conf;
 
-	return wpa_write_ftie(conf, use_sha384, conf->r0_key_holder,
-			      conf->r0_key_holder_len,
+	return wpa_write_ftie(conf, sm->wpa_key_mgmt, sm->xxkey_len,
+			      conf->r0_key_holder, conf->r0_key_holder_len,
 			      NULL, NULL, buf, len, NULL, 0, 0);
 }
 #endif /* CONFIG_IEEE80211R_AP */
@@ -5688,9 +5695,8 @@ int wpa_auth_resend_m3(struct wpa_state_machine *sm,
 				  2 + sm->assoc_resp_ftie[1]);
 			res = 2 + sm->assoc_resp_ftie[1];
 		} else {
-			int use_sha384 = wpa_key_mgmt_sha384(sm->wpa_key_mgmt);
-
-			res = wpa_write_ftie(conf, use_sha384,
+			res = wpa_write_ftie(conf, sm->wpa_key_mgmt,
+					     sm->xxkey_len,
 					     conf->r0_key_holder,
 					     conf->r0_key_holder_len,
 					     NULL, NULL, pos,

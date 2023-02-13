@@ -799,6 +799,7 @@ void hostapd_config_free_bss(struct hostapd_bss_config *conf)
 	os_free(conf->radius_req_attr_sqlite);
 	os_free(conf->rsn_preauth_interfaces);
 	os_free(conf->ctrl_interface);
+	os_free(conf->config_id);
 	os_free(conf->ca_cert);
 	os_free(conf->server_cert);
 	os_free(conf->server_cert2);
@@ -1451,6 +1452,12 @@ static int hostapd_config_check_bss(struct hostapd_bss_config *bss,
 	}
 #endif /* CONFIG_IEEE80211BE */
 
+	if (full_config && bss->ignore_broadcast_ssid && conf->mbssid) {
+		wpa_printf(MSG_ERROR,
+			   "Hidden SSID is not suppored when MBSSID is enabled");
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -1533,6 +1540,12 @@ int hostapd_config_check(struct hostapd_config *conf, int full_config)
 		return -1;
 	}
 #endif /* CONFIG_IEEE80211BE */
+
+	if (full_config && conf->mbssid && !conf->ieee80211ax) {
+		wpa_printf(MSG_ERROR,
+			   "Cannot enable multiple BSSID support without ieee80211ax");
+		return -1;
+	}
 
 	for (i = 0; i < conf->num_bss; i++) {
 		if (hostapd_config_check_bss(conf->bss[i], conf, full_config))

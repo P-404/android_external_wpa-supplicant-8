@@ -5201,7 +5201,7 @@ int fils_process_auth(struct wpa_sm *sm, const u8 *bssid, const u8 *data,
 		}
 
 		if (wpa_ft_parse_ies(pos, end - pos, &parse,
-				     wpa_key_mgmt_sha384(sm->key_mgmt)) < 0) {
+				     sm->key_mgmt) < 0) {
 			wpa_printf(MSG_DEBUG, "FILS+FT: Failed to parse IEs");
 			goto fail;
 		}
@@ -5491,16 +5491,19 @@ static int fils_ft_build_assoc_req_rsne(struct wpa_sm *sm, struct wpabuf *buf)
 	if (wpa_derive_pmk_r0(sm->fils_ft, sm->fils_ft_len, sm->ssid,
 			      sm->ssid_len, sm->mobility_domain,
 			      sm->r0kh_id, sm->r0kh_id_len, sm->own_addr,
-			      sm->pmk_r0, sm->pmk_r0_name, use_sha384) < 0) {
+			      sm->pmk_r0, sm->pmk_r0_name, sm->key_mgmt) < 0) {
 		wpa_printf(MSG_WARNING, "FILS+FT: Could not derive PMK-R0");
 		return -1;
 	}
-	sm->pmk_r0_len = use_sha384 ? SHA384_MAC_LEN : PMK_LEN;
+	if (wpa_key_mgmt_sae_ext_key(sm->key_mgmt))
+		sm->pmk_r0_len = sm->fils_ft_len;
+	else
+		sm->pmk_r0_len = use_sha384 ? SHA384_MAC_LEN : PMK_LEN;
 	wpa_printf(MSG_DEBUG, "FILS+FT: R1KH-ID: " MACSTR,
 		   MAC2STR(sm->r1kh_id));
 	pos = wpabuf_put(buf, WPA_PMK_NAME_LEN);
 	if (wpa_derive_pmk_r1_name(sm->pmk_r0_name, sm->r1kh_id, sm->own_addr,
-				   sm->pmk_r1_name, use_sha384) < 0) {
+				   sm->pmk_r1_name, sm->fils_ft_len) < 0) {
 		wpa_printf(MSG_WARNING, "FILS+FT: Could not derive PMKR1Name");
 		return -1;
 	}
