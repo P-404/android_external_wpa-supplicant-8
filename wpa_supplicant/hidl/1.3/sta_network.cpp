@@ -2183,6 +2183,15 @@ SupplicantStatus StaNetwork::setPmkCacheInternal(const std::vector<uint8_t>& ser
 	misc_utils::deserializePmkCacheEntry(ss, new_entry);
 	new_entry->network_ctx = wpa_ssid;
 	new_entry->external = true;
+
+	// If there is an entry has a later expiration, ignore this one.
+	struct rsn_pmksa_cache_entry *existing_entry = wpa_sm_pmksa_cache_get(
+		wpa_s->wpa, new_entry->aa, NULL, NULL, new_entry->akmp);
+	if (NULL != existing_entry &&
+		existing_entry->expiration >= new_entry->expiration) {
+		return {SupplicantStatusCode::SUCCESS, ""};
+	}
+
 	wpa_sm_pmksa_cache_add_entry(wpa_s->wpa, new_entry);
 
 	return {SupplicantStatusCode::SUCCESS, ""};
