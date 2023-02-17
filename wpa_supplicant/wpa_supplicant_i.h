@@ -1020,6 +1020,8 @@ struct wpa_supplicant {
 		u8 ext_auth_ssid[SSID_MAX_LEN];
 		size_t ext_auth_ssid_len;
 		int ext_auth_key_mgmt;
+		u8 ext_auth_ap_mld_addr[ETH_ALEN];
+		bool ext_ml_auth;
 		int *sae_rejected_groups;
 #endif /* CONFIG_SAE */
 	} sme;
