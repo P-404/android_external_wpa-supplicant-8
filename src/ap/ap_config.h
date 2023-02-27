@@ -913,6 +913,8 @@ struct hostapd_bss_config {
 	u8 ext_capa[EXT_CAPA_MAX_LEN];
 
 	u8 rnr;
+	char *config_id;
+	bool xrates_supported;
 };
 
 /**
@@ -1141,6 +1143,12 @@ struct hostapd_config {
 #define CH_SWITCH_EHT_ENABLED BIT(0)
 #define CH_SWITCH_EHT_DISABLED BIT(1)
 	unsigned int ch_switch_eht_config;
+
+	enum mbssid {
+		MBSSID_DISABLED = 0,
+		MBSSID_ENABLED = 1,
+		ENHANCED_MBSSID_ENABLED = 2,
+	} mbssid;
 };
 
 

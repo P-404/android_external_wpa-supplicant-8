@@ -162,6 +162,7 @@ u8 * hostapd_eid_ext_supp_rates(struct hostapd_data *hapd, u8 *eid)
 	int i, num, count;
 	int h2e_required;
 
+	hapd->conf->xrates_supported = false;
 	if (hapd->iface->current_rates == NULL)
 		return eid;
 
@@ -211,6 +212,7 @@ u8 * hostapd_eid_ext_supp_rates(struct hostapd_data *hapd, u8 *eid)
 			*pos++ = 0x80 | BSS_MEMBERSHIP_SELECTOR_SAE_H2E_ONLY;
 	}
 
+	hapd->conf->xrates_supported = true;
 	return pos;
 }
 
@@ -2000,10 +2002,8 @@ prepare_auth_resp_fils(struct hostapd_data *hapd,
 	if (wpa_key_mgmt_ft(wpa_auth_sta_key_mgmt(sta->wpa_sm))) {
 		/* FTE[R1KH-ID,R0KH-ID] when using FILS+FT */
 		int res;
-		int use_sha384 = wpa_key_mgmt_sha384(
-			wpa_auth_sta_key_mgmt(sta->wpa_sm));
 
-		res = wpa_auth_write_fte(hapd->wpa_auth, use_sha384,
+		res = wpa_auth_write_fte(hapd->wpa_auth, sta->wpa_sm,
 					 wpabuf_put(data, 0),
 					 wpabuf_tailroom(data));
 		if (res < 0) {
@@ -3120,6 +3120,23 @@ static void handle_auth(struct hostapd_data *hapd,
 }
 
 
+static u8 hostapd_max_bssid_indicator(struct hostapd_data *hapd)
+{
+	size_t num_bss_nontx;
+	u8 max_bssid_ind = 0;
+
+	if (!hapd->iconf->mbssid || hapd->iface->num_bss <= 1)
+		return 0;
+
+	num_bss_nontx = hapd->iface->num_bss - 1;
+	while (num_bss_nontx > 0) {
+		max_bssid_ind++;
+		num_bss_nontx >>= 1;
+	}
+	return max_bssid_ind;
+}
+
+
 int hostapd_get_aid(struct hostapd_data *hapd, struct sta_info *sta)
 {
 	int i, j = 32, aid;
@@ -3145,7 +3162,7 @@ int hostapd_get_aid(struct hostapd_data *hapd, struct sta_info *sta)
 	}
 	if (j == 32)
 		return -1;
-	aid = i * 32 + j + 1;
+	aid = i * 32 + j + (1 << hostapd_max_bssid_indicator(hapd));
 	if (aid > 2007)
 		return -1;
 
@@ -4335,7 +4352,7 @@ static u16 send_assoc_resp(struct hostapd_data *hapd, struct sta_info *sta,
 	}
 #endif /* CONFIG_IEEE80211AX */
 
-	p = hostapd_eid_ext_capab(hapd, p);
+	p = hostapd_eid_ext_capab(hapd, p, false);
 	p = hostapd_eid_bss_max_idle_period(hapd, p);
 	if (sta && sta->qos_map_enabled)
 		p = hostapd_eid_qos_map_set(hapd, p);
@@ -5281,10 +5298,10 @@ static int handle_action(struct hostapd_data *hapd,
 
 			pos = &mgmt->u.action.u.public_action.action;
 			end = ((const u8 *) mgmt) + len;
-			gas_query_ap_rx(hapd->gas, mgmt->sa,
-					mgmt->u.action.category,
-					pos, end - pos, freq);
-			return 1;
+			if (gas_query_ap_rx(hapd->gas, mgmt->sa,
+					    mgmt->u.action.category,
+					    pos, end - pos, freq) == 0)
+				return 1;
 		}
 #endif /* CONFIG_DPP */
 		if (hapd->public_action_cb) {
@@ -6607,6 +6624,14 @@ static u8 * hostapd_eid_rnr_iface(struct hostapd_data *hapd,
 			    reporting_hapd->conf->ssid.short_ssid)
 				bss_param |= RNR_BSS_PARAM_SAME_SSID;
 
+			if (iface->conf->mbssid != MBSSID_DISABLED &&
+			    iface->num_bss > 1) {
+				bss_param |= RNR_BSS_PARAM_MULTIPLE_BSSID;
+				if (i == 0)
+					bss_param |=
+						RNR_BSS_PARAM_TRANSMITTED_BSSID;
+			}
+
 			if (is_6ghz_op_class(hapd->iconf->op_class) &&
 			    bss->conf->unsol_bcast_probe_resp_interval)
 				bss_param |=
@@ -6691,6 +6716,255 @@ u8 * hostapd_eid_rnr(struct hostapd_data *hapd, u8 *eid, u32 type)
 
 	if (eid == eid_start + 2)
 		return eid_start;
+
+	return eid;
+}
+
+
+static bool mbssid_known_bss(unsigned int i, const u8 *known_bss,
+			     size_t known_bss_len)
+{
+	if (!known_bss || known_bss_len <= i / 8)
+		return false;
+	known_bss = &known_bss[i / 8];
+	return *known_bss & (u8) (BIT(i % 8));
+}
+
+
+static size_t hostapd_eid_mbssid_elem_len(struct hostapd_data *hapd,
+					  u32 frame_type, size_t *bss_index,
+					  const u8 *known_bss,
+					  size_t known_bss_len)
+{
+	struct hostapd_data *tx_bss = hostapd_mbssid_get_tx_bss(hapd);
+	size_t len = 3, i;
+
+	for (i = *bss_index; i < hapd->iface->num_bss; i++) {
+		struct hostapd_data *bss = hapd->iface->bss[i];
+		const u8 *auth, *rsn = NULL, *rsnx = NULL;
+		size_t nontx_profile_len, auth_len;
+		u8 ie_count = 0;
+
+		if (!bss || !bss->conf || !bss->started ||
+		    mbssid_known_bss(i, known_bss, known_bss_len))
+			continue;
+
+		/*
+		 * Sublement ID: 1 octet
+		 * Length: 1 octet
+		 * Nontransmitted capabilities: 4 octets
+		 * SSID element: 2 + variable
+		 * Multiple BSSID Index Element: 3 octets (+2 octets in beacons)
+		 * Fixed length = 1 + 1 + 4 + 2 + 3 = 11
+		 */
+		nontx_profile_len = 11 + bss->conf->ssid.ssid_len;
+
+		if (frame_type == WLAN_FC_STYPE_BEACON)
+			nontx_profile_len += 2;
+
+		auth = wpa_auth_get_wpa_ie(bss->wpa_auth, &auth_len);
+		if (auth) {
+			rsn = get_ie(auth, auth_len, WLAN_EID_RSN);
+			if (rsn)
+				nontx_profile_len += 2 + rsn[1];
+
+			rsnx = get_ie(auth, auth_len, WLAN_EID_RSNX);
+			if (rsnx)
+				nontx_profile_len += 2 + rsnx[1];
+		}
+		if (!rsn && hostapd_wpa_ie(tx_bss, WLAN_EID_RSN))
+			ie_count++;
+		if (!rsnx && hostapd_wpa_ie(tx_bss, WLAN_EID_RSNX))
+			ie_count++;
+		if (bss->conf->xrates_supported)
+			nontx_profile_len += 8;
+		else if (hapd->conf->xrates_supported)
+			ie_count++;
+		if (ie_count)
+			nontx_profile_len += 4 + ie_count;
+
+		if (len + nontx_profile_len > 255)
+			break;
+
+		len += nontx_profile_len;
+	}
+
+	*bss_index = i;
+	return len;
+}
+
+
+size_t hostapd_eid_mbssid_len(struct hostapd_data *hapd, u32 frame_type,
+			      u8 *elem_count, const u8 *known_bss,
+			      size_t known_bss_len)
+{
+	size_t len = 0, bss_index = 1;
+
+	if (!hapd->iconf->mbssid || hapd->iface->num_bss <= 1 ||
+	    (frame_type != WLAN_FC_STYPE_BEACON &&
+	     frame_type != WLAN_FC_STYPE_PROBE_RESP))
+		return 0;
+
+	if (frame_type == WLAN_FC_STYPE_BEACON) {
+		if (!elem_count) {
+			wpa_printf(MSG_INFO,
+				   "MBSSID: Insufficient data for Beacon frames");
+			return 0;
+		}
+		*elem_count = 0;
+	}
+
+	while (bss_index < hapd->iface->num_bss) {
+		len += hostapd_eid_mbssid_elem_len(hapd, frame_type,
+						   &bss_index, known_bss,
+						   known_bss_len);
+
+		if (frame_type == WLAN_FC_STYPE_BEACON)
+			*elem_count += 1;
+	}
+	return len;
+}
+
+
+static u8 * hostapd_eid_mbssid_elem(struct hostapd_data *hapd, u8 *eid, u8 *end,
+				    u32 frame_type, u8 max_bssid_indicator,
+				    size_t *bss_index, u8 elem_count,
+				    const u8 *known_bss, size_t known_bss_len)
+{
+	struct hostapd_data *tx_bss = hostapd_mbssid_get_tx_bss(hapd);
+	size_t i;
+	u8 *eid_len_offset, *max_bssid_indicator_offset;
+
+	*eid++ = WLAN_EID_MULTIPLE_BSSID;
+	eid_len_offset = eid++;
+	max_bssid_indicator_offset = eid++;
+
+	for (i = *bss_index; i < hapd->iface->num_bss; i++) {
+		struct hostapd_data *bss = hapd->iface->bss[i];
+		struct hostapd_bss_config *conf;
+		u8 *eid_len_pos, *nontx_bss_start = eid;
+		const u8 *auth, *rsn = NULL, *rsnx = NULL;
+		u8 ie_count = 0, non_inherit_ie[3];
+		size_t auth_len = 0;
+		u16 capab_info;
+
+		if (!bss || !bss->conf || !bss->started ||
+		    mbssid_known_bss(i, known_bss, known_bss_len))
+			continue;
+		conf = bss->conf;
+
+		*eid++ = WLAN_MBSSID_SUBELEMENT_NONTRANSMITTED_BSSID_PROFILE;
+		eid_len_pos = eid++;
+
+		capab_info = hostapd_own_capab_info(bss);
+		*eid++ = WLAN_EID_NONTRANSMITTED_BSSID_CAPA;
+		*eid++ = sizeof(capab_info);
+		WPA_PUT_LE16(eid, capab_info);
+		eid += sizeof(capab_info);
+
+		*eid++ = WLAN_EID_SSID;
+		*eid++ = conf->ssid.ssid_len;
+		os_memcpy(eid, conf->ssid.ssid, conf->ssid.ssid_len);
+		eid += conf->ssid.ssid_len;
+
+		*eid++ = WLAN_EID_MULTIPLE_BSSID_INDEX;
+		if (frame_type == WLAN_FC_STYPE_BEACON) {
+			*eid++ = 3;
+			*eid++ = i; /* BSSID Index */
+			if (hapd->iconf->mbssid == ENHANCED_MBSSID_ENABLED &&
+			    (conf->dtim_period % elem_count))
+				conf->dtim_period = elem_count;
+			*eid++ = conf->dtim_period;
+			*eid++ = 0xFF; /* DTIM Count */
+		} else {
+			/* Probe Request frame does not include DTIM Period and
+			 * DTIM Count fields. */
+			*eid++ = 1;
+			*eid++ = i; /* BSSID Index */
+		}
+
+		auth = wpa_auth_get_wpa_ie(bss->wpa_auth, &auth_len);
+		if (auth) {
+			rsn = get_ie(auth, auth_len, WLAN_EID_RSN);
+			if (rsn) {
+				os_memcpy(eid, rsn, 2 + rsn[1]);
+				eid += 2 + rsn[1];
+			}
+
+			rsnx = get_ie(auth, auth_len, WLAN_EID_RSNX);
+			if (rsnx) {
+				os_memcpy(eid, rsnx, 2 + rsnx[1]);
+				eid += 2 + rsnx[1];
+			}
+		}
+		if (!rsn && hostapd_wpa_ie(tx_bss, WLAN_EID_RSN))
+			non_inherit_ie[ie_count++] = WLAN_EID_RSN;
+		if (!rsnx && hostapd_wpa_ie(tx_bss, WLAN_EID_RSNX))
+			non_inherit_ie[ie_count++] = WLAN_EID_RSNX;
+		if (hapd->conf->xrates_supported &&
+		    !bss->conf->xrates_supported)
+			non_inherit_ie[ie_count++] = WLAN_EID_EXT_SUPP_RATES;
+		if (ie_count) {
+			*eid++ = WLAN_EID_EXTENSION;
+			*eid++ = 2 + ie_count;
+			*eid++ = WLAN_EID_EXT_NON_INHERITANCE;
+			*eid++ = ie_count;
+			os_memcpy(eid, non_inherit_ie, ie_count);
+			eid += ie_count;
+		}
+
+		*eid_len_pos = (eid - eid_len_pos) - 1;
+
+		if (((eid - eid_len_offset) - 1) > 255) {
+			eid = nontx_bss_start;
+			break;
+		}
+	}
+
+	*bss_index = i;
+	*max_bssid_indicator_offset = max_bssid_indicator;
+	if (*max_bssid_indicator_offset < 1)
+		*max_bssid_indicator_offset = 1;
+	*eid_len_offset = (eid - eid_len_offset) - 1;
+	return eid;
+}
+
+
+u8 * hostapd_eid_mbssid(struct hostapd_data *hapd, u8 *eid, u8 *end,
+			unsigned int frame_stype, u8 elem_count,
+			u8 **elem_offset,
+			const u8 *known_bss, size_t known_bss_len)
+{
+	size_t bss_index = 1;
+	u8 elem_index = 0;
+
+	if (!hapd->iconf->mbssid || hapd->iface->num_bss <= 1 ||
+	    (frame_stype != WLAN_FC_STYPE_BEACON &&
+	     frame_stype != WLAN_FC_STYPE_PROBE_RESP))
+		return eid;
+
+	if (frame_stype == WLAN_FC_STYPE_BEACON && !elem_offset) {
+		wpa_printf(MSG_INFO,
+			   "MBSSID: Insufficient data for Beacon frames");
+		return eid;
+	}
+
+	while (bss_index < hapd->iface->num_bss) {
+		if (frame_stype == WLAN_FC_STYPE_BEACON) {
+			if (elem_index == elem_count) {
+				wpa_printf(MSG_WARNING,
+					   "MBSSID: Larger number of elements than there is room in the provided array");
+				break;
+			}
+
+			elem_offset[elem_index] = eid;
+			elem_index = elem_index + 1;
+		}
+		eid = hostapd_eid_mbssid_elem(hapd, eid, end, frame_stype,
+					      hostapd_max_bssid_indicator(hapd),
+					      &bss_index, elem_count,
+					      known_bss, known_bss_len);
+	}
 
 	return eid;
 }
