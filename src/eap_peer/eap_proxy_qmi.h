@@ -162,6 +162,8 @@ struct eap_proxy_sm {
         qmi_client_type uim_notifier_handle;
         qmi_client_type auth_notifier_handle;
         bool notifier_cb_initialized;
+        // To store the PPID of eap_proxy init caller
+        pid_t init_ppid;
 };
 
 int eap_proxy_allowed_method(struct eap_peer_config *config, int vendor,
