@@ -101,20 +101,20 @@ static void * eap_sim_init(struct eap_sm *sm)
 		return NULL;
 	}
 
-	if (config && config->imsi_privacy_key) {
+	if (config && config->imsi_privacy_cert) {
 #ifdef CRYPTO_RSA_OAEP_SHA256
 		data->imsi_privacy_key = crypto_rsa_key_read(
-			config->imsi_privacy_key, false);
+			config->imsi_privacy_cert, false);
 		if (!data->imsi_privacy_key) {
 			wpa_printf(MSG_ERROR,
-				   "EAP-SIM: Failed to read/parse IMSI privacy key %s",
-				   config->imsi_privacy_key);
+				   "EAP-SIM: Failed to read/parse IMSI privacy certificate %s",
+				   config->imsi_privacy_cert);
 			os_free(data);
 			return NULL;
 		}
 #else /* CRYPTO_RSA_OAEP_SHA256 */
 		wpa_printf(MSG_ERROR,
-			   "EAP-SIM: No support for imsi_privacy_key in the build");
+			   "EAP-SIM: No support for imsi_privacy_cert in the build");
 		os_free(data);
 		return NULL;
 #endif /* CRYPTO_RSA_OAEP_SHA256 */
@@ -133,6 +133,9 @@ static void * eap_sim_init(struct eap_sm *sm)
 					   "sim_min_num_chal configuration "
 					   "(%lu, expected 2 or 3)",
 					   (unsigned long) data->min_num_chal);
+#ifdef CRYPTO_RSA_OAEP_SHA256
+				crypto_rsa_key_free(data->imsi_privacy_key);
+#endif /* CRYPTO_RSA_OAEP_SHA256 */
 				os_free(data);
 				return NULL;
 			}
