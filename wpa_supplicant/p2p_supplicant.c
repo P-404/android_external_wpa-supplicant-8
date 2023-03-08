@@ -5824,6 +5824,10 @@ static int wpas_p2p_setup_freqs(struct wpa_supplicant *wpa_s, int freq,
 			res = wpa_drv_get_pref_freq_list(wpa_s, iface_type,
 						 &max_pref_freq,
 						 pref_freq_list);
+			if (!is_p2p_allow_6ghz(wpa_s->global->p2p))
+				max_pref_freq = p2p_remove_6ghz_channels(pref_freq_list,
+									 max_pref_freq);
+
 			if (!res && max_pref_freq > 0) {
 				*num_pref_freq = max_pref_freq;
 				i = 0;
