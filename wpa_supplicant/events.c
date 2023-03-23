@@ -1408,9 +1408,9 @@ static bool wpa_scan_res_ok(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 	     is_6ghz_freq(bss->freq) || ssid->sae_password_id) &&
 	    wpa_s->conf->sae_pwe != SAE_PWE_FORCE_HUNT_AND_PECK &&
 	    wpa_key_mgmt_sae(ssid->key_mgmt) &&
-#ifdef CONFIG_DRIVER_NL80211_BRCM
+#if defined(CONFIG_DRIVER_NL80211_BRCM) || defined(CONFIG_DRIVER_NL80211_SYNA)
 	    !(wpa_key_mgmt_wpa_psk_no_sae(ssid->key_mgmt)) &&
-#endif /* CONFIG_DRIVER_NL80211_BRCM */
+#endif /* CONFIG_DRIVER_NL80211_BRCM || CONFIG_DRIVER_NL80211_SYNA */
 	    !(rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_H2E))) {
 		if (debug_print)
 			wpa_dbg(wpa_s, MSG_DEBUG,
@@ -3014,9 +3014,9 @@ static int wpa_supplicant_event_associnfo(struct wpa_supplicant *wpa_s,
 	const u8 *p;
 	u8 bssid[ETH_ALEN];
 	bool bssid_known;
-#ifdef CONFIG_DRIVER_NL80211_BRCM
+#if defined(CONFIG_DRIVER_NL80211_BRCM) || defined(CONFIG_DRIVER_NL80211_SYNA)
 	struct wpa_ie_data ie;
-#endif /* CONFIG_DRIVER_NL80211_BRCM */
+#endif /* CONFIG_DRIVER_NL80211_BRCM || CONFIG_DRIVER_NL80211_SYNA */
 
 	wpa_dbg(wpa_s, MSG_DEBUG, "Association info event");
 	bssid_known = wpa_drv_get_bssid(wpa_s, bssid) == 0;
@@ -3181,7 +3181,7 @@ static int wpa_supplicant_event_associnfo(struct wpa_supplicant *wpa_s,
 	if (!found_x && data->assoc_info.req_ies)
 		wpa_sm_set_assoc_rsnxe(wpa_s->wpa, NULL, 0);
 
-#ifdef CONFIG_DRIVER_NL80211_BRCM
+#if defined(CONFIG_DRIVER_NL80211_BRCM) || defined(CONFIG_DRIVER_NL80211_SYNA)
 	/* The WPA/RSN IE has been updated at this point. Since the Firmware could have roamed
 	 * to a different security type, update the current supplicant configuration to use the AKM
 	 * and pairwise suites from the assoc IE passed by the driver.
@@ -3225,7 +3225,7 @@ static int wpa_supplicant_event_associnfo(struct wpa_supplicant *wpa_s,
 			// TODO: Notify the framework about security type change b/230766005
 		}
 	}
-#endif /* CONFIG_DRIVER_NL80211_BRCM */
+#endif /* CONFIG_DRIVER_NL80211_BRCM || CONFIG_DRIVER_NL80211_SYNA */
 
 #ifdef CONFIG_FILS
 #ifdef CONFIG_SME
