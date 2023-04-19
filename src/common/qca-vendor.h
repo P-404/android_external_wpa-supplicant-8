@@ -834,6 +834,33 @@ enum qca_radiotap_vendor_ids {
  *
  *      The attributes used with this event are defined in
  *      enum qca_wlan_vendor_attr_scs_rule_config.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_GET_SAR_CAPABILITY: Fetch SAR capabilities
+ *	supported by the WLAN firmware.
+ *
+ *	The attributes used with this command are defined in
+ *	enum qca_wlan_vendor_attr_sar_capability.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_SR: Subcommand used to implement Spatial Reuse
+ *	(SR) feature. This command is used by userspace to configure SR
+ *	parameters to the driver and to get the SR related parameters and
+ *	statistics with synchronous responses from the driver.
+ *	The driver also uses this command to send asynchronous events to
+ *	userspace to indicate suspend/resume of SR feature and changes
+ *	in SR parameters.
+ *
+ *	The attributes used with this command are defined in
+ *	enum qca_wlan_vendor_attr_sr.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_MLO_PEER_PRIM_NETDEV_EVENT: Subcommand used to
+ *	notify application layer about the primary netdev of an MLO connection.
+ *	In some implementations, MLO has multiple netdevs out of which one
+ *	netdev is designated as primary to provide a unified interface to the
+ *	bridge. In those implementations this event is sent on every MLO peer
+ *	connection.
+ *
+ *	The attributes used with this event are defined in
+ *	enum qca_wlan_vendor_attr_mlo_peer_prim_netdev_event.
  */
 enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_UNSPEC = 0,
@@ -1036,6 +1063,9 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_SECURE_RANGING_CONTEXT = 216,
 	QCA_NL80211_VENDOR_SUBCMD_COAP_OFFLOAD = 217,
 	QCA_NL80211_VENDOR_SUBCMD_SCS_RULE_CONFIG = 218,
+	QCA_NL80211_VENDOR_SUBCMD_GET_SAR_CAPABILITY = 219,
+	QCA_NL80211_VENDOR_SUBCMD_SR = 220,
+	QCA_NL80211_VENDOR_SUBCMD_MLO_PEER_PRIM_NETDEV_EVENT = 221,
 };
 
 /* Compatibility defines for previously used subcmd names.
@@ -13156,6 +13186,353 @@ enum qca_wlan_vendor_attr_scs_rule_config {
 	QCA_WLAN_VENDOR_ATTR_SCS_RULE_CONFIG_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_SCS_RULE_CONFIG_MAX =
 	QCA_WLAN_VENDOR_ATTR_SCS_RULE_CONFIG_AFTER_LAST - 1,
+};
+
+/**
+ * enum qca_wlan_vendor_sar_version - This describes the current SAR version
+ * used in the firmware.
+ *
+ * @QCA_WLAN_VENDOR_SAR_VERSION_1: The firmware supports legacy SAR.
+ * In legacy SAR, the firmware supports 5 static and 1 user defined SAR limits.
+ *
+ * @QCA_WLAN_VENDOR_SAR_VERSION_2: The firmware supports SAR version 2,
+ * i.e., SAR Non DBS mode. In SAR version 2, the firmware has 6 SAR tables for
+ * each CTL group. So user can select up to 6 SAR indexes from the current CTL
+ * groups.
+ *
+ * @QCA_WLAN_VENDOR_SAR_VERSION_3: The firmware supports SAR version 3,
+ * i.e., SAR DBS mode. In SAR version 3, the firmware has 6 SAR tables for each
+ * CTL group but user can choose up to 3 SAR set index only, as the top half
+ * of the SAR index (0 to 2) is used for non DBS purpose and the bottom half of
+ * the SAR index (3 to 5) is used for DBS mode.
+ */
+enum qca_wlan_vendor_sar_version {
+	QCA_WLAN_VENDOR_SAR_VERSION_INVALID = 0,
+	QCA_WLAN_VENDOR_SAR_VERSION_1 = 1,
+	QCA_WLAN_VENDOR_SAR_VERSION_2 = 2,
+	QCA_WLAN_VENDOR_SAR_VERSION_3 = 3,
+};
+
+/**
+ * enum qca_wlan_vendor_sar_ctl_group_state - This describes whether
+ * CTL grouping is enabled or disabled in the firmware.
+ *
+ * @QCA_WLAN_VENDOR_SAR_CTL_GROUP_STATE_ENABLED: CTL grouping
+ * is enabled in firmware.
+ *
+ * @QCA_WLAN_VENDOR_SAR_CTL_GROUP_STATE_DISABLED: CTL grouping
+ * is disabled in firmware.
+ *
+ */
+enum qca_wlan_vendor_sar_ctl_group_state {
+	QCA_WLAN_VENDOR_SAR_CTL_GROUP_STATE_INVALID = 0,
+	QCA_WLAN_VENDOR_SAR_CTL_GROUP_STATE_ENABLED = 1,
+	QCA_WLAN_VENDOR_SAR_CTL_GROUP_STATE_DISABLED = 2,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_sar_capability - Used by the vendor command
+ * QCA_NL80211_VENDOR_SUBCMD_GET_SAR_CAPABILITY to get SAR capabilities
+ * supported by the firmware.
+
+ * @QCA_WLAN_VENDOR_ATTR_SAR_CAPABILITY_VERSION:
+ * u32 attribute. This field describes current SAR version supported by the
+ * firmware.
+ * See enum qca_wlan_vendor_sar_version for more information.
+ * This attribute is mandatory.
+
+ * @QCA_WLAN_VENDOR_ATTR_SAR_CAPABILITY_CTL_GROUP_STATE:
+ * u32 attribute. This field describes whether CTL groups are enabled
+ * or disabled in the firmware.
+ * See enum qca_wlan_vendor_sar_ctl_group_state for more information.
+ * This attribute is optional.
+ */
+
+enum qca_wlan_vendor_attr_sar_capability {
+	QCA_WLAN_VENDOR_ATTR_SAR_CAPABILITY_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_SAR_CAPABILITY_VERSION = 1,
+	QCA_WLAN_VENDOR_ATTR_SAR_CAPABILITY_CTL_GROUP_STATE = 2,
+
+	/* Keep last */
+	QCA_WLAN_VENDOR_ATTR_SAR_CAPABILITY_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_SAR_CAPABILITY_MAX =
+	QCA_WLAN_VENDOR_ATTR_SAR_CAPABILITY_AFTER_LAST - 1,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_sr_stats - Attributes for Spatial Reuse statistics.
+ * These statistics are sent from the driver in a response when userspace
+ * queries to get the statistics using the operation
+ * %QCA_WLAN_SR_OPERATION_GET_STATS. These statistics are reset
+ * by the driver when the SR feature is enabled, when the driver receives
+ * %QCA_WLAN_SR_OPERATION_CLEAR_STATS operation, or when disconnected.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_STATS_NON_SRG_TX_OPPORTUNITIES_COUNT: u32 attribute.
+ * Mandatory only when non-SRG is supported by the AP and optional otherwise.
+ * This represents the number of non-SRG TX opportunities.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_STATS_NON_SRG_TX_PPDU_TRIED_COUNT: u32 attribute.
+ * Mandatory only when non-SRG is supported by the AP and optional otherwise.
+ * This represents the number of non-SRG PPDUs tried to transmit.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_STATS_NON_SRG_TX_PPDU_SUCCESS_COUNT: u32 attribute.
+ * Mandatory only when non-SRG is supported by the AP and optional otherwise.
+ * This represents the number of non-SRG PPDUs successfully transmitted.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_STATS_SRG_TX_OPPORTUNITIES_COUNT: u32 attribute.
+ * Mandatory only when SRG is supported by the AP and optional otherwise.
+ * This represents the number of SRG TX opportunities.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_STATS_SRG_TX_PPDU_TRIED_COUNT: u32 attribute.
+ * Mandatory only when SRG is supported by the AP and optional otherwise.
+ * This represents the number of SRG PPDUs tried to transmit.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_STATS_SRG_TX_PPDU_SUCCESS_COUNT: u32 attribute.
+ * Mandatory only when SRG is supported by the AP and optional otherwise.
+ * This represents the number of SRG PPDUs successfully transmitted.
+ */
+enum qca_wlan_vendor_attr_sr_stats {
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_NON_SRG_TX_OPPORTUNITIES_COUNT = 1,
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_NON_SRG_TX_PPDU_TRIED_COUNT = 2,
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_NON_SRG_TX_PPDU_SUCCESS_COUNT = 3,
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_SRG_TX_OPPORTUNITIES_COUNT = 4,
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_SRG_TX_PPDU_TRIED_COUNT = 5,
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_SRG_TX_PPDU_SUCCESS_COUNT = 6,
+
+	/* Keep last */
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_MAX =
+	QCA_WLAN_VENDOR_ATTR_SR_STATS_AFTER_LAST - 1,
+};
+
+/**
+ * enum qca_wlan_sr_reason_code - Defines the different reason codes used in
+ * Spatial Reuse feature.
+ *
+ * @QCA_WLAN_SR_REASON_CODE_ROAMING: The SR feature is disabled/enabled due to
+ * roaming to an AP that doesn't support/supports SR feature, respectively.
+ *
+ * @QCA_WLAN_SR_REASON_CODE_CONCURRENCY: The SR feature is disabled/enabled due
+ * to change in concurrent interfaces that are supported by the driver.
+ */
+enum qca_wlan_sr_reason_code {
+	QCA_WLAN_SR_REASON_CODE_ROAMING = 0,
+	QCA_WLAN_SR_REASON_CODE_CONCURRENCY = 1,
+};
+
+/**
+ * enum qca_wlan_sr_operation - Defines the different types of SR operations.
+ * The values are used inside attribute %QCA_WLAN_VENDOR_ATTR_SR_OPERATION.
+ *
+ * @QCA_WLAN_SR_OPERATION_SR_ENABLE: Userspace sends this operation to the
+ * driver to enable the Spatial Reuse feature. Attributes
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_PD_THRESHOLD and
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_PD_THRESHOLD are used with this
+ * operation.
+ *
+ * @QCA_WLAN_SR_OPERATION_SR_DISABLE: Userspace sends this operation to the
+ * driver to disable the Spatial Reuse feature.
+ *
+ * @QCA_WLAN_SR_OPERATION_SR_SUSPEND: The driver uses this operation in an
+ * asynchronous event sent to userspace when the SR feature is disabled.
+ * The disable reason is encoded in QCA_WLAN_VENDOR_ATTR_SR_PARAMS_REASON_CODE
+ * and sent along with the asynchronous event.
+ *
+ * @QCA_WLAN_SR_OPERATION_SR_RESUME: The driver uses this operation in an
+ * asynchronous event when the SR feature is enabled again after the SR feature
+ * was suspended by the driver earlier. The enable reason is
+ * encoded in QCA_WLAN_VENDOR_ATTR_SR_PARAMS_REASON_CODE. Attributes used are
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_PD_THRESHOLD and
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_PD_THRESHOLD.
+ *
+ * @QCA_WLAN_SR_OPERATION_PSR_AND_NON_SRG_OBSS_PD_PROHIBIT: This operation is
+ * used to prohibit PSR-based spatial reuse and non-SRG OBSS PD-based spatial
+ * reuse transmissions. Userspace sends this operation to the driver.
+ * The driver/firmware upon receiving this operation shall prohibit PSR-based
+ * spatial reuse and non-SRG OBSS PD-based spatial reuse transmissions.
+ *
+ * @QCA_WLAN_SR_OPERATION_PSR_AND_NON_SRG_OBSS_PD_ALLOW: This operation is
+ * used to allow PSR-based spatial reuse and non-SRG OBSS PD-based spatial
+ * reuse transmissions. Userspace sends this operation to the driver.
+ * The driver/firmware upon receiving this operation shall allow PSR-based
+ * spatial reuse and non-SRG OBSS PD-based spatial reuse transmissions.
+ *
+ * @QCA_WLAN_SR_OPERATION_GET_STATS: Userspace sends this operation to the
+ * driver to get the SR statistics and the driver sends a synchronous response
+ * with the attributes defined in enum qca_wlan_vendor_attr_sr_stats using the
+ * nested attribute %QCA_WLAN_VENDOR_ATTR_SR_STATS.
+ *
+ * @QCA_WLAN_SR_OPERATION_CLEAR_STATS: Userspace sends this operation to the
+ * driver to clear the SR statistics and upon receiving this operation
+ * the driver/firmware shall clear the SR statistics.
+ *
+ * @QCA_WLAN_SR_OPERATION_GET_PARAMS: Userspace sends this operation to the
+ * driver to get the SR parameters and the driver sends the synchronous response
+ * with the following required attributes:
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_OBSS_PD_MIN_OFFSET,
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_OBSS_PD_MAX_OFFSET,
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_OBSS_PD_MAX_OFFSET,
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_HESIGA_VAL15_ENABLE,
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_OBSS_PD_DISALLOW.
+ *
+ * @QCA_WLAN_SR_OPERATION_UPDATE_PARAMS: The driver uses this operation in an
+ * asynchronous event to userspace to update any changes in SR parameters.
+ * The following attributes are used with this operation:
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_OBSS_PD_MIN_OFFSET,
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_OBSS_PD_MAX_OFFSET,
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_OBSS_PD_MAX_OFFSET,
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_HESIGA_VAL15_ENABLE,
+ * %QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_OBSS_PD_DISALLOW.
+ */
+enum qca_wlan_sr_operation {
+	QCA_WLAN_SR_OPERATION_SR_ENABLE = 0,
+	QCA_WLAN_SR_OPERATION_SR_DISABLE = 1,
+	QCA_WLAN_SR_OPERATION_SR_SUSPEND = 2,
+	QCA_WLAN_SR_OPERATION_SR_RESUME = 3,
+	QCA_WLAN_SR_OPERATION_PSR_AND_NON_SRG_OBSS_PD_PROHIBIT = 4,
+	QCA_WLAN_SR_OPERATION_PSR_AND_NON_SRG_OBSS_PD_ALLOW = 5,
+	QCA_WLAN_SR_OPERATION_GET_STATS = 6,
+	QCA_WLAN_SR_OPERATION_CLEAR_STATS = 7,
+	QCA_WLAN_SR_OPERATION_GET_PARAMS = 8,
+	QCA_WLAN_SR_OPERATION_UPDATE_PARAMS = 9,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_sr_params - Defines attributes for SR configuration
+ * parameters used by attribute %QCA_WLAN_VENDOR_ATTR_SR_PARAMS.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_PARAMS_HESIGA_VAL15_ENABLE: Flag attribute.
+ * This attribute is optionally set in response to
+ * %QCA_WLAN_SR_OPERATION_GET_PARAMS and in request when operation is set to
+ * %QCA_WLAN_SR_OPERATION_PSR_AND_NON_SRG_OBSS_PD_PROHIBIT. Refer IEEE Std
+ * 802.11ax-2021 Figure 9-788r-SR Control field format to understand more
+ * about HESIGA_Spatial_reuse_value15_allowed.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_OBSS_PD_DISALLOW: Flag attribute.
+ * This attribute is used in response to %QCA_WLAN_SR_OPERATION_GET_PARAMS
+ * operation. This indicates whether non-SRG OBSS PD SR transmissions are
+ * allowed or not at non-AP STAs that are associated with the AP. If present
+ * non-SRG OBSS PD SR transmissions are not allowed else are allowed.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_OBSS_PD_MIN_OFFSET: Optional u8
+ * attribute. This attribute is used in response to
+ * %QCA_WLAN_SR_OPERATION_GET_PARAMS operation. This indicates the SRG OBSS PD
+ * Min Offset field which contains an unsigned integer that is added to -82 dBm
+ * to generate the value of the SRG OBSS PD Min parameter.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_OBSS_PD_MAX_OFFSET: Optional u8
+ * attribute. This attribute is used in response to
+ * %QCA_WLAN_SR_OPERATION_GET_PARAMS operation. This indicates the SRG OBSS PD
+ * Max Offset field which contains an unsigned integer that is added to -82 dBm
+ * to generate the value of the SRG OBSS PD Max parameter.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_OBSS_PD_MAX_OFFSET: Optional u8
+ * attribute. This attribute is used in response to
+ * %QCA_WLAN_SR_OPERATION_GET_PARAMS operation. This indicates the Non-SRG OBSS
+ * PD Max Offset field which contains an unsigned integer that is added to -82
+ * dBm to generate the value of the Non-SRG OBSS PD Max parameter.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_PD_THRESHOLD: s32 attribute (in dBm).
+ * Userspace optionally sends this attribute with
+ * %QCA_WLAN_SR_OPERATION_SR_ENABLE operation to the driver to specify the
+ * preferred SRG PD threshold. The driver shall send this attribute to
+ * userspace in SR resume event to indicate the PD threshold being used for SR.
+ * When there is change in SRG PD threshold (for example, due to roaming, etc.)
+ * the driver shall indicate the userspace the newly configured SRG PD threshold
+ * using an asynchronous event.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_PD_THRESHOLD: s32 attribute (in dBm).
+ * Userspace optionally sends this attribute with
+ * %QCA_WLAN_SR_OPERATION_SR_ENABLE operation to the driver to specify the
+ * preferred non-SRG PD threshold. The driver shall send this attribute to
+ * userspace in SR resume event to indicate the PD threshold being used for SR.
+ * When there is change in non-SRG PD threshold (for example, due to roaming,
+ * etc.) the driver shall indicate the userspace the newly configured non-SRG PD
+ * threshold using an asynchronous event.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_PARAMS_REASON_CODE: u32 attribute. The possible
+ * values are defined in enum qca_wlan_sr_reason_code. This
+ * attribute is used with %QCA_WLAN_SR_OPERATION_SR_RESUME and
+ * %QCA_WLAN_SR_OPERATION_SR_SUSPEND operations.
+ */
+enum qca_wlan_vendor_attr_sr_params {
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_HESIGA_VAL15_ENABLE = 1,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_OBSS_PD_DISALLOW = 2,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_OBSS_PD_MIN_OFFSET = 3,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_OBSS_PD_MAX_OFFSET = 4,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_OBSS_PD_MAX_OFFSET = 5,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_SRG_PD_THRESHOLD = 6,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_NON_SRG_PD_THRESHOLD = 7,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_REASON_CODE = 8,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_MAX =
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS_AFTER_LAST - 1,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_sr - Defines the attributes used by the vendor
+ * command QCA_NL80211_VENDOR_SUBCMD_SR.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_OPERATION: Mandatory u8 attribute for all requests
+ * from userspace to the driver. Possible values are defined in enum
+ * qca_wlan_sr_operation.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_PARAMS: Nested attribute, contains the SR
+ * configuration parameters. The possible attributes inside this attribute are
+ * defined in enum qca_wlan_vendor_attr_sr_params.
+ * This attribute is used when QCA_WLAN_VENDOR_ATTR_SR_OPERATION is set to
+ * %QCA_WLAN_SR_OPERATION_SR_ENABLE in requests from userspace to the driver and
+ * also in response from the driver to userspace when the response is sent for
+ * %QCA_WLAN_SR_OPERATION_GET_PARAMS.
+ * The driver uses this attribute in asynchronous events in which the operation
+ * is set to %QCA_WLAN_SR_OPERATION_SR_RESUME,
+ * %QCA_WLAN_SR_OPERATION_SR_SUSPEND or %QCA_WLAN_SR_OPERATION_UPDATE_PARAMS.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SR_STATS: Nested attribute, contains the SR
+ * statistics. These attributes used inside this are defined in enum
+ * qca_wlan_vendor_attr_sr_stats.
+ * This attribute is used in response from the driver to a command in which
+ * %QCA_WLAN_VENDOR_ATTR_SR_OPERATION is set to
+ * %QCA_WLAN_SR_OPERATION_GET_STATS.
+ */
+enum qca_wlan_vendor_attr_sr {
+	QCA_WLAN_VENDOR_ATTR_SR_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_SR_OPERATION = 1,
+	QCA_WLAN_VENDOR_ATTR_SR_PARAMS = 2,
+	QCA_WLAN_VENDOR_ATTR_SR_STATS = 3,
+
+	/* Keep last */
+	QCA_WLAN_VENDOR_ATTR_SR_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_SR_MAX =
+	QCA_WLAN_VENDOR_ATTR_SR_AFTER_LAST - 1,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_mlo_peer_prim_netdev_event - Defines the attributes
+ * used in the QCA_NL80211_VENDOR_SUBCMD_MLO_PEER_PRIM_NETDEV_EVENT subcommand.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_MACADDR: 6 byte MAC address
+ * used by the peer on the link that corresponds to the link used for sending
+ * the event notification.
+ * @QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_MLD_MAC_ADDR: 6 byte
+ * MLD MAC address of the peer.
+ * @QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_PRIM_IFINDEX: u32 attribute,
+ * used to pass ifindex of the primary netdev.
+ */
+enum qca_wlan_vendor_attr_mlo_peer_prim_netdev_event {
+	QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_MACADDR = 1,
+	QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_MLD_MAC_ADDR = 2,
+	QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_PRIM_IFINDEX = 3,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_MAX =
+	QCA_WLAN_VENDOR_ATTR_MLO_PEER_PRIM_NETDEV_EVENT_AFTER_LAST - 1,
 };
 
 #endif /* QCA_VENDOR_H */
