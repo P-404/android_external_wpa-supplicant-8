@@ -110,6 +110,10 @@ extern "C" {
 #define WPA_EVENT_DO_ROAM "CTRL-EVENT-DO-ROAM "
 /** Decision made to skip a within-ESS roam */
 #define WPA_EVENT_SKIP_ROAM "CTRL-EVENT-SKIP-ROAM "
+/** TID-to-link mapping response event */
+#define WPA_EVENT_T2LM_UPDATE "CTRL-EVENT-T2LM-UPDATE "
+/** MLO link reconfiguration event */
+#define WPA_EVENT_LINK_RECONFIG "CTRL-EVENT-LINK-RECONFIG "
 
 /** IP subnet status change notification
  *
@@ -465,6 +469,7 @@ extern "C" {
 #define WPA_BSS_MASK_FILS_INDICATION	BIT(24)
 #define WPA_BSS_MASK_RNR		BIT(25)
 #define WPA_BSS_MASK_ML			BIT(26)
+#define WPA_BSS_MASK_AP_MLD_ADDR	BIT(27)
 
 
 /* VENDOR_ELEM_* frame id values */

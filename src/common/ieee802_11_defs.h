@@ -2438,6 +2438,7 @@ struct ieee80211_he_mu_edca_parameter_set {
 #define RNR_TBTT_INFO_COUNT(x)                      (((x) & 0xf) << 4)
 #define RNR_TBTT_INFO_COUNT_MAX                     16
 #define RNR_TBTT_INFO_LEN                           13
+#define RNR_TBTT_INFO_MLD_LEN                       16
 #define RNR_NEIGHBOR_AP_OFFSET_UNKNOWN              255
 /* Figure 9-632a - BSS Parameters subfield format */
 #define RNR_BSS_PARAM_OCT_RECOMMENDED               BIT(0)
@@ -2459,6 +2460,7 @@ struct ieee80211_he_mu_edca_parameter_set {
 #define EHT_OPER_DEFAULT_PE_DURATION                   BIT(2)
 #define EHT_OPER_GROUP_ADDR_BU_INDICATION_LIMIT        BIT(3)
 #define EHT_OPER_GROUP_ADDR_BU_INDICATION_EXPONENT     (BIT(4) | BIT(5))
+#define EHT_OPER_DISABLED_SUBCHAN_BITMAP_SIZE          2
 
 /* Control subfield: Channel Width subfield; see Table 9-401b */
 #define EHT_OPER_CHANNEL_WIDTH_MASK                    0x7
@@ -2594,6 +2596,7 @@ struct ieee80211_eht_capabilities {
  * STA Control field definitions of Per-STA Profile subelement in Basic
  * Multi-Link element as described in Figure 9-1002n: STA Control field format.
  */
+#define BASIC_MLE_STA_CTRL_LEN				2
 #define BASIC_MLE_STA_CTRL_LINK_ID_MASK			0x000F
 #define BASIC_MLE_STA_CTRL_COMPLETE_PROFILE		0x0010
 #define BASIC_MLE_STA_CTRL_PRES_STA_MAC			0x0020
@@ -2646,6 +2649,16 @@ struct eht_ml_basic_common_info {
 #define EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_NEG_SUPP_MSK  0x0060
 #define EHT_ML_MLD_CAPA_FREQ_SEP_FOR_STR_MASK         0x0f80
 #define EHT_ML_MLD_CAPA_AAR_SUPP                      0x1000
+
+#define EHT_PER_STA_CTRL_LINK_ID_MSK                  0x000f
+#define EHT_PER_STA_CTRL_COMPLETE_PROFILE_MSK         0x0010
+#define EHT_PER_STA_CTRL_MAC_ADDR_PRESENT_MSK         0x0020
+#define EHT_PER_STA_CTRL_BEACON_INTERVAL_PRESENT_MSK  0x0040
+#define EHT_PER_STA_CTRL_TSF_OFFSET_PRESENT_MSK       0x0080
+#define EHT_PER_STA_CTRL_DTIM_INFO_PRESENT_MSK        0x0100
+#define EHT_PER_STA_CTRL_NSTR_LINK_PAIR_PRESENT_MSK   0x0200
+#define EHT_PER_STA_CTRL_NSTR_BM_SIZE_MSK             0x0400
+#define EHT_PER_STA_CTRL_BSS_PARAM_CNT_PRESENT_MSK    0x0800
 
 /* IEEE P802.11be/D2.0, 9.4.2.312.2.4 - Per-STA Profile subelement format */
 struct ieee80211_eht_per_sta_profile {

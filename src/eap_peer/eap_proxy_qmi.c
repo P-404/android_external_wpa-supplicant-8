@@ -797,7 +797,7 @@ void __eap_proxy_notifier_cb(void *eloop_ctx, void *timeout_ctx)
         qmi_client_type user_handle = cb_data->userHandle;
         struct eap_proxy_sm *eap_proxy = (struct eap_proxy_sm *)cb_data->userdata;
 
-        if (user_handle == NULL) {
+        if (user_handle == NULL || !valid_eap_proxy(eap_proxy)) {
             wpa_printf(MSG_ERROR, "eap_proxy: qmi_client_type or eap_proxy is missing in callback");
             goto done;
         }
@@ -846,7 +846,7 @@ void eap_proxy_notifier_cb
             wpa_printf(MSG_DEBUG, "eap_proxy: %s Handle QMI_CLIENT_SERVICE_COUNT_INC event",
                        __func__);
             pthread_mutex_lock(&eloop_lock);       // Lock
-            cb_data = eap_proxy_prepare_qmi_cb_data(user_handle, 0, notify_cb_data, 0, NULL,
+            cb_data = eap_proxy_prepare_qmi_cb_data(user_handle, 0, NULL, 0, notify_cb_data,
                                                     __eap_proxy_notifier_cb);
 
             if (cb_data == NULL) {

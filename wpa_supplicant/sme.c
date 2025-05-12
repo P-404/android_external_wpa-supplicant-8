@@ -203,7 +203,7 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 				  wpa_s->sme.sae_rejected_groups, NULL) < 0)
 		return NULL;
 	if (!use_pt &&
-	    sae_prepare_commit(wpa_s->own_addr, bssid,
+	    sae_prepare_commit(wpa_s->own_addr, addr,
 			       (u8 *) password, os_strlen(password),
 			       &wpa_s->sme.sae) < 0) {
 		wpa_printf(MSG_DEBUG, "SAE: Could not pick PWE");
@@ -334,10 +334,12 @@ static void sme_auth_handle_rrm(struct wpa_supplicant *wpa_s,
 }
 
 
-static bool wpas_ml_element(struct wpa_supplicant *wpa_s, struct wpa_bss *bss)
+static bool wpas_ml_element(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
+			    struct wpa_ssid *ssid)
 {
 	struct wpabuf *mlbuf;
-	const u8 *rnr_ie, *pos;
+	const u8 *rnr_ie, *pos, *rsn_ie;
+	struct wpa_ie_data ie;
 	u8 ml_ie_len, rnr_ie_len;
 	const struct ieee80211_eht_ml *eht_ml;
 	const struct eht_ml_basic_common_info *ml_basic_common_info;
@@ -356,6 +358,26 @@ static bool wpas_ml_element(struct wpa_supplicant *wpa_s, struct wpa_bss *bss)
 	if (!mlbuf) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "MLD: No ML element");
 		return false;
+	}
+
+	rsn_ie = wpa_bss_get_ie(bss, WLAN_EID_RSN);
+	if (!rsn_ie || wpa_parse_wpa_ie(rsn_ie, 2 + rsn_ie[1], &ie)) {
+		wpa_dbg(wpa_s, MSG_DEBUG, "MLD: No RSN element");
+		goto out;
+	}
+
+	if (!(ie.capabilities & WPA_CAPABILITY_MFPC) ||
+	    wpas_get_ssid_pmf(wpa_s, ssid) == NO_MGMT_FRAME_PROTECTION) {
+		wpa_dbg(wpa_s, MSG_DEBUG,
+			"MLD: No management frame protection");
+		goto out;
+	}
+
+	ie.key_mgmt &= ~(WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_FT_PSK |
+			 WPA_KEY_MGMT_PSK_SHA256);
+	if (!(ie.key_mgmt & ssid->key_mgmt)) {
+		wpa_dbg(wpa_s, MSG_DEBUG, "MLD: No valid key management");
+		goto out;
 	}
 
 	ml_ie_len = wpabuf_len(mlbuf);
@@ -481,6 +503,7 @@ static void wpas_sme_ml_auth(struct wpa_supplicant *wpa_s,
 {
 	struct ieee802_11_elems elems;
 	const u8 *mld_addr;
+	u16 status_code = data->auth.status_code;
 
 	if (!wpa_s->valid_links)
 		return;
@@ -494,7 +517,14 @@ static void wpas_sme_ml_auth(struct wpa_supplicant *wpa_s,
 
 	if (!elems.basic_mle || !elems.basic_mle_len) {
 		wpa_printf(MSG_DEBUG, "MLD: No ML element in authentication");
-		goto out;
+		if (status_code == WLAN_STATUS_ANTI_CLOGGING_TOKEN_REQ ||
+		    status_code == WLAN_STATUS_SUCCESS ||
+		    status_code == WLAN_STATUS_SAE_HASH_TO_ELEMENT ||
+		    status_code == WLAN_STATUS_SAE_PK)
+			goto out;
+		/* Accept missing Multi-Link element in failed authentication
+		 * cases. */
+		return;
 	}
 
 	mld_addr = get_basic_mle_mld_addr(elems.basic_mle, elems.basic_mle_len);
@@ -560,7 +590,7 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 	params.ssid_len = bss->ssid_len;
 	params.p2p = ssid->p2p_group;
 
-	if (wpas_ml_element(wpa_s, bss)) {
+	if (wpas_ml_element(wpa_s, bss, ssid)) {
 		wpa_printf(MSG_DEBUG, "MLD: In authentication");
 		params.mld = true;
 		params.mld_link_id = wpa_s->mlo_assoc_link_id;
@@ -1546,7 +1576,8 @@ static int sme_check_sae_rejected_groups(struct wpa_supplicant *wpa_s,
 
 
 static int sme_external_ml_auth(struct wpa_supplicant *wpa_s,
-				const u8 *data, size_t len, int ie_offset)
+				const u8 *data, size_t len, int ie_offset,
+				u16 status_code)
 {
 	struct ieee802_11_elems elems;
 	const u8 *mld_addr;
@@ -1559,7 +1590,14 @@ static int sme_external_ml_auth(struct wpa_supplicant *wpa_s,
 
 	if (!elems.basic_mle || !elems.basic_mle_len) {
 		wpa_printf(MSG_DEBUG, "MLD: No ML element in authentication");
-		return -1;
+		if (status_code == WLAN_STATUS_ANTI_CLOGGING_TOKEN_REQ ||
+		    status_code == WLAN_STATUS_SUCCESS ||
+		    status_code == WLAN_STATUS_SAE_HASH_TO_ELEMENT ||
+		    status_code == WLAN_STATUS_SAE_PK)
+			return -1;
+		/* Accept missing Multi-Link element in failed authentication
+		 * cases. */
+		return 0;
 	}
 
 	mld_addr = get_basic_mle_mld_addr(elems.basic_mle, elems.basic_mle_len);
@@ -1629,21 +1667,48 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 		token_len = len - sizeof(le16);
 		h2e = wpa_s->sme.sae.h2e;
 		if (h2e) {
+			u8 id, elen, extid;
+
 			if (token_len < 3) {
 				wpa_dbg(wpa_s, MSG_DEBUG,
 					"SME: Too short SAE anti-clogging token container");
 				return -1;
 			}
-			if (token_pos[0] != WLAN_EID_EXTENSION ||
-			    token_pos[1] == 0 ||
-			    token_pos[1] > token_len - 2 ||
-			    token_pos[2] != WLAN_EID_EXT_ANTI_CLOGGING_TOKEN) {
+			id = *token_pos++;
+			elen = *token_pos++;
+			extid = *token_pos++;
+			if (id != WLAN_EID_EXTENSION ||
+			    elen == 0 || elen > token_len - 2 ||
+			    extid != WLAN_EID_EXT_ANTI_CLOGGING_TOKEN) {
 				wpa_dbg(wpa_s, MSG_DEBUG,
 					"SME: Invalid SAE anti-clogging token container header");
 				return -1;
 			}
-			token_len = token_pos[1] - 1;
-			token_pos += 3;
+			token_len = elen - 1;
+#ifdef CONFIG_IEEE80211BE
+		} else if ((wpa_s->valid_links ||
+			    (external && wpa_s->sme.ext_ml_auth)) &&
+			   token_len > 12 &&
+			   token_pos[token_len - 12] == WLAN_EID_EXTENSION &&
+			   token_pos[token_len - 11] == 10 &&
+			   token_pos[token_len - 10] ==
+			   WLAN_EID_EXT_MULTI_LINK) {
+			/* IEEE P802.11be requires H2E to be used whenever SAE
+			 * is used for ML association. However, some early
+			 * Wi-Fi 7 APs enable MLO without H2E. Recognize this
+			 * special case based on the fixed length Basic
+			 * Multi-Link element being at the end of the data that
+			 * would contain the unknown variable length
+			 * Anti-Clogging Token field. The Basic Multi-Link
+			 * element in Authentication frames include the MLD MAC
+			 * addreess in the Common Info field and all subfields
+			 * of the Presence Bitmap subfield of the Multi-Link
+			 * Control field of the element zero and consequently,
+			 * has a fixed length of 12 octets. */
+			wpa_printf(MSG_DEBUG,
+				   "SME: Detected Basic Multi-Link element at the end of Anti-Clogging Token field");
+			token_len -= 12;
+#endif /* CONFIG_IEEE80211BE */
 		}
 
 		*ie_offset = token_pos + token_len - data;
@@ -1656,7 +1721,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 						wpa_s->current_ssid, 2);
 		} else {
 			if (wpa_s->sme.ext_ml_auth &&
-			    sme_external_ml_auth(wpa_s, data, len, *ie_offset))
+			    sme_external_ml_auth(wpa_s, data, len, *ie_offset,
+						 status_code))
 				return -1;
 
 			sme_external_auth_send_sae_commit(
@@ -1683,7 +1749,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 						wpa_s->current_ssid, 1);
 		} else {
 			if (wpa_s->sme.ext_ml_auth &&
-			    sme_external_ml_auth(wpa_s, data, len, *ie_offset))
+			    sme_external_ml_auth(wpa_s, data, len, *ie_offset,
+						 status_code))
 				return -1;
 
 			sme_external_auth_send_sae_commit(
@@ -1782,7 +1849,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 						wpa_s->current_ssid, 0);
 		} else {
 			if (wpa_s->sme.ext_ml_auth &&
-			    sme_external_ml_auth(wpa_s, data, len, *ie_offset))
+			    sme_external_ml_auth(wpa_s, data, len, *ie_offset,
+						 status_code))
 				return -1;
 
 			sme_external_auth_send_sae_confirm(wpa_s, sa);
@@ -1798,7 +1866,8 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 				      ie_offset) < 0)
 			return -1;
 		if (external && wpa_s->sme.ext_ml_auth &&
-		    sme_external_ml_auth(wpa_s, data, len, *ie_offset))
+		    sme_external_ml_auth(wpa_s, data, len, *ie_offset,
+					 status_code))
 			return -1;
 
 		wpa_s->sme.sae.state = SAE_ACCEPTED;

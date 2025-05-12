@@ -26,7 +26,7 @@
 #include "dpp_i.h"
 
 
-#ifdef CONFIG_TESTING_OPTIONS
+#if defined(CONFIG_TESTING_OPTIONS) || defined(CONFIG_AIDL_DPP_VERSION)
 #ifdef CONFIG_DPP3
 int dpp_version_override = 3;
 #elif defined(CONFIG_DPP2)
@@ -34,7 +34,10 @@ int dpp_version_override = 2;
 #else
 int dpp_version_override = 1;
 #endif
-enum dpp_test_behavior dpp_test = DPP_TEST_DISABLED;
+#endif /* CONFIG_TESTING_OPTIONS || CONFIG_AIDL_DPP_VERSION */
+
+#ifdef CONFIG_TESTING_OPTION
+dpp_test_behavior dpp_test = DPP_TEST_DISABLED;
 #endif /* CONFIG_TESTING_OPTIONS */
 
 

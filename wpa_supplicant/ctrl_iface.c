@@ -5685,7 +5685,8 @@ static int print_bss_info(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
 	}
 #endif /* CONFIG_FILS */
 
-	if (!is_zero_ether_addr(bss->mld_addr)) {
+	if (!is_zero_ether_addr(bss->mld_addr) &&
+	    (mask & WPA_BSS_MASK_AP_MLD_ADDR)) {
 		ret = os_snprintf(pos, end - pos,
 				  "ap_mld_addr=" MACSTR "\n",
 				  MAC2STR(bss->mld_addr));
@@ -9830,7 +9831,7 @@ static int wpas_ctrl_iface_eapol_rx(struct wpa_supplicant *wpa_s, char *cmd)
 		return -1;
 	}
 
-	wpa_supplicant_rx_eapol(wpa_s, src, buf, len);
+	wpa_supplicant_rx_eapol(wpa_s, src, buf, len, FRAME_ENCRYPTION_UNKNOWN);
 	os_free(buf);
 
 	return 0;

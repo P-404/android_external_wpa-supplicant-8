@@ -416,22 +416,12 @@ static int ieee802_11_parse_extension(const u8 *pos, size_t elen,
 }
 
 
-/**
- * ieee802_11_parse_elems - Parse information elements in management frames
- * @start: Pointer to the start of IEs
- * @len: Length of IE buffer in octets
- * @elems: Data structure for parsed elements
- * @show_errors: Whether to show parsing errors in debug log
- * Returns: Parsing result
- */
-ParseRes ieee802_11_parse_elems(const u8 *start, size_t len,
-				struct ieee802_11_elems *elems,
-				int show_errors)
+static ParseRes __ieee802_11_parse_elems(const u8 *start, size_t len,
+					 struct ieee802_11_elems *elems,
+					 int show_errors)
 {
 	const struct element *elem;
 	int unknown = 0;
-
-	os_memset(elems, 0, sizeof(*elems));
 
 	if (!start)
 		return ParseOK;
@@ -681,6 +671,431 @@ ParseRes ieee802_11_parse_elems(const u8 *start, size_t len,
 
 done:
 	return unknown ? ParseUnknown : ParseOK;
+}
+
+
+/**
+ * ieee802_11_parse_elems - Parse information elements in management frames
+ * @start: Pointer to the start of IEs
+ * @len: Length of IE buffer in octets
+ * @elems: Data structure for parsed elements
+ * @show_errors: Whether to show parsing errors in debug log
+ * Returns: Parsing result
+ */
+ParseRes ieee802_11_parse_elems(const u8 *start, size_t len,
+				struct ieee802_11_elems *elems,
+				int show_errors)
+{
+	os_memset(elems, 0, sizeof(*elems));
+
+	return __ieee802_11_parse_elems(start, len, elems, show_errors);
+}
+
+
+/**
+ * ieee802_11_elems_clear_ids - Clear the data for the given element IDs
+ * @ids: Array of element IDs for which data should be cleared.
+ * @num: The number of entries in the array
+ */
+void ieee802_11_elems_clear_ids(struct ieee802_11_elems *elems,
+				const u8 *ids, size_t num)
+{
+	size_t i;
+
+	for (i = 0; i < num; i++) {
+		switch (ids[i]) {
+		case WLAN_EID_SSID:
+			elems->ssid = NULL;
+			elems->ssid_len = 0;
+			break;
+		case WLAN_EID_SUPP_RATES:
+			elems->supp_rates = NULL;
+			elems->supp_rates_len = 0;
+			break;
+		case WLAN_EID_DS_PARAMS:
+			elems->ds_params = NULL;
+			break;
+		case WLAN_EID_CHALLENGE:
+			elems->challenge = NULL;
+			elems->challenge_len = 0;
+			break;
+		case WLAN_EID_ERP_INFO:
+			elems->erp_info = NULL;
+			break;
+		case WLAN_EID_EXT_SUPP_RATES:
+			elems->ext_supp_rates = NULL;
+			elems->ext_supp_rates_len = 0;
+			break;
+		case WLAN_EID_RSN:
+			elems->rsn_ie = NULL;
+			elems->rsn_ie_len = 0;
+			break;
+		case WLAN_EID_RSNX:
+			elems->rsnxe = NULL;
+			elems->rsnxe_len = 0;
+			break;
+		case WLAN_EID_PWR_CAPABILITY:
+			elems->power_capab = NULL;
+			elems->power_capab_len = 0;
+			break;
+		case WLAN_EID_SUPPORTED_CHANNELS:
+			elems->supp_channels = NULL;
+			elems->supp_channels_len = 0;
+			break;
+		case WLAN_EID_MOBILITY_DOMAIN:
+			elems->mdie = NULL;
+			elems->mdie_len = 0;
+			break;
+		case WLAN_EID_FAST_BSS_TRANSITION:
+			elems->ftie = NULL;
+			elems->ftie_len = 0;
+			break;
+		case WLAN_EID_TIMEOUT_INTERVAL:
+			elems->timeout_int = NULL;
+			break;
+		case WLAN_EID_HT_CAP:
+			elems->ht_capabilities = NULL;
+			break;
+		case WLAN_EID_HT_OPERATION:
+			elems->ht_operation = NULL;
+			break;
+		case WLAN_EID_MESH_CONFIG:
+			elems->mesh_config = NULL;
+			elems->mesh_config_len = 0;
+			break;
+		case WLAN_EID_MESH_ID:
+			elems->mesh_id = NULL;
+			elems->mesh_id_len = 0;
+			break;
+		case WLAN_EID_PEER_MGMT:
+			elems->peer_mgmt = NULL;
+			elems->peer_mgmt_len = 0;
+			break;
+		case WLAN_EID_VHT_CAP:
+			elems->vht_capabilities = NULL;
+			break;
+		case WLAN_EID_VHT_OPERATION:
+			elems->vht_operation = NULL;
+			break;
+		case WLAN_EID_VHT_OPERATING_MODE_NOTIFICATION:
+			elems->vht_opmode_notif = NULL;
+			break;
+		case WLAN_EID_LINK_ID:
+			elems->link_id = NULL;
+			break;
+		case WLAN_EID_INTERWORKING:
+			elems->interworking = NULL;
+			elems->interworking_len = 0;
+			break;
+		case WLAN_EID_QOS_MAP_SET:
+			elems->qos_map_set = NULL;
+			elems->qos_map_set_len = 0;
+			break;
+		case WLAN_EID_EXT_CAPAB:
+			elems->ext_capab = NULL;
+			elems->ext_capab_len = 0;
+			break;
+		case WLAN_EID_BSS_MAX_IDLE_PERIOD:
+			elems->bss_max_idle_period = NULL;
+			break;
+		case WLAN_EID_SSID_LIST:
+			elems->ssid_list = NULL;
+			elems->ssid_list_len = 0;
+			break;
+		case WLAN_EID_AMPE:
+			elems->ampe = NULL;
+			elems->ampe_len = 0;
+			break;
+		case WLAN_EID_MIC:
+			elems->mic = NULL;
+			elems->mic_len = 0;
+			break;
+		case WLAN_EID_MULTI_BAND:
+			os_memset(&elems->mb_ies, 0, sizeof(elems->mb_ies));
+			elems->mb_ies.nof_ies = 0;
+			break;
+		case WLAN_EID_SUPPORTED_OPERATING_CLASSES:
+			elems->supp_op_classes = NULL;
+			elems->supp_op_classes_len = 0;
+			break;
+		case WLAN_EID_RRM_ENABLED_CAPABILITIES:
+			elems->rrm_enabled = NULL;
+			elems->rrm_enabled_len = 0;
+			break;
+		case WLAN_EID_CAG_NUMBER:
+			elems->cag_number = NULL;
+			elems->cag_number_len = 0;
+			break;
+		case WLAN_EID_AP_CSN:
+			elems->ap_csn = NULL;
+			break;
+		case WLAN_EID_FILS_INDICATION:
+			elems->fils_indic = NULL;
+			elems->fils_indic_len = 0;
+			break;
+		case WLAN_EID_DILS:
+			elems->dils = NULL;
+			elems->dils_len = 0;
+			break;
+		case WLAN_EID_S1G_CAPABILITIES:
+			elems->s1g_capab = NULL;
+			break;
+		}
+	}
+}
+
+
+/**
+ * ieee802_11_elems_clear_ext_ids - Clear the data for the given element
+ * extension IDs
+ * @ids: Array of element extension IDs for which data should be cleared.
+ * @num: The number of entries in the array
+ */
+void ieee802_11_elems_clear_ext_ids(struct ieee802_11_elems *elems,
+				    const u8 *ids, size_t num)
+{
+	size_t i;
+
+	for (i = 0; i < num; i++) {
+		switch (ids[i]) {
+		case WLAN_EID_EXT_ASSOC_DELAY_INFO:
+			elems->assoc_delay_info = NULL;
+			break;
+		case WLAN_EID_EXT_FILS_REQ_PARAMS:
+			elems->fils_req_params = NULL;
+			elems->fils_req_params_len = 0;
+			break;
+		case WLAN_EID_EXT_FILS_KEY_CONFIRM:
+			elems->fils_key_confirm = NULL;
+			elems->fils_key_confirm_len = 0;
+			break;
+		case WLAN_EID_EXT_FILS_SESSION:
+			elems->fils_session = NULL;
+			break;
+		case WLAN_EID_EXT_FILS_HLP_CONTAINER:
+			elems->fils_hlp = NULL;
+			elems->fils_hlp_len = 0;
+			break;
+		case WLAN_EID_EXT_FILS_IP_ADDR_ASSIGN:
+			elems->fils_ip_addr_assign = NULL;
+			elems->fils_ip_addr_assign_len = 0;
+			break;
+		case WLAN_EID_EXT_KEY_DELIVERY:
+			elems->key_delivery = NULL;
+			elems->key_delivery_len = 0;
+			break;
+		case WLAN_EID_EXT_WRAPPED_DATA:
+			elems->wrapped_data = NULL;
+			elems->wrapped_data_len = 0;
+			break;
+		case WLAN_EID_EXT_FILS_PUBLIC_KEY:
+			elems->fils_pk = NULL;
+			elems->fils_pk_len = 0;
+			break;
+		case WLAN_EID_EXT_FILS_NONCE:
+			elems->fils_nonce = NULL;
+			break;
+		case WLAN_EID_EXT_OWE_DH_PARAM:
+			elems->owe_dh = NULL;
+			elems->owe_dh_len = 0;
+			break;
+		case WLAN_EID_EXT_PASSWORD_IDENTIFIER:
+			elems->password_id = NULL;
+			elems->password_id_len = 0;
+			break;
+		case WLAN_EID_EXT_HE_CAPABILITIES:
+			elems->he_capabilities = NULL;
+			elems->he_capabilities_len = 0;
+			break;
+		case WLAN_EID_EXT_HE_OPERATION:
+			elems->he_operation = NULL;
+			elems->he_operation_len = 0;
+			break;
+		case WLAN_EID_EXT_OCV_OCI:
+			elems->oci = NULL;
+			elems->oci_len = 0;
+			break;
+		case WLAN_EID_EXT_SHORT_SSID_LIST:
+			elems->short_ssid_list = NULL;
+			elems->short_ssid_list_len = 0;
+			break;
+		case WLAN_EID_EXT_HE_6GHZ_BAND_CAP:
+			elems->he_6ghz_band_cap = NULL;
+			break;
+		case WLAN_EID_EXT_PASN_PARAMS:
+			elems->pasn_params = NULL;
+			elems->pasn_params_len = 0;
+			break;
+		case WLAN_EID_EXT_MULTI_LINK:
+			elems->basic_mle = NULL;
+			elems->probe_req_mle = NULL;
+			elems->reconf_mle = NULL;
+			elems->tdls_mle = NULL;
+			elems->prior_access_mle = NULL;
+
+			elems->basic_mle_len = 0;
+			elems->probe_req_mle_len = 0;
+			elems->reconf_mle_len = 0;
+			elems->tdls_mle_len = 0;
+			elems->prior_access_mle_len = 0;
+			break;
+		case WLAN_EID_EXT_EHT_CAPABILITIES:
+			elems->eht_capabilities = NULL;
+			elems->eht_capabilities_len = 0;
+			break;
+		case WLAN_EID_EXT_EHT_OPERATION:
+			elems->eht_operation = NULL;
+			elems->eht_operation_len = 0;
+			break;
+		}
+	}
+}
+
+
+ParseRes ieee802_11_parse_link_assoc_req(const u8 *start, size_t len,
+					 struct ieee802_11_elems *elems,
+					 struct wpabuf *mlbuf,
+					 u8 link_id, bool show_errors)
+{
+	const struct ieee80211_eht_ml *ml;
+	const u8 *pos;
+	ParseRes res = ParseFailed;
+
+	pos = wpabuf_head(mlbuf);
+	len = wpabuf_len(mlbuf);
+
+	/* Must have control and common info length */
+	if (len < sizeof(*ml) + 1 || len < sizeof(*ml) + pos[sizeof(*ml)])
+		goto out;
+
+	ml = (const struct ieee80211_eht_ml *) pos;
+
+	/* As we are interested with the Per-STA profile, ignore other types */
+	if ((le_to_host16(ml->ml_control) & MULTI_LINK_CONTROL_TYPE_MASK) !=
+	     MULTI_LINK_CONTROL_TYPE_BASIC)
+		goto out;
+
+	/* Skip the common info */
+	len -= sizeof(*ml) + pos[sizeof(*ml)];
+	pos += sizeof(*ml) + pos[sizeof(*ml)];
+
+	while (len > 2) {
+		size_t sub_elem_len = *(pos + 1);
+		size_t sta_info_len;
+		u16 link_info_control;
+		const u8 *non_inherit;
+
+		wpa_printf(MSG_DEBUG,
+			   "MLD: sub element: len=%zu, sub_elem_len=%zu",
+			   len, sub_elem_len);
+
+		if (2 + sub_elem_len > len) {
+			if (show_errors)
+				wpa_printf(MSG_DEBUG,
+					   "MLD: error: len=%zu, sub_elem_len=%zu",
+					   len, sub_elem_len);
+			goto out;
+		}
+
+		if (*pos != 0) {
+			pos += 2 + sub_elem_len;
+			len -= 2 + sub_elem_len;
+			continue;
+		}
+
+		if (sub_elem_len < 3) {
+			if (show_errors)
+				wpa_printf(MSG_DEBUG,
+					   "MLD: error: sub_elem_len=%zu < 5",
+					   sub_elem_len);
+			goto out;
+		}
+
+		link_info_control = WPA_GET_LE16(pos + 2);
+		if ((link_info_control & BASIC_MLE_STA_CTRL_LINK_ID_MASK) !=
+		    link_id) {
+			pos += 2 + sub_elem_len;
+			len -= 2 + sub_elem_len;
+			continue;
+		}
+
+		sta_info_len = *(pos + 4);
+		if (sub_elem_len < sta_info_len + 3 || sta_info_len < 1) {
+			if (show_errors)
+				wpa_printf(MSG_DEBUG,
+					   "MLD: error: sub_elem_len=%zu, sta_info_len=%zu",
+					   sub_elem_len, sta_info_len);
+			goto out;
+		}
+
+		pos += sta_info_len + 4;
+		sub_elem_len -= sta_info_len + 2;
+
+		if (sub_elem_len < 2) {
+			if (show_errors)
+				wpa_printf(MSG_DEBUG,
+					   "MLD: missing capability info");
+			goto out;
+		}
+
+		pos += 2;
+		sub_elem_len -= 2;
+
+		/* Handle non-inheritance */
+		non_inherit = get_ie_ext(pos, sub_elem_len,
+					 WLAN_EID_EXT_NON_INHERITANCE);
+		if (non_inherit && non_inherit[1] > 1) {
+			u8 non_inherit_len = non_inherit[1] - 1;
+
+			/*
+			 * Do not include the Non-Inheritance element when
+			 * parsing below. It should be the last element in the
+			 * subelement.
+			 */
+			if (3U + non_inherit_len > sub_elem_len)
+				goto out;
+			sub_elem_len -= 3 + non_inherit_len;
+
+			/* Skip the ID, length and extension ID */
+			non_inherit += 3;
+
+			if (non_inherit_len < 1UL + non_inherit[0]) {
+				if (show_errors)
+					wpa_printf(MSG_DEBUG,
+						   "MLD: Invalid inheritance");
+				goto out;
+			}
+
+			ieee802_11_elems_clear_ids(elems, &non_inherit[1],
+						   non_inherit[0]);
+
+			non_inherit_len -= 1 + non_inherit[0];
+			non_inherit += 1 + non_inherit[0];
+
+			if (non_inherit_len < 1UL + non_inherit[0]) {
+				if (show_errors)
+					wpa_printf(MSG_DEBUG,
+						   "MLD: Invalid inheritance");
+				goto out;
+			}
+
+			ieee802_11_elems_clear_ext_ids(elems, &non_inherit[1],
+						       non_inherit[0]);
+		}
+
+		wpa_printf(MSG_DEBUG, "MLD: link: sub_elem_len=%zu",
+			   sub_elem_len);
+
+		if (sub_elem_len)
+			res = __ieee802_11_parse_elems(pos, sub_elem_len,
+						       elems, show_errors);
+		else
+			res = ParseOK;
+		break;
+	}
+
+out:
+	return res;
 }
 
 
@@ -1383,6 +1798,7 @@ static int ieee80211_chan_to_freq_eu(u8 op_class, u8 chan)
 
 static int ieee80211_chan_to_freq_jp(u8 op_class, u8 chan)
 {
+	/* Table E-3 in IEEE Std 802.11-2020 - Operating classes in Japan */
 	switch (op_class) {
 	case 30: /* channels 1..13 */
 	case 56: /* channels 1..9; 40 MHz */
@@ -1406,14 +1822,14 @@ static int ieee80211_chan_to_freq_jp(u8 op_class, u8 chan)
 		if (chan < 34 || chan > 64)
 			return -1;
 		return 5000 + 5 * chan;
-	case 34: /* channels 100-140 */
-	case 35: /* channels 100-140 */
-	case 39: /* channels 100-132; 40 MHz */
-	case 40: /* channels 100-132; 40 MHz */
-	case 44: /* channels 104-136; 40 MHz */
-	case 45: /* channels 104-136; 40 MHz */
-	case 58: /* channels 100-140 */
-		if (chan < 100 || chan > 140)
+	case 34: /* channels 100-144 */
+	case 35: /* reserved */
+	case 39: /* channels 100-140; 40 MHz */
+	case 40: /* reserved */
+	case 44: /* channels 104-144; 40 MHz */
+	case 45: /* reserved */
+	case 58: /* channels 100-144 */
+		if (chan < 100 || chan > 144)
 			return -1;
 		return 5000 + 5 * chan;
 	case 59: /* 60 GHz band, channels 1..6 */
@@ -1465,7 +1881,7 @@ static int ieee80211_chan_to_freq_cn(u8 op_class, u8 chan)
 
 static int ieee80211_chan_to_freq_global(u8 op_class, u8 chan)
 {
-	/* Table E-4 in IEEE Std 802.11-2012 - Global operating classes */
+	/* Table E-4 in IEEE Std 802.11-2020 - Global operating classes */
 	switch (op_class) {
 	case 81:
 		/* channels 1..13 */
@@ -1491,10 +1907,10 @@ static int ieee80211_chan_to_freq_global(u8 op_class, u8 chan)
 		if (chan < 36 || chan > 64)
 			return -1;
 		return 5000 + 5 * chan;
-	case 121: /* channels 100-140 */
-	case 122: /* channels 100-142; 40 MHz */
-	case 123: /* channels 104-136; 40 MHz */
-		if (chan < 100 || chan > 140)
+	case 121: /* channels 100-144 */
+	case 122: /* channels 100-140; 40 MHz */
+	case 123: /* channels 104-144; 40 MHz */
+		if (chan < 100 || chan > 144)
 			return -1;
 		return 5000 + 5 * chan;
 	case 124: /* channels 149,153,157,161 */
@@ -1595,7 +2011,7 @@ int ieee80211_is_dfs(int freq, const struct hostapd_hw_modes *modes,
 
 	if (!modes || !num_modes)
 		return (freq >= 5260 && freq <= 5320) ||
-			(freq >= 5500 && freq <= 5700);
+			(freq >= 5500 && freq <= 5720);
 
 	for (i = 0; i < num_modes; i++) {
 		for (j = 0; j < modes[i].num_channels; j++) {
@@ -1616,6 +2032,13 @@ int ieee80211_is_dfs(int freq, const struct hostapd_hw_modes *modes,
 int is_dfs_global_op_class(u8 op_class)
 {
     return (op_class >= 118) && (op_class <= 123);
+}
+
+
+bool is_80plus_op_class(u8 op_class)
+{
+	/* Operating classes with "80+" behavior indication in Table E-4 */
+	return op_class == 130 || op_class == 135;
 }
 
 
@@ -1965,9 +2388,9 @@ const struct oper_class_map global_op_class[] = {
 	{ HOSTAPD_MODE_IEEE80211A, 118, 52, 64, 4, BW20, NO_P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 119, 52, 60, 8, BW40PLUS, NO_P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 120, 56, 64, 8, BW40MINUS, NO_P2P_SUPP },
-	{ HOSTAPD_MODE_IEEE80211A, 121, 100, 140, 4, BW20, NO_P2P_SUPP },
-	{ HOSTAPD_MODE_IEEE80211A, 122, 100, 132, 8, BW40PLUS, NO_P2P_SUPP },
-	{ HOSTAPD_MODE_IEEE80211A, 123, 104, 136, 8, BW40MINUS, NO_P2P_SUPP },
+	{ HOSTAPD_MODE_IEEE80211A, 121, 100, 144, 4, BW20, NO_P2P_SUPP },
+	{ HOSTAPD_MODE_IEEE80211A, 122, 100, 140, 8, BW40PLUS, NO_P2P_SUPP },
+	{ HOSTAPD_MODE_IEEE80211A, 123, 104, 144, 8, BW40MINUS, NO_P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 124, 149, 161, 4, BW20, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 125, 149, 177, 4, BW20, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 126, 149, 173, 8, BW40PLUS, P2P_SUPP },
@@ -1983,15 +2406,26 @@ const struct oper_class_map global_op_class[] = {
 	 * channel center frequency index value, but it happens to be a 20 MHz
 	 * channel and the channel number in the channel set would match the
 	 * value in for the frequency center.
+	 *
+	 * Operating class value pair 128 and 130 is used to describe a 80+80
+	 * MHz channel on the 5 GHz band. 130 is identified with "80+", so this
+	 * is encoded with two octets 130 and 128. Similarly, operating class
+	 * value pair 133 and 135 is used to describe a 80+80 MHz channel on
+	 * the 6 GHz band (135 being the one with "80+" indication). All other
+	 * operating classes listed here are used as 1-octet values.
 	 */
 	{ HOSTAPD_MODE_IEEE80211A, 128, 36, 177, 4, BW80, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 129, 36, 177, 4, BW160, P2P_SUPP },
+	{ HOSTAPD_MODE_IEEE80211A, 130, 36, 177, 4, BW80P80, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 131, 1, 233, 4, BW20, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 132, 1, 233, 8, BW40, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 133, 1, 233, 16, BW80, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 134, 1, 233, 32, BW160, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 135, 1, 233, 16, BW80P80, NO_P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 136, 2, 2, 4, BW20, NO_P2P_SUPP },
+
+	/* IEEE P802.11be/D5.0, Table E-4 (Global operating classes) */
+	{ HOSTAPD_MODE_IEEE80211A, 137, 31, 191, 32, BW320, NO_P2P_SUPP },
 
 	/*
 	 * IEEE Std 802.11ad-2012 and P802.ay/D5.0 60 GHz operating classes.
@@ -2003,11 +2437,6 @@ const struct oper_class_map global_op_class[] = {
 	{ HOSTAPD_MODE_IEEE80211AD, 182, 17, 20, 1, BW6480, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211AD, 183, 25, 27, 1, BW8640, P2P_SUPP },
 
-	/* Keep the operating class 130 as the last entry as a workaround for
-	 * the OneHundredAndThirty Delimiter value used in the Supported
-	 * Operating Classes element to indicate the end of the Operating
-	 * Classes field. */
-	{ HOSTAPD_MODE_IEEE80211A, 130, 36, 177, 4, BW80P80, P2P_SUPP },
 	{ -1, 0, 0, 0, 0, BW20, NO_P2P_SUPP }
 };
 
@@ -2314,6 +2743,8 @@ int oper_class_bw_to_int(const struct oper_class_map *map)
 	case BW80P80:
 	case BW160:
 		return 160;
+	case BW320:
+		return 320;
 	case BW2160:
 		return 2160;
 	default:
@@ -2642,10 +3073,10 @@ int op_class_to_bandwidth(u8 op_class)
 	case 119: /* channels 52,60; 40 MHz; dfs */
 	case 120: /* channels 56,64; 40 MHz; dfs */
 		return 40;
-	case 121: /* channels 100-140 */
+	case 121: /* channels 100-144 */
 		return 20;
-	case 122: /* channels 100-142; 40 MHz */
-	case 123: /* channels 104-136; 40 MHz */
+	case 122: /* channels 100-140; 40 MHz */
+	case 123: /* channels 104-144; 40 MHz */
 		return 40;
 	case 124: /* channels 149,153,157,161 */
 	case 125: /* channels 149,153,157,161,165,169,173,177 */
@@ -2705,10 +3136,10 @@ enum oper_chan_width op_class_to_ch_width(u8 op_class)
 	case 119: /* channels 52,60; 40 MHz; dfs */
 	case 120: /* channels 56,64; 40 MHz; dfs */
 		return CONF_OPER_CHWIDTH_USE_HT;
-	case 121: /* channels 100-140 */
+	case 121: /* channels 100-144 */
 		return CONF_OPER_CHWIDTH_USE_HT;
-	case 122: /* channels 100-142; 40 MHz */
-	case 123: /* channels 104-136; 40 MHz */
+	case 122: /* channels 100-140; 40 MHz */
+	case 123: /* channels 104-144; 40 MHz */
 		return CONF_OPER_CHWIDTH_USE_HT;
 	case 124: /* channels 149,153,157,161 */
 	case 125: /* channels 149,153,157,161,165,169,171 */

@@ -95,45 +95,108 @@ static void ieee802_1x_send(struct hostapd_data *hapd, struct sta_info *sta,
 	if (sta->flags & WLAN_STA_PREAUTH) {
 		rsn_preauth_send(hapd, sta, buf, len);
 	} else {
+		int link_id = -1;
+
+#ifdef CONFIG_IEEE80211BE
+		link_id = hapd->conf->mld_ap ? hapd->mld_link_id : -1;
+#endif /* CONFIG_IEEE80211BE */
 		hostapd_drv_hapd_send_eapol(
 			hapd, sta->addr, buf, len,
-			encrypt, hostapd_sta_flags_to_drv(sta->flags));
+			encrypt, hostapd_sta_flags_to_drv(sta->flags), link_id);
 	}
 
 	os_free(buf);
 }
 
 
-void ieee802_1x_set_sta_authorized(struct hostapd_data *hapd,
-				   struct sta_info *sta, int authorized)
+static void ieee802_1x_set_authorized(struct hostapd_data *hapd,
+				      struct sta_info *sta,
+				      bool authorized, bool mld)
 {
 	int res;
 
 	if (sta->flags & WLAN_STA_PREAUTH)
 		return;
 
-	if (authorized) {
-		ap_sta_set_authorized(hapd, sta, 1);
-		res = hostapd_set_authorized(hapd, sta, 1);
-		hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE8021X,
-			       HOSTAPD_LEVEL_DEBUG, "authorizing port");
-	} else {
-		ap_sta_set_authorized(hapd, sta, 0);
-		res = hostapd_set_authorized(hapd, sta, 0);
-		hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE8021X,
-			       HOSTAPD_LEVEL_DEBUG, "unauthorizing port");
-	}
+	ap_sta_set_authorized(hapd, sta, authorized);
+	res = hostapd_set_authorized(hapd, sta, authorized);
+	hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE8021X,
+		       HOSTAPD_LEVEL_DEBUG, "%sauthorizing port",
+		       authorized ? "" : "un");
 
-	if (res && errno != ENOENT) {
+	if (!mld && res && errno != ENOENT) {
 		wpa_printf(MSG_DEBUG, "Could not set station " MACSTR
 			   " flags for kernel driver (errno=%d).",
 			   MAC2STR(sta->addr), errno);
+	} else if (mld && res) {
+		wpa_printf(MSG_DEBUG,
+			   "MLD: Could not set station " MACSTR " flags",
+			   MAC2STR(sta->addr));
 	}
 
 	if (authorized) {
 		os_get_reltime(&sta->connected_time);
 		accounting_sta_start(hapd, sta);
 	}
+}
+
+
+static void ieee802_1x_ml_set_sta_authorized(struct hostapd_data *hapd,
+					     struct sta_info *sta,
+					     bool authorized)
+{
+#ifdef CONFIG_IEEE80211BE
+	unsigned int i, link_id;
+
+	if (!hostapd_is_mld_ap(hapd))
+		return;
+
+	/*
+	 * Authorizing the station should be done only in the station
+	 * performing the association
+	 */
+	if (authorized && hapd->mld_link_id != sta->mld_assoc_link_id)
+		return;
+
+	for (link_id = 0; link_id < MAX_NUM_MLD_LINKS; link_id++) {
+		struct mld_link_info *link = &sta->mld_info.links[link_id];
+
+		if (!link->valid)
+			continue;
+
+		for (i = 0; i < hapd->iface->interfaces->count; i++) {
+			struct sta_info *tmp_sta;
+			struct hostapd_data *tmp_hapd =
+				hapd->iface->interfaces->iface[i]->bss[0];
+
+			if (tmp_hapd->conf->mld_ap ||
+			    hapd->conf->mld_id != tmp_hapd->conf->mld_id)
+				continue;
+
+			for (tmp_sta = tmp_hapd->sta_list; tmp_sta;
+			     tmp_sta = tmp_sta->next) {
+				if (tmp_sta == sta ||
+				    tmp_sta->mld_assoc_link_id !=
+				    sta->mld_assoc_link_id ||
+				    tmp_sta->aid != sta->aid)
+					continue;
+
+				ieee802_1x_set_authorized(tmp_hapd, tmp_sta,
+							  authorized, true);
+				break;
+			}
+		}
+	}
+#endif /* CONFIG_IEEE80211BE */
+}
+
+
+
+void ieee802_1x_set_sta_authorized(struct hostapd_data *hapd,
+				   struct sta_info *sta, int authorized)
+{
+	ieee802_1x_set_authorized(hapd, sta, authorized, false);
+	ieee802_1x_ml_set_sta_authorized(hapd, sta, !!authorized);
 }
 
 
@@ -998,7 +1061,7 @@ ieee802_1x_alloc_eapol_sm(struct hostapd_data *hapd, struct sta_info *sta)
 
 
 static void ieee802_1x_save_eapol(struct sta_info *sta, const u8 *buf,
-				  size_t len)
+				  size_t len, enum frame_encryption encrypted)
 {
 	if (sta->pending_eapol_rx) {
 		wpabuf_free(sta->pending_eapol_rx->buf);
@@ -1016,6 +1079,7 @@ static void ieee802_1x_save_eapol(struct sta_info *sta, const u8 *buf,
 		return;
 	}
 
+	sta->pending_eapol_rx->encrypted = encrypted;
 	os_get_reltime(&sta->pending_eapol_rx->rx_time);
 }
 
@@ -1026,11 +1090,12 @@ static void ieee802_1x_save_eapol(struct sta_info *sta, const u8 *buf,
  * @sa: Source address (sender of the EAPOL frame)
  * @buf: EAPOL frame
  * @len: Length of buf in octets
+ * @encrypted: Whether the frame was encrypted
  *
  * This function is called for each incoming EAPOL frame from the interface
  */
 void ieee802_1x_receive(struct hostapd_data *hapd, const u8 *sa, const u8 *buf,
-			size_t len)
+			size_t len, enum frame_encryption encrypted)
 {
 	struct sta_info *sta;
 	struct ieee802_1x_hdr *hdr;
@@ -1043,8 +1108,9 @@ void ieee802_1x_receive(struct hostapd_data *hapd, const u8 *sa, const u8 *buf,
 	    !hapd->conf->wps_state)
 		return;
 
-	wpa_printf(MSG_DEBUG, "IEEE 802.1X: %lu bytes from " MACSTR,
-		   (unsigned long) len, MAC2STR(sa));
+	wpa_printf(MSG_DEBUG, "IEEE 802.1X: %lu bytes from " MACSTR
+		   " (encrypted=%d)",
+		   (unsigned long) len, MAC2STR(sa), encrypted);
 	sta = ap_get_sta(hapd, sa);
 	if (!sta || (!(sta->flags & (WLAN_STA_ASSOC | WLAN_STA_PREAUTH)) &&
 		     !(hapd->iface->drv_flags & WPA_DRIVER_FLAGS_WIRED))) {
@@ -1054,7 +1120,7 @@ void ieee802_1x_receive(struct hostapd_data *hapd, const u8 *sa, const u8 *buf,
 		if (sta && (sta->flags & WLAN_STA_AUTH)) {
 			wpa_printf(MSG_DEBUG, "Saving EAPOL frame from " MACSTR
 				   " for later use", MAC2STR(sta->addr));
-			ieee802_1x_save_eapol(sta, buf, len);
+			ieee802_1x_save_eapol(sta, buf, len, encrypted);
 		}
 
 		return;
@@ -2434,6 +2500,14 @@ int ieee802_1x_init(struct hostapd_data *hapd)
 	struct eapol_auth_config conf;
 	struct eapol_auth_cb cb;
 
+	if (hapd->mld_first_bss) {
+		wpa_printf(MSG_DEBUG,
+			   "MLD: Using IEEE 802.1X state machine of the first BSS");
+
+		hapd->eapol_auth = hapd->mld_first_bss->eapol_auth;
+		return 0;
+	}
+
 	dl_list_init(&hapd->erp_keys);
 
 	os_memset(&conf, 0, sizeof(conf));
@@ -2518,6 +2592,14 @@ void ieee802_1x_erp_flush(struct hostapd_data *hapd)
 
 void ieee802_1x_deinit(struct hostapd_data *hapd)
 {
+	if (hapd->mld_first_bss) {
+		wpa_printf(MSG_DEBUG,
+			   "MLD: Deinit IEEE 802.1X state machine of a non-first BSS");
+
+		hapd->eapol_auth = NULL;
+		return;
+	}
+
 #ifdef CONFIG_WEP
 	eloop_cancel_timeout(ieee802_1x_rekey, hapd, NULL);
 #endif /* CONFIG_WEP */

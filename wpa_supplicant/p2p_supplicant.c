@@ -3775,13 +3775,7 @@ static enum chan_allowed wpas_p2p_verify_80mhz(struct wpa_supplicant *wpa_s,
 		if (res == NO_IR)
 			ret = NO_IR;
 		if (!is_6ghz) {
-			if (i == 0 && !(flags & HOSTAPD_CHAN_VHT_10_70))
-				return NOT_ALLOWED;
-			if (i == 1 && !(flags & HOSTAPD_CHAN_VHT_30_50))
-				return NOT_ALLOWED;
-			if (i == 2 && !(flags & HOSTAPD_CHAN_VHT_50_30))
-				return NOT_ALLOWED;
-			if (i == 3 && !(flags & HOSTAPD_CHAN_VHT_70_10))
+			if (!(flags & HOSTAPD_CHAN_VHT_80MHZ_SUBCHANNEL))
 				return NOT_ALLOWED;
 		} else if (is_6ghz &&
 			   (!(wpas_get_6ghz_he_chwidth_capab(mode) &
@@ -3859,21 +3853,8 @@ static enum chan_allowed wpas_p2p_verify_160mhz(struct wpa_supplicant *wpa_s,
 			ret = NO_IR;
 
 		if (!is_6ghz_op_class(op_class)) {
-			if (i == 0 && !(flags & HOSTAPD_CHAN_VHT_10_150))
-				return NOT_ALLOWED;
-			if (i == 1 && !(flags & HOSTAPD_CHAN_VHT_30_130))
-				return NOT_ALLOWED;
-			if (i == 2 && !(flags & HOSTAPD_CHAN_VHT_50_110))
-				return NOT_ALLOWED;
-			if (i == 3 && !(flags & HOSTAPD_CHAN_VHT_70_90))
-				return NOT_ALLOWED;
-			if (i == 4 && !(flags & HOSTAPD_CHAN_VHT_90_70))
-				return NOT_ALLOWED;
-			if (i == 5 && !(flags & HOSTAPD_CHAN_VHT_110_50))
-				return NOT_ALLOWED;
-			if (i == 6 && !(flags & HOSTAPD_CHAN_VHT_130_30))
-				return NOT_ALLOWED;
-			if (i == 7 && !(flags & HOSTAPD_CHAN_VHT_150_10))
+			if (!(flags & HOSTAPD_CHAN_VHT_80MHZ_SUBCHANNEL) ||
+			    !(flags & HOSTAPD_CHAN_VHT_160MHZ_SUBCHANNEL))
 				return NOT_ALLOWED;
 		} else if (is_6ghz_op_class(op_class) &&
 			   (!(wpas_get_6ghz_he_chwidth_capab(mode) &
@@ -9797,6 +9778,7 @@ static int wpas_p2p_move_go_csa(struct wpa_supplicant *wpa_s)
 	os_memset(&csa_settings, 0, sizeof(csa_settings));
 	csa_settings.cs_count = P2P_GO_CSA_COUNT;
 	csa_settings.block_tx = P2P_GO_CSA_BLOCK_TX;
+	csa_settings.link_id = -1;
 	csa_settings.freq_params.freq = params.freq;
 	csa_settings.freq_params.sec_channel_offset = conf->secondary_channel;
 	csa_settings.freq_params.ht_enabled = conf->ieee80211n;

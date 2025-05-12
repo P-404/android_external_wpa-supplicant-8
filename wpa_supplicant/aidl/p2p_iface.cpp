@@ -1348,6 +1348,9 @@ ndk::ScopedAStatus P2pIface::provisionDiscoveryInternal(
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
 	p2ps_provision* prov_param;
 	const char* config_method_str = nullptr;
+	if (peer_address.size() != ETH_ALEN) {
+		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
+	}
 	switch (provision_method) {
 	case WpsProvisionMethod::PBC:
 		config_method_str = kConfigMethodStrPbc;
@@ -1403,7 +1406,7 @@ ndk::ScopedAStatus P2pIface::inviteInternal(
 	const std::vector<uint8_t>& peer_address)
 {
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
-	if (peer_address.size() != ETH_ALEN) {
+	if (go_device_address.size() != ETH_ALEN || peer_address.size() != ETH_ALEN) {
 		return {createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
 	}
 	if (wpas_p2p_invite_group(
@@ -1492,6 +1495,10 @@ std::pair<std::vector<uint8_t>, ndk::ScopedAStatus> P2pIface::getSsidInternal(
 	const std::vector<uint8_t>& peer_address)
 {
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
+	if (peer_address.size() != ETH_ALEN) {
+		return {std::vector<uint8_t>(),
+			createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
+	}
 	const struct p2p_peer_info* info =
 		p2p_get_peer_info(wpa_s->global->p2p, peer_address.data(), 0);
 	if (!info) {
@@ -1514,6 +1521,10 @@ std::pair<P2pGroupCapabilityMask, ndk::ScopedAStatus> P2pIface::getGroupCapabili
 	const std::vector<uint8_t>& peer_address)
 {
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
+	if (peer_address.size() != ETH_ALEN) {
+		return {static_cast<P2pGroupCapabilityMask>(0),
+			createStatus(SupplicantStatusCode::FAILURE_UNKNOWN)};
+	}
 	const struct p2p_peer_info* info =
 		p2p_get_peer_info(wpa_s->global->p2p, peer_address.data(), 0);
 	if (!info) {
@@ -1951,6 +1962,11 @@ ndk::ScopedAStatus P2pIface::addGroupWithConfigInternal(
 	// The rest is for group join.
 	wpa_printf(MSG_DEBUG, "P2P: Stop any on-going P2P FIND before group join.");
 	wpas_p2p_stop_find(wpa_s);
+
+	if (peer_address.size() != ETH_ALEN) {
+		return createStatusWithMsg(SupplicantStatusCode::FAILURE_ARGS_INVALID,
+			"Peer address is invalid.");
+	}
 
 	if (pending_scan_res_join_callback != NULL) {
 		wpa_printf(MSG_WARNING, "P2P: Renew scan result callback with new request.");

@@ -186,6 +186,14 @@ typedef enum { ParseOK = 0, ParseUnknown = 1, ParseFailed = -1 } ParseRes;
 ParseRes ieee802_11_parse_elems(const u8 *start, size_t len,
 				struct ieee802_11_elems *elems,
 				int show_errors);
+void ieee802_11_elems_clear_ids(struct ieee802_11_elems *elems,
+				const u8 *ids, size_t num);
+void ieee802_11_elems_clear_ext_ids(struct ieee802_11_elems *elems,
+				    const u8 *ids, size_t num);
+ParseRes ieee802_11_parse_link_assoc_req(const u8 *start, size_t len,
+					 struct ieee802_11_elems *elems,
+					 struct wpabuf *mlbuf,
+					 u8 link_id, bool show_errors);
 int ieee802_11_ie_count(const u8 *ies, size_t ies_len);
 struct wpabuf * ieee802_11_vendor_ie_concat(const u8 *ies, size_t ies_len,
 					    u32 oui_type);
@@ -225,6 +233,7 @@ int ieee80211_chaninfo_to_channel(unsigned int freq, enum chan_width chanwidth,
 int ieee80211_is_dfs(int freq, const struct hostapd_hw_modes *modes,
 		     u16 num_modes);
 int is_dfs_global_op_class(u8 op_class);
+bool is_80plus_op_class(u8 op_class);
 enum phy_type ieee80211_get_phy_type(int freq, int ht, int vht);
 
 int supp_rates_11b_only(struct ieee802_11_elems *elems);
@@ -243,7 +252,7 @@ struct oper_class_map {
 	u8 max_chan;
 	u8 inc;
 	enum { BW20, BW40PLUS, BW40MINUS, BW40, BW80, BW2160, BW160, BW80P80,
-	       BW4320, BW6480, BW8640} bw;
+	       BW320, BW4320, BW6480, BW8640} bw;
 	enum { P2P_SUPP, NO_P2P_SUPP } p2p;
 };
 

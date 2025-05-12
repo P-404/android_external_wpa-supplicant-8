@@ -60,6 +60,9 @@ static inline int wpa_drv_associate(struct wpa_supplicant *wpa_s,
 				    struct wpa_driver_associate_params *params)
 {
 	if (wpa_s->driver->associate) {
+		if (params)
+			params->freq.link_id = -1;
+
 		return wpa_s->driver->associate(wpa_s->drv_priv, params);
 	}
 	return -1;
@@ -199,7 +202,7 @@ static inline int wpa_drv_sta_deauth(struct wpa_supplicant *wpa_s,
 	if (wpa_s->driver->sta_deauth) {
 		return wpa_s->driver->sta_deauth(wpa_s->drv_priv,
 						 wpa_s->own_addr, addr,
-						 reason_code);
+						 reason_code, -1);
 	}
 	return -1;
 }
@@ -325,7 +328,7 @@ static inline int wpa_drv_send_mlme(struct wpa_supplicant *wpa_s,
 	if (wpa_s->driver->send_mlme)
 		return wpa_s->driver->send_mlme(wpa_s->drv_priv,
 						data, data_len, noack,
-						freq, NULL, 0, 0, wait);
+						freq, NULL, 0, 0, wait, -1);
 	return -1;
 }
 
@@ -350,8 +353,11 @@ static inline int wpa_drv_set_ap(struct wpa_supplicant *wpa_s,
 static inline int wpa_drv_sta_add(struct wpa_supplicant *wpa_s,
 				  struct hostapd_sta_add_params *params)
 {
-	if (wpa_s->driver->sta_add)
+	if (wpa_s->driver->sta_add) {
+		/* Set link_id to -1 as it's needed for AP only */
+		params->mld_link_id = -1;
 		return wpa_s->driver->sta_add(wpa_s->drv_priv, params);
+	}
 	return -1;
 }
 
@@ -371,7 +377,7 @@ static inline int wpa_drv_tx_control_port(struct wpa_supplicant *wpa_s,
 	if (!wpa_s->driver->tx_control_port)
 		return -1;
 	return wpa_s->driver->tx_control_port(wpa_s->drv_priv, dest, proto,
-					      buf, len, no_encrypt);
+					      buf, len, no_encrypt, -1);
 }
 
 static inline int wpa_drv_hapd_send_eapol(struct wpa_supplicant *wpa_s,
@@ -382,7 +388,7 @@ static inline int wpa_drv_hapd_send_eapol(struct wpa_supplicant *wpa_s,
 	if (wpa_s->driver->hapd_send_eapol)
 		return wpa_s->driver->hapd_send_eapol(wpa_s->drv_priv, addr,
 						      data, data_len, encrypt,
-						      own_addr, flags);
+						      own_addr, flags, -1);
 	return -1;
 }
 
@@ -1087,6 +1093,10 @@ static inline int wpa_drv_update_connect_params(
 {
 	if (!wpa_s->driver->update_connect_params)
 		return -1;
+
+	if (params)
+		params->freq.link_id = -1;
+
 	return wpa_s->driver->update_connect_params(wpa_s->drv_priv, params,
 						    mask);
 }

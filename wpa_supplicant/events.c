@@ -393,7 +393,7 @@ void wpa_supplicant_mark_disassoc(struct wpa_supplicant *wpa_s)
 }
 
 
-static void wpa_find_assoc_pmkid(struct wpa_supplicant *wpa_s, bool authorized)
+static void wpa_find_assoc_pmkid(struct wpa_supplicant *wpa_s)
 {
 	struct wpa_ie_data ie;
 	int pmksa_set = -1;
@@ -417,8 +417,7 @@ static void wpa_find_assoc_pmkid(struct wpa_supplicant *wpa_s, bool authorized)
 						    NULL, NULL, 0, NULL, 0);
 		if (pmksa_set == 0) {
 			eapol_sm_notify_pmkid_attempt(wpa_s->eapol);
-			if (authorized)
-				wpa_sm_set_pmk_from_pmksa(wpa_s->wpa);
+			wpa_sm_set_pmk_from_pmksa(wpa_s->wpa);
 			break;
 		}
 	}
@@ -610,8 +609,7 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 #ifdef CONFIG_WEP
 	int wep_ok;
 #endif /* CONFIG_WEP */
-	bool is_6ghz_bss_or_mld = is_6ghz_freq(bss->freq) ||
-		!is_zero_ether_addr(bss->mld_addr);
+	bool is_6ghz_bss = is_6ghz_freq(bss->freq);
 
 	ret = wpas_wps_ssid_bss_match(wpa_s, ssid, bss);
 	if (ret >= 0)
@@ -626,10 +624,10 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_WEP */
 
 	rsn_ie = wpa_bss_get_ie(bss, WLAN_EID_RSN);
-	if (is_6ghz_bss_or_mld && !rsn_ie) {
+	if (is_6ghz_bss && !rsn_ie) {
 		if (debug_print)
 			wpa_dbg(wpa_s, MSG_DEBUG,
-				"   skip - 6 GHz/MLD BSS without RSNE");
+				"   skip - 6 GHz BSS without RSNE");
 		return 0;
 	}
 
@@ -647,8 +645,8 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 		if (!ie.has_group)
 			ie.group_cipher = wpa_default_rsn_cipher(bss->freq);
 
-		if (is_6ghz_bss_or_mld) {
-			/* WEP and TKIP are not allowed on 6 GHz */
+		if (is_6ghz_bss || !is_zero_ether_addr(bss->mld_addr)) {
+			/* WEP and TKIP are not allowed on 6 GHz/MLD */
 			ie.pairwise_cipher &= ~(WPA_CIPHER_WEP40 |
 						WPA_CIPHER_WEP104 |
 						WPA_CIPHER_TKIP);
@@ -698,12 +696,12 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 			break;
 		}
 
-		if (is_6ghz_bss_or_mld) {
+		if (is_6ghz_bss) {
 			/* MFPC must be supported on 6 GHz */
 			if (!(ie.capabilities & WPA_CAPABILITY_MFPC)) {
 				if (debug_print)
 					wpa_dbg(wpa_s, MSG_DEBUG,
-						"   skip RSNE - 6 GHz/MLD without MFPC");
+						"   skip RSNE - 6 GHz without MFPC");
 				break;
 			}
 
@@ -743,10 +741,10 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 		return 1;
 	}
 
-	if (is_6ghz_bss_or_mld) {
+	if (is_6ghz_bss) {
 		if (debug_print)
 			wpa_dbg(wpa_s, MSG_DEBUG,
-				"   skip - 6 GHz/MLD BSS without matching RSNE");
+				"   skip - 6 GHz BSS without matching RSNE");
 		return 0;
 	}
 
@@ -2846,10 +2844,12 @@ static int wpa_supplicant_use_own_rsne_params(struct wpa_supplicant *wpa_s,
 		return -1;
 	}
 
+#ifdef CONFIG_OCV
 	if (((wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME) ||
 	     (wpa_s->drv_flags2 & WPA_DRIVER_FLAGS2_OCV)) && ssid->ocv)
 		wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_OCV,
 				 !!(ie.capabilities & WPA_CAPABILITY_OCVC));
+#endif /* CONFIG_OCV */
 
 	/*
 	 * Update PMK in wpa_sm and the driver if roamed to WPA/WPA2 PSK from a
@@ -3165,8 +3165,7 @@ static int wpa_supplicant_event_associnfo(struct wpa_supplicant *wpa_s,
 			if (wpa_sm_set_assoc_wpa_ie(wpa_s->wpa, p, len))
 				break;
 			found = 1;
-			wpa_find_assoc_pmkid(wpa_s,
-					     data->assoc_info.authorized);
+			wpa_find_assoc_pmkid(wpa_s);
 		}
 		if (!found_x && p[0] == WLAN_EID_RSNX) {
 			if (wpa_sm_set_assoc_rsnxe(wpa_s->wpa, p, len))
@@ -3638,8 +3637,8 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 		hostapd_notif_assoc(wpa_s->ap_iface->bss[0],
 				    data->assoc_info.addr,
 				    data->assoc_info.req_ies,
-				    data->assoc_info.req_ies_len,
-				    data->assoc_info.reassoc);
+				    data->assoc_info.req_ies_len, NULL, 0,
+				    NULL, data->assoc_info.reassoc);
 		return;
 	}
 #endif /* CONFIG_AP */
@@ -3762,7 +3761,13 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 	wpas_fst_update_mb_assoc(wpa_s, data);
 
 #ifdef CONFIG_SME
-	os_memcpy(wpa_s->sme.prev_bssid, bssid, ETH_ALEN);
+	/*
+	 * Cache the current AP's BSSID (for non-MLO connection) or MLD address
+	 * (for MLO connection) as the previous BSSID for subsequent
+	 * reassociation requests handled by SME-in-wpa_supplicant.
+	 */
+	os_memcpy(wpa_s->sme.prev_bssid,
+		  wpa_s->valid_links ? wpa_s->ap_mld_addr : bssid, ETH_ALEN);
 	wpa_s->sme.prev_bssid_set = 1;
 	wpa_s->sme.last_unprot_disconnect.sec = 0;
 #endif /* CONFIG_SME */
@@ -3909,7 +3914,8 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 			wpa_supplicant_rx_eapol(
 				wpa_s, wpa_s->pending_eapol_rx_src,
 				wpabuf_head(wpa_s->pending_eapol_rx),
-				wpabuf_len(wpa_s->pending_eapol_rx));
+				wpabuf_len(wpa_s->pending_eapol_rx),
+				wpa_s->pending_eapol_encrypted);
 		}
 		wpabuf_free(wpa_s->pending_eapol_rx);
 		wpa_s->pending_eapol_rx = NULL;
@@ -5337,6 +5343,97 @@ static void wpas_event_unprot_beacon(struct wpa_supplicant *wpa_s,
 }
 
 
+static const char * bitmap_to_str(u8 value, char *buf)
+{
+	char *pos = buf;
+	int i, k = 0;
+
+	for (i = 7; i >= 0; i--)
+		pos[k++] = (value & BIT(i)) ? '1' : '0';
+
+	pos[8] = '\0';
+	return pos;
+}
+
+
+static void wpas_tid_link_map(struct wpa_supplicant *wpa_s,
+			      struct tid_link_map_info *info)
+{
+	char map_info[1000], *pos, *end;
+	int res, i;
+
+	pos = map_info;
+	end = pos + sizeof(map_info);
+	res = os_snprintf(map_info, sizeof(map_info), "default=%d",
+			  info->default_map);
+	if (os_snprintf_error(end - pos, res))
+		return;
+	pos += res;
+
+	if (!info->default_map) {
+		for (i = 0; i < MAX_NUM_MLD_LINKS && end > pos; i++) {
+			char uplink_map_str[9];
+			char downlink_map_str[9];
+
+			if (!(info->valid_links & BIT(i)))
+				continue;
+
+			bitmap_to_str(info->t2lmap[i].uplink, uplink_map_str);
+			bitmap_to_str(info->t2lmap[i].downlink,
+				      downlink_map_str);
+
+			res = os_snprintf(pos, end - pos,
+					  " link_id=%d up_link=%s down_link=%s",
+					  i, uplink_map_str,
+					  downlink_map_str);
+			if (os_snprintf_error(end - pos, res))
+				return;
+			pos += res;
+		}
+	}
+
+	wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_T2LM_UPDATE "%s", map_info);
+}
+
+
+static void wpas_link_reconfig(struct wpa_supplicant *wpa_s)
+{
+	u8 bssid[ETH_ALEN];
+
+	if (wpa_drv_get_bssid(wpa_s, bssid) < 0) {
+		wpa_printf(MSG_ERROR, "LINK_RECONFIG: Failed to get BSSID");
+		wpa_supplicant_deauthenticate(wpa_s,
+					      WLAN_REASON_DEAUTH_LEAVING);
+		return;
+	}
+
+	if (os_memcmp(bssid, wpa_s->bssid, ETH_ALEN) != 0) {
+		os_memcpy(wpa_s->bssid, bssid, ETH_ALEN);
+		wpa_supplicant_update_current_bss(wpa_s, wpa_s->bssid);
+		wpas_notify_bssid_changed(wpa_s);
+	}
+
+	if (wpa_drv_get_mlo_info(wpa_s) < 0) {
+		wpa_printf(MSG_ERROR,
+			   "LINK_RECONFIG: Failed to get MLO connection info");
+		wpa_supplicant_deauthenticate(wpa_s,
+					      WLAN_REASON_DEAUTH_LEAVING);
+		return;
+	}
+
+	if (wpa_sm_set_ml_info(wpa_s)) {
+		wpa_printf(MSG_ERROR,
+			   "LINK_RECONFIG: Failed to set MLO connection info to wpa_sm");
+		wpa_supplicant_deauthenticate(wpa_s,
+					      WLAN_REASON_DEAUTH_LEAVING);
+		return;
+	}
+
+	wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_LINK_RECONFIG "valid_links=0x%x",
+		wpa_s->valid_links);
+}
+
+
 void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 			  union wpa_event_data *data)
 {
@@ -5435,6 +5532,9 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 #endif /* CONFIG_TESTING_OPTIONS */
 		wpas_event_deauth(wpa_s,
 				  data ? &data->deauth_info : NULL);
+		break;
+	case EVENT_LINK_RECONFIG:
+		wpas_link_reconfig(wpa_s);
 		break;
 	case EVENT_MICHAEL_MIC_FAILURE:
 		wpa_supplicant_event_michael_mic_failure(wpa_s, data);
@@ -5727,6 +5827,7 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 					  data->ch_switch.ch_width,
 					  data->ch_switch.cf1,
 					  data->ch_switch.cf2,
+					  data->ch_switch.punct_bitmap,
 					  1);
 		}
 #endif /* CONFIG_AP */
@@ -5927,7 +6028,8 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 	case EVENT_EAPOL_RX:
 		wpa_supplicant_rx_eapol(wpa_s, data->eapol_rx.src,
 					data->eapol_rx.data,
-					data->eapol_rx.data_len);
+					data->eapol_rx.data_len,
+					data->eapol_rx.encrypted);
 		break;
 	case EVENT_SIGNAL_CHANGE:
 		wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_SIGNAL_CHANGE
@@ -6230,6 +6332,10 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 #ifdef CONFIG_DPP
 		wpas_dpp_tx_wait_expire(wpa_s);
 #endif /* CONFIG_DPP */
+		break;
+	case EVENT_TID_LINK_MAP:
+		if (data)
+			wpas_tid_link_map(wpa_s, &data->t2l_map_info);
 		break;
 	default:
 		wpa_msg(wpa_s, MSG_INFO, "Unknown event %d", event);

@@ -22,7 +22,7 @@ struct dpp_global;
 struct json_token;
 struct dpp_reconfig_id;
 
-#ifdef CONFIG_TESTING_OPTIONS
+#if defined(CONFIG_TESTING_OPTIONS) || defined(CONFIG_AIDL_DPP_VERSION)
 #define DPP_VERSION (dpp_version_override)
 extern int dpp_version_override;
 #else /* CONFIG_TESTING_OPTIONS */

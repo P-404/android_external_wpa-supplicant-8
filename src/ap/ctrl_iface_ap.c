@@ -886,6 +886,21 @@ int hostapd_ctrl_iface_status(struct hostapd_data *hapd, char *buf,
 		if (os_snprintf_error(buflen - len, ret))
 			return len;
 		len += ret;
+
+#ifdef CONFIG_IEEE80211BE
+		if (bss->conf->mld_ap) {
+			ret = os_snprintf(buf + len, buflen - len,
+					  "mld_addr[%d]=" MACSTR "\n"
+					  "mld_id[%d]=%d\n"
+					  "mld_link_id[%d]=%d\n",
+					  (int) i, MAC2STR(bss->mld_addr),
+					  (int) i, bss->conf->mld_id,
+					  (int) i, bss->mld_link_id);
+			if (os_snprintf_error(buflen - len, ret))
+				return len;
+			len += ret;
+		}
+#endif /* CONFIG_IEEE80211BE */
 	}
 
 	if (hapd->conf->chan_util_avg_period) {
@@ -928,16 +943,27 @@ int hostapd_parse_csa_settings(const char *pos,
 		} \
 	} while (0)
 
+#define SET_CSA_SETTING_EXT(str) \
+	do { \
+		const char *pos2 = os_strstr(pos, " " #str "="); \
+		if (pos2) { \
+			pos2 += sizeof(" " #str "=") - 1; \
+			settings->str = atoi(pos2); \
+		} \
+	} while (0)
+
 	SET_CSA_SETTING(center_freq1);
 	SET_CSA_SETTING(center_freq2);
 	SET_CSA_SETTING(bandwidth);
 	SET_CSA_SETTING(sec_channel_offset);
+	SET_CSA_SETTING_EXT(punct_bitmap);
 	settings->freq_params.ht_enabled = !!os_strstr(pos, " ht");
 	settings->freq_params.vht_enabled = !!os_strstr(pos, " vht");
 	settings->freq_params.he_enabled = !!os_strstr(pos, " he");
 	settings->freq_params.eht_enabled = !!os_strstr(pos, " eht");
 	settings->block_tx = !!os_strstr(pos, " blocktx");
 #undef SET_CSA_SETTING
+#undef SET_CSA_SETTING_EXT
 
 	return 0;
 }
